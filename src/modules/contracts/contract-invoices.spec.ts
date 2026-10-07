@@ -9,7 +9,9 @@ import {
 	fixedFxLines,
 	INVOICE_EVENT_TYPES,
 	invoiceDueDate,
+	isPendingUnifiedV2,
 	netExactFx,
+	operationBlockers,
 	planErpReset,
 	planFx,
 	planMarkIssued,
@@ -20,6 +22,7 @@ import {
 	planSendNow,
 	sameDayOfMonth,
 	spotFxLines,
+	UNIFIED_MIXED_PAIRS_MESSAGE,
 } from './contract-invoices';
 
 const TODAY = '2026-09-29';
@@ -812,6 +815,30 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 			expect(codes(planReferences(invoice({ invoice_type: 'Unificada' }), [], []).blockers)).toEqual(['unified_invoice']);
 			expect(codes(planReferences(invoice({ is_legacy: true }), [], []).blockers)).toEqual(['legacy_invoice']);
 		});
+
+		it('unificada v2 Por Emitir (Domi 07-10, "Pide OC"): admite referencias; sin borrador en el ERP; históricas, emitidas y orígenes bloqueados', () => {
+			const unified = invoice({ invoice_type: 'Unificada' });
+			const input = [{ type: 'OC' as const, code: '4500' }];
+
+			expect(planReferences(unified, input, [], { unified_v2: true })).toMatchObject({ blockers: [], warnings: [], can_apply: true });
+			// Con borrador en el ERP: bloqueo con "Restablecer borrador" (no el aviso de una factura normal).
+			expect(planReferences(invoice({ invoice_type: 'Unificada', odoo_invoice_id: 55 }), input, [], { unified_v2: true })).toMatchObject({
+				blockers: [expect.objectContaining({ code: 'sent_to_erp_draft', action: 'erp_reset' })],
+				warnings: [],
+				can_apply: false,
+			});
+			// Histórica (sin evento INVOICE_CONSOLIDATED), ya emitida u origen inactivo: siguen bloqueadas.
+			expect(codes(planReferences(unified, input, []).blockers)).toEqual(['unified_invoice']);
+			expect(
+				codes(planReferences(invoice({ invoice_type: 'Unificada', status: 'Emitida' }), input, [], { unified_v2: true }).blockers)
+			).toEqual(['unified_invoice']);
+			expect(
+				codes(planReferences(invoice({ is_active: false, consolidated_into_invoice_id: 'u-1' }), input, [], { unified_v2: true }).blockers)
+			).toEqual(['not_editable', 'unified_invoice']);
+			expect(codes(planReferences(invoice({ invoice_type: 'Consolidada' }), input, [], { unified_v2: true }).blockers)).toEqual([
+				'unified_invoice',
+			]);
+		});
 	});
 	describe('planErpReset (restablecer el borrador del ERP)', () => {
 		it('Por Emitir vinculada al ERP: deja odoo_invoice_id, sent_to_odoo_at y sent_at en NULL y avisa que el borrador sigue en el ERP', () => {
@@ -923,6 +950,78 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 					{ sameCurrency: false, fx: 950, taxRate: 19 }
 				)
 			).toEqual({ amount_contract_currency: 110, vat: 19855, amount_invoice_currency: 104500, total_invoice_currency: 124355 });
+		});
+	});
+	describe('unificada v2 Por Emitir (Domi 07-10, caso Brightcell)', () => {
+		const unified = (overrides: Partial<ContractInvoiceRow> = {}) => invoice({ invoice_type: 'Unificada', unified_v2: true, ...overrides });
+
+		it('solo la unificada v2 Por Emitir activa se libera de unified_invoice; orígenes, históricas, Consolidada y emitidas no', () => {
+			expect(isPendingUnifiedV2(unified())).toBe(true);
+			expect(codes(operationBlockers(unified()))).toEqual([]);
+			// Histórica (sin evento INVOICE_CONSOLIDATED) o sin cargar el flag.
+			expect(codes(operationBlockers(unified({ unified_v2: false })))).toEqual(['unified_invoice']);
+			expect(codes(operationBlockers(invoice({ invoice_type: 'Unificada' })))).toEqual(['unified_invoice']);
+			// Origen inactivo de una unificada.
+			expect(codes(operationBlockers(invoice({ is_active: false, consolidated_into_invoice_id: 'u-1', unified_v2: true })))).toEqual([
+				'not_pending',
+				'unified_invoice',
+			]);
+			expect(codes(operationBlockers(invoice({ invoice_type: 'Consolidada', unified_v2: true })))).toEqual(['unified_invoice']);
+			expect(codes(operationBlockers(unified({ status: 'Emitida', invoice_number: 'F-9' })))).toEqual(['not_pending', 'unified_invoice']);
+			// commonBlockers (editar líneas, anular, NC, facturar por OC, reorganizar) sigue bloqueando la unificada v2.
+			expect(codes(commonBlockers(unified()))).toEqual(['unified_invoice']);
+		});
+
+		it('Enviar al ERP ahora: sin unified_invoice, con los demás bloqueos reales (OC, IVA, producto sin mapeo)', () => {
+			expect(planSendNow(unified(), context())).toMatchObject({ blockers: [], can_apply: true });
+			expect(codes(planSendNow(unified({ tax_rate: null, unmapped_products: ['Licencia'] }), context()).blockers)).toEqual([
+				'product_without_erp_mapping',
+				'tax_rate_missing',
+			]);
+			expect(codes(planSendNow(unified({ auto_invoice: true }), context({ contract_requires_references: true })).blockers)).toEqual([
+				'needs_reference',
+			]);
+			expect(codes(planSendNow(unified({ unified_v2: false }), context()).blockers)).toEqual(['unified_invoice']);
+		});
+
+		it('Reprogramar (una y masivo): mueve solo la unificada y respeta el borrador en el ERP', () => {
+			const plan = planRescheduleOne(unified(), context(), '2026-10-15');
+
+			expect(plan.blockers).toEqual([]);
+			expect(plan.after).toMatchObject({ issue_date: '2026-10-15', scheduled_at: '2026-10-15', original_issue_date: '2026-10-01' });
+			// Sin descuento puntual no se reconstruye el devengo (sigue al período de servicio de las líneas).
+			expect(plan.rsm_from_month).toBeNull();
+			expect(codes(planRescheduleBulk([unified()], context(), { shift_months: 1 })[0].blockers)).toEqual([]);
+			expect(codes(planRescheduleOne(unified({ odoo_invoice_id: 7 }), context(), '2026-10-15').blockers)).toEqual(['sent_to_erp_draft']);
+			expect(codes(planRescheduleOne(invoice({ invoice_type: 'Unificada' }), context(), '2026-10-15').blockers)).toEqual(['unified_invoice']);
+		});
+
+		it('Restablecer borrador del ERP: disponible en la unificada v2 vinculada', () => {
+			expect(codes(planErpReset(unified({ odoo_invoice_id: 5 }), context()).blockers)).toEqual([]);
+			expect(codes(planErpReset(unified({ odoo_invoice_id: 5, unified_v2: false }), context()).blockers)).toEqual(['unified_invoice']);
+		});
+
+		it('Tipo de cambio: con un solo par se ajusta (con aviso de re-copia); con varios pares, bloqueo con mensaje claro', () => {
+			const onePair = planFx(unified(), [line(), line({ id: 'line-2' })], context(), { policy: 'fixed', rate: 950 });
+
+			expect(onePair.blockers).toEqual([]);
+			expect(codes(onePair.warnings)).toContain('unified_recopy_fx');
+			expect(onePair.after.fx_rate).toBe(950);
+			// Líneas en USD y EUR facturadas en CLP: dos pares.
+			const mixed = planFx(unified(), [line({ currency: 'USD' }), line({ id: 'line-2', currency: 'EUR' })], context(), {
+				policy: 'fixed',
+				rates_by_pair: { 'USD>CLP': 950, 'EUR>CLP': 1050 },
+			});
+
+			expect(mixed.blockers).toEqual([expect.objectContaining({ code: 'unified_invoice', message: UNIFIED_MIXED_PAIRS_MESSAGE })]);
+			expect(mixed.write).toBeNull();
+			// Todo en la moneda de factura: no aplica tipo de cambio (como cualquier factura).
+			expect(
+				codes(planFx(unified({ contract_currency: 'CLP' }), [line({ currency: 'CLP' })], context(), { policy: 'fixed', rate: 1 }).blockers)
+			).toEqual(['same_currency']);
+			expect(codes(planFx(invoice({ invoice_type: 'Unificada' }), [line()], context(), { policy: 'fixed', rate: 950 }).blockers)).toEqual([
+				'unified_invoice',
+			]);
 		});
 	});
 });

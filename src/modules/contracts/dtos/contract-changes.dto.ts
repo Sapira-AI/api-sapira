@@ -361,7 +361,7 @@ export class RenewalItemDto {
 
 /**
  * Ítem de `item_update` = "Corregir un dato mal cargado" (§9.2, F4): cuenta, glosa (`product_name`), tipo y, para un solo ítem por cambio,
- * cantidad, precio (`unit_price` en el modo `price_entry_mode`), descuento % o fecha de inicio (`start_date`). Corrección en su lugar: sin ítems espejo ni UPSELL/DOWNSELL;
+ * cantidad, precio (`unit_price` en el modo `price_entry_mode`), descuento % o fecha de inicio (`start_date`) o de fin (`end_date`). Corrección en su lugar: sin ítems espejo ni UPSELL/DOWNSELL;
  * con valor, reescribe las Por Emitir y reparte la diferencia de lo emitido. La forma (al menos un campo, rangos) la valida el plan
  * (`contract-changes.ts` `planItemUpdate`).
  */
@@ -414,6 +414,14 @@ export class ItemUpdateItemDto {
 	@Matches(ISO_DATE, { message: 'Fecha de inicio inválida (YYYY-MM-DD)' })
 	@IsOptional()
 	start_date?: string;
+
+	@ApiPropertyOptional({
+		description:
+			'Fecha de fin correcta (YYYY-MM-DD, ≥ inicio; caso S02762: el fin debe calzar con el ciclo). Sola en el cambio (sin inicio ni valor). Bloquea si una emitida vigente cobra el ítem después; las Por Emitir posteriores se quitan, la del nuevo fin se rehace prorrateada como el motor y, al alargar, se generan los períodos que faltan',
+	})
+	@Matches(ISO_DATE, { message: 'Fecha de fin inválida (YYYY-MM-DD)' })
+	@IsOptional()
+	end_date?: string;
 }
 
 /** Ítem de `reactivate` (§9.3.2): sin lista = todo lo cancelado. Cantidad/unitario solo cambian en la rama de mes cerrado (REACTIVATION nuevo). */

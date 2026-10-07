@@ -365,6 +365,46 @@ describe('ContractInvoiceDescriptionsService (spec facturas §3.6–3.7a)', () =
 			]);
 		});
 
+		it('unificada v2 Por Emitir (Domi 07-10): acepta el texto manual en sus líneas; plantillas y unificadas históricas siguen bloqueadas', async () => {
+			const unified = invoiceRow(INV_A, { invoice_type: 'Unificada' });
+			const { service, runner, dataSource } = build({
+				invoices: { [INV_A]: unified, [INV_B]: invoiceRow(INV_B, { invoice_type: 'Unificada' }) },
+				items: [itemRow('l-1', INV_A, { description: 'PLATAFORMA - CTR-2026-001' }), itemRow('l-2', INV_B)],
+			});
+			// Solo INV_A tiene evento INVOICE_CONSOLIDATED (v2); INV_B es una unificada histórica.
+			const v2 = (mock: jest.Mock) => {
+				const route = mock.getMockImplementation()!;
+
+				mock.mockImplementation((sql: string, params: unknown[] = []) =>
+					// La consulta propia de unificadas v2 (`unifiedV2Ids`); el SELECT de facturas también nombra el evento (`unified_v2`).
+					sql.startsWith('SELECT i.id FROM invoices i') && sql.includes("event_type = 'INVOICE_CONSOLIDATED'")
+						? (params[1] as string[]).filter((id) => id === INV_A).map((id) => ({ id }))
+						: route(sql, params)
+				);
+			};
+
+			v2(runner.query);
+			v2((dataSource as unknown as { query: jest.Mock }).query);
+			const result = await service.updateDescriptions(
+				CONTRACT_ID,
+				{ line_ids: ['l-1', 'l-2'], mode: 'set', text: 'Plataforma octubre - CTR-2026-001' },
+				HOLDING,
+				'auth-1'
+			);
+
+			expect(result.updated).toBe(1);
+			expect(result.skipped).toEqual([{ line_id: 'l-2', reason: 'unified_invoice' }]);
+			expect(calls(runner.query, 'UPDATE invoice_items ii SET description').map(([, params]) => params)).toEqual([
+				['l-1', HOLDING, 'Plataforma octubre - CTR-2026-001', true],
+			]);
+			// Sin montos: solo la glosa y la protección.
+			expect(calls(runner.query, 'UPDATE invoices')).toHaveLength(0);
+
+			const template = await service.previewDescriptions(CONTRACT_ID, { invoice_ids: [INV_A], mode: 'apply_template' }, HOLDING);
+
+			expect(template.lines.map((line) => line.skipped_reason)).toEqual(['unified_invoice']);
+		});
+
 		it('sin facturas ni líneas → 400; apply_blocks sin plantilla → 400; línea de otro contrato → 404', async () => {
 			const { service } = build();
 
@@ -427,6 +467,28 @@ describe('ContractInvoiceDescriptionsService (spec facturas §3.6–3.7a)', () =
 				before: { references: [{ document_number: '1' }], requires_references_for_billing: false },
 				after: { references: [{ document_number: '4500123' }, { document_number: '998' }], requires_references_for_billing: true },
 			});
+		});
+
+		it('unificada v2 Por Emitir: guarda la OC (Domi 07-10); una unificada histórica sigue bloqueada', async () => {
+			const unified = invoiceRow(INV_A, { invoice_type: 'Unificada' });
+			const v2 = build({ invoices: { [INV_A]: unified } });
+			const route = v2.runner.query.getMockImplementation()!;
+
+			v2.runner.query.mockImplementation((sql: string, params: unknown[] = []) =>
+				sql.includes("event_type = 'INVOICE_CONSOLIDATED'") ? [{ id: INV_A }] : route(sql, params)
+			);
+			await v2.service.updateReferences(CONTRACT_ID, INV_A, { references: [{ type: 'OC', code: '4500' }] }, HOLDING, 'auth-1');
+			expect(calls(v2.runner.query, 'INSERT INTO invoice_references').map(([, params]) => (params as unknown[]).slice(0, 4))).toEqual([
+				[INV_A, HOLDING, '4500', '801'],
+			]);
+
+			const legacy = build({ invoices: { [INV_A]: unified } });
+			const error = await legacy.service
+				.updateReferences(CONTRACT_ID, INV_A, { references: [{ type: 'OC', code: '4500' }] }, HOLDING, 'auth-1')
+				.catch((caught: unknown) => caught);
+
+			expect((error as ConflictException).getResponse()).toMatchObject({ blockers: [expect.objectContaining({ code: 'unified_invoice' })] });
+			expect(calls(legacy.runner.query, 'INSERT INTO invoice_references')).toHaveLength(0);
 		});
 
 		it('emitida ya enviada al ERP → 409 blocked sin escribir; repetidas → 400 por índice', async () => {

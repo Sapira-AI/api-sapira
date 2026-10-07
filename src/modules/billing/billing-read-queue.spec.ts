@@ -137,4 +137,25 @@ describe('BillingReadService.queueEntries · contexto por contrato', () => {
 		expect(closed.blocked_reasons.map((blocker) => blocker.code)).not.toContain('period_closed');
 		expect(closed.blocked_reasons).toEqual(open.blocked_reasons);
 	});
+	it('la unificada v2 Por Emitir no cuenta como bloqueada por unified_invoice; la histórica sí (Domi 07-10)', async () => {
+		const invoices = [
+			{ ...invoiceRow(1, contractId(1)), invoice_type: 'Unificada', unified_v2: true },
+			{ ...invoiceRow(2, contractId(1)), invoice_type: 'Unificada', unified_v2: false },
+			{ ...invoiceRow(3, contractId(1)), invoice_type: 'Unificada', unified_v2: true, tax_rate: null },
+		];
+		const [v2, legacy, v2WithoutTax] = await build(invoices).service.queueEntries(
+			HOLDING,
+			invoices.map((row) => String(row.id)),
+			TODAY
+		);
+		const codesOf = (entry: typeof v2) => entry.blocked_reasons.map((blocker) => blocker.code);
+
+		expect(codesOf(v2)).not.toContain('unified_invoice');
+		expect(v2.group).toBe('ready');
+		expect(codesOf(legacy)).toContain('unified_invoice');
+		expect(legacy.group).toBe('blocked');
+		// Sus otros motivos reales siguen contando.
+		expect(codesOf(v2WithoutTax)).toEqual(['tax_rate_missing']);
+		expect(v2WithoutTax.group).toBe('blocked');
+	});
 });

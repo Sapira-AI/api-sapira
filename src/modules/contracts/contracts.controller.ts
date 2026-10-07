@@ -309,7 +309,7 @@ export class ContractsController {
 	@ApiOperation({
 		summary: 'Consolidar facturas de varios contratos',
 		description:
-			'Una transacción: documento `Unificada` nuevo (grupo propio; encabezado del contrato principal; `auto_invoice` = AND de los orígenes; `requires_references_for_billing` heredado) con COPIAS de las líneas (prefijo de contrato, `contract_id` de la línea, tasa por par), referencias OC/HES sin repetir tipo+folio, orígenes `is_active = false` con `consolidated_into_invoice_id`, y un evento INVOICE_CONSOLIDATED por contrato',
+			'Una transacción: documento `Unificada` nuevo (grupo propio; encabezado del contrato principal; `auto_invoice` = AND de los orígenes; `requires_references_for_billing` heredado) con COPIAS de las líneas (glosa con el número de contrato al final, `contract_id` de la línea, tasa por par), referencias OC/HES sin repetir tipo+folio, orígenes `is_active = false` con `consolidated_into_invoice_id`, y un evento INVOICE_CONSOLIDATED por contrato',
 	})
 	@ApiResponse({ status: 201, description: 'El preview más `applied`, `consolidated_invoice_id`, `event_ids`, `invoice`' })
 	@ApiResponse({
@@ -1454,7 +1454,7 @@ export class ContractsController {
 	@ApiOperation({
 		summary: 'Descripciones de líneas de facturas Por Emitir',
 		description:
-			'Una transacción sobre Por Emitir activas del contrato: set = texto manual (la línea queda protegida, `description_locked`); unlock = libera y regenera con la plantilla del contrato; apply_template / apply_blocks = regenera (salta las protegidas salvo `include_locked`). Rechaza (400) si alguna línea a escribir supera el límite del documento. Un evento INVOICE_DESCRIPTIONS_UPDATED por factura. Reemplaza `invoice_items_bulk_update_description`',
+			'Una transacción sobre Por Emitir activas del contrato: set = texto manual (la línea queda protegida, `description_locked`); unlock = libera y regenera con la plantilla del contrato; apply_template / apply_blocks = regenera (salta las protegidas salvo `include_locked`). Rechaza (400) si alguna línea a escribir supera el límite del documento. Un evento INVOICE_DESCRIPTIONS_UPDATED por factura. Una factura unificada v2 Por Emitir (en el contrato principal) admite solo `set` en sus líneas (glosa, sin montos); con plantillas se salta (`unified_invoice`). Reemplaza `invoice_items_bulk_update_description`',
 	})
 	@ApiParam(CONTRACT_PARAM)
 	@ApiResponse({ status: 200, description: '{ updated, skipped[{ line_id, reason }], event_ids[] }' })

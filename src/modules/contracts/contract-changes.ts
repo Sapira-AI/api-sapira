@@ -61,6 +61,7 @@ import {
 	type InvoiceDecisionAction,
 } from './dtos/contract-changes.dto';
 import { hasPricingModel, type PriceSpecDto, UF_CURRENCY } from './dtos/create-contract.dto';
+import { lastPartialPeriod } from './end-off-cycle';
 import { DESCRIPTION_FITTED_CODE, type DescriptionTemplate } from './invoice-description';
 import {
 	type CodedFieldError,
@@ -6063,6 +6064,7 @@ export const ITEM_CORRECTION_FIELDS = [
 	'price_entry_mode',
 	'discount_value',
 	'start_date',
+	'end_date',
 ] as const;
 export type ItemCorrectionField = (typeof ITEM_CORRECTION_FIELDS)[number];
 /** Campos que cambian el valor del ítem: reescriben las Por Emitir, reconstruyen el devengo y piden el período del mes abierto. */
@@ -6076,6 +6078,7 @@ export const CORRECTION_FIELD_LABELS: Record<ItemCorrectionField, string> = {
 	price_entry_mode: 'precio ingresado',
 	discount_value: 'descuento',
 	start_date: 'fecha de inicio',
+	end_date: 'fecha de fin',
 };
 export const CORRECTION_NEXT_STEP = 'Usa "Cambió el precio o la cantidad" para cambiar el acuerdo desde una fecha';
 
@@ -6200,6 +6203,11 @@ export function issuedDifferenceSentence(
  *   `issued_invoice_before_start` si una emitida vigente cobra antes del nuevo inicio; Por Emitir anteriores quitadas o canceladas; el
  *   primer período prorrateado como al crear; al adelantar, se generan las Por Emitir del tramo que falta). `term_months`, `price` y
  *   `final_price` siguen a los meses nuevos; devengo reconstruido desde el inicio más temprano; evento con `subtype: 'start'`.
+ * - Fecha de fin (`end_date`, caso S02762, decisión 07-10: el prorrateo solo va en el primer mes; un ítem por cambio, sin inicio ni valor en el
+ *   mismo paso): reglas en `endCorrectionSet` y facturas en `moveItemEndInvoices` (bloqueo `issued_invoice_after_end` si una emitida vigente
+ *   cobra después del nuevo fin; Por Emitir posteriores quitadas o canceladas; la del nuevo fin rehecha hasta él; al alargar, se generan
+ *   los períodos que faltan). Los ajustes vivos que terminaban con el ítem lo siguen (`aligned_adjustments`). Sugerencia: `cycleAlignedEnd`
+ *   (`end-off-cycle.ts`). Evento con `subtype: 'end'`.
  * Bloqueo `item_not_found`. Evento `ITEM_CORRECTED` con `metadata.items[{ item_id, product_name, changes[{ field, before, after }] }]`.
  */
 export function planItemUpdate(ctx: ChangeContext, req: ContractChangeRequestDto): ChangePlan {
@@ -6213,6 +6221,7 @@ export function planItemUpdate(ctx: ChangeContext, req: ContractChangeRequestDto
 		set: ItemUpdateSet;
 		values: CorrectionValues | null;
 		start: string | null;
+		end: string | null;
 	}> = [];
 	const anchor = anchorDayOf(ctx.contract, ctx.items);
 
@@ -6222,7 +6231,10 @@ export function planItemUpdate(ctx: ChangeContext, req: ContractChangeRequestDto
 		const itemId = String(ref.item_id ?? '');
 
 		if (!ITEM_CORRECTION_FIELDS.some((name) => name in ref)) {
-			p.error(field, 'Indica al menos un dato a corregir del ítem (cuenta, glosa, tipo, cantidad, precio, descuento o fecha de inicio)');
+			p.error(
+				field,
+				'Indica al menos un dato a corregir del ítem (cuenta, glosa, tipo, cantidad, precio, descuento, fecha de inicio o de fin)'
+			);
 			continue;
 		}
 		if (seen.has(itemId)) {
@@ -6247,23 +6259,36 @@ export function planItemUpdate(ctx: ChangeContext, req: ContractChangeRequestDto
 	}
 	const commercial = entries.filter((entry) => entry.values);
 	const moves = entries.filter((entry) => entry.start);
+	const ends = entries.filter((entry) => entry.end);
 
 	if (commercial.length > 1) p.error('change.items', 'Corrige la cantidad, el precio o el descuento de un ítem a la vez');
+	// Fecha de fin (caso S02762, 07-10): un ítem por cambio, sola o con datos (cuenta, glosa, tipo); nunca con el inicio ni con el valor.
+	if (ends.length && (ends.length > 1 || moves.length || commercial.length))
+		p.error(
+			'change.items',
+			'Corrige la fecha de fin de un ítem a la vez, sin cambiar en el mismo paso la fecha de inicio, la cantidad, el precio o el descuento'
+		);
 	// Fecha de inicio (CTR-2026-191): un ítem por cambio y sola o con datos (cuenta, glosa, tipo), nunca junto al valor.
-	if (moves.length > 1 || (moves.length && commercial.length))
+	else if (moves.length > 1 || (moves.length && commercial.length))
 		p.error('change.items', 'Corrige la fecha de inicio de un ítem a la vez, sin cambiar en el mismo paso la cantidad, el precio o el descuento');
-	else
+	else {
 		for (const entry of moves) {
 			const extra = startCorrectionSet(p, entry.item, entry.start!, entry.field, anchor);
 
 			if (extra) Object.assign(entry.set, extra);
 		}
+		for (const entry of ends) {
+			const extra = endCorrectionSet(p, entry.item, entry.end!, entry.field, anchor);
+
+			if (extra) Object.assign(entry.set, extra);
+		}
+	}
 	for (const entry of entries) {
 		p.ops.push({ kind: 'update_item', item_id: entry.item.id, set: entry.set });
 		const row = p.itemsAfter.find((candidate) => candidate.id === entry.item.id)!;
 
 		Object.assign(row, entry.set);
-		if (entry.values || entry.set.start_date) p.adjusted.push(previewOf(row));
+		if (entry.values || entry.set.start_date || entry.set.end_date) p.adjusted.push(previewOf(row));
 	}
 	// El duplicado se mira contra los ítems ya con las cuentas nuevas (dos ítems del cambio pueden chocar entre sí), salvo los que se mueven
 	// juntos desde la misma cuenta (el producto completo con sus ajustes y renovaciones: ya eran un solo producto).
@@ -6320,12 +6345,25 @@ export function planItemUpdate(ctx: ChangeContext, req: ContractChangeRequestDto
 			start_date: start,
 		});
 	}
+	const alignedAdjustments: Array<{ item_id: string; product_name: string | null }> = [];
+
+	for (const entry of ends.filter((candidate) => candidate.set.end_date)) {
+		const row = p.itemsAfter.find((candidate) => candidate.id === entry.item.id)!;
+
+		moveItemEndInvoices(p, entry.item, row, anchor);
+		// D3/MF-h: los ajustes vivos que terminaban con el ítem siguen terminando con él (mismo fin corregido, con sus facturas).
+		alignedAdjustments.push(...correctAdjustmentEnds(p, entry.item, entry.set.end_date!, anchor));
+		// El valor del ítem cambia con sus meses: el devengo se reconstruye desde su inicio.
+		p.touchRsm(entry.item.start_date ?? p.effective);
+	}
 	p.closeHeaders('Corrección de un dato mal cargado');
 	if (preserved.length)
 		p.warn('correction_overrides_preserved', `Se respetan los ajustes hechos en las facturas por emitir: ${[...new Set(preserved)].join('; ')}`);
 	// La glosa se regenera si cambió un dato o el valor; mover solo el inicio no cambia la glosa de las Por Emitir que quedan.
 	const changedIds = new Set(
-		entries.filter((entry) => entry.changes.some((change) => change.field !== 'start_date')).map((entry) => entry.item.id)
+		entries
+			.filter((entry) => entry.changes.some((change) => change.field !== 'start_date' && change.field !== 'end_date'))
+			.map((entry) => entry.item.id)
 	);
 	const lineIds = ctx.invoices
 		.filter((invoice) => isEditablePending(invoice) && !hasErpDraft(invoice))
@@ -6365,13 +6403,16 @@ export function planItemUpdate(ctx: ChangeContext, req: ContractChangeRequestDto
 
 	return p.finish({
 		type: 'ITEM_CORRECTED',
-		subtype: commercial.length ? 'value' : moves.length ? 'start' : 'data',
+		subtype: commercial.length ? 'value' : moves.length ? 'start' : ends.length ? 'end' : 'data',
 		title: 'Dato corregido',
-		description: entries.map(describe).join('; '),
+		description: `${entries.map(describe).join('; ')}${
+			alignedAdjustments.length ? ` (y ${alignedAdjustments.length === 1 ? 'su ajuste' : `sus ${alignedAdjustments.length} ajustes`})` : ''
+		}`,
 		amount_delta: 0,
-		items_affected: entries.map((entry) => entry.item.id),
+		items_affected: [...entries.map((entry) => entry.item.id), ...alignedAdjustments.map((entry) => entry.item_id)],
 		metadata: {
 			items: entries.map((entry) => ({ item_id: entry.item.id, product_name: entry.item.product_name, changes: entry.changes })),
+			...(alignedAdjustments.length ? { aligned_adjustments: alignedAdjustments } : {}),
 			pending_descriptions_updated: lineIds.length,
 			...(issuedDifference ? { issued_difference: issuedDifference } : {}),
 			...(preserved.length ? { preserved: [...new Set(preserved)] } : {}),
@@ -6404,7 +6445,7 @@ function parseCorrection(
 	item: ChangeItemRow,
 	ref: Record<string, unknown>,
 	field: string
-): { changes: ItemCorrectionChange[]; set: ItemUpdateSet; values: CorrectionValues | null; start: string | null } | null {
+): { changes: ItemCorrectionChange[]; set: ItemUpdateSet; values: CorrectionValues | null; start: string | null; end: string | null } | null {
 	const changes: ItemCorrectionChange[] = [];
 	const set: ItemUpdateSet = {};
 	let valid = true;
@@ -6461,6 +6502,18 @@ function parseCorrection(
 			changes.push({ field: 'start_date', before: item.start_date, after: start });
 		}
 	}
+	// Fecha de fin (caso S02762, 07-10): solo la forma aquí; las reglas del movimiento las aplica `endCorrectionSet`.
+	let end: string | null = null;
+
+	if ('end_date' in ref && ref.end_date !== null && ref.end_date !== undefined) {
+		if (!isIsoDay(ref.end_date)) {
+			p.error(`${field}.end_date`, 'Fecha de fin inválida (YYYY-MM-DD)');
+			valid = false;
+		} else if (ref.end_date !== item.end_date) {
+			end = ref.end_date;
+			changes.push({ field: 'end_date', before: item.end_date, after: end });
+		}
+	}
 	const number = (name: 'quantity' | 'unit_price' | 'discount_value', check: (value: number) => string | null): number | null => {
 		if (!(name in ref) || ref[name] === null || ref[name] === undefined) return null;
 		const value = Number(ref[name]);
@@ -6500,7 +6553,7 @@ function parseCorrection(
 	if (pctIn !== null && pctIn !== pctBefore) changes.push({ field: 'discount_value', before: pctBefore, after: pctIn });
 	const valueChanged = changes.some((change) => COMMERCIAL_CORRECTION_FIELDS.has(change.field));
 
-	if (!valueChanged) return { changes, set, values: null, start };
+	if (!valueChanged) return { changes, set, values: null, start, end };
 	if (REMOVAL_CATEGORIES.has(item.categoria ?? '')) {
 		p.error(field, `"${item.product_name}" es el registro de una baja: su valor no se corrige`);
 
@@ -6568,6 +6621,7 @@ function parseCorrection(
 			pct_given: pctIn !== null,
 		},
 		start,
+		end,
 	};
 }
 
@@ -6695,6 +6749,171 @@ function moveItemStartInvoices(p: Planner, item: ChangeItemRow, row: ChangeItemR
 	});
 
 	p.addRestoredInvoices(restored, 'se suma el tramo del nuevo inicio');
+}
+
+/** Meses, precio y valor de un ítem con el fin corregido: `term_months` cubre los meses nuevos y `price`/`final_price` escalan con los meses de ciclo. */
+function endValueFields(item: ChangeItemRow, to: string, contractAnchor: number): ItemUpdateSet {
+	const set: ItemUpdateSet = { end_date: to };
+
+	if (!item.start_date || !item.end_date) return set;
+	const anchor = anchorOfItem(item, contractAnchor);
+	const monthsBefore = monthsBetween(item.start_date, item.end_date, anchor);
+	const monthsAfter = monthsBetween(item.start_date, to, anchor);
+
+	set.term_months = monthsCeil(item.start_date, to);
+	if (monthsBefore > 0) {
+		set.price = round2((num(item.price) * monthsAfter) / monthsBefore);
+		set.final_price = round2((num(item.final_price) * monthsAfter) / monthsBefore);
+	}
+
+	return set;
+}
+
+/**
+ * `item_update` con fecha de fin (caso S02762 de SimpliRoute, decisión de Domi 07-10: el prorrateo solo va en el primer mes; el fin de un
+ * ítem debe calzar con el ciclo). Reglas: ítem recurrente con fin (no indefinido), que no es baja, sin baja registrada ni renovación; el
+ * nuevo fin ≥ inicio; un ajuste no termina después que su ítem original; sus ajustes no pueden partir después del nuevo fin; el día de
+ * ciclo del contrato no cambia. El mes del fin más temprano (el día siguiente) debe estar abierto. `term_months`/`price`/`final_price`
+ * siguen a los meses nuevos como en `startCorrectionSet`.
+ */
+function endCorrectionSet(p: Planner, item: ChangeItemRow, to: string, field: string, contractAnchor: number): ItemUpdateSet | null {
+	const from = item.end_date;
+	const name = item.product_name ?? 'El ítem';
+	const fail = (message: string) => {
+		p.error(`${field}.end_date`, message);
+
+		return null;
+	};
+
+	if (item.is_recurring === false) return fail(`"${name}" es un cargo único: no tiene fecha de fin que corregir`);
+	if (REMOVAL_CATEGORIES.has(item.categoria ?? '')) return fail(`"${name}" es el registro de una baja: su fin no se corrige`);
+	if (!item.start_date) return fail(`"${name}" no tiene fecha de inicio`);
+	if (!from) return fail(`"${name}" no tiene fecha de fin (es sin término): para terminarlo usa "Quitar un producto"`);
+	if (item.churn_date) return fail(`"${name}" tiene una baja desde el ${item.churn_date}: su fin lo marca la baja`);
+	if (item.renewed_by_item_id) return fail(`"${name}" ya se renovó: su fin es el día antes de que parta la renovación`);
+	if (to < item.start_date) return fail(`El fin no puede quedar antes del inicio del ítem (${item.start_date})`);
+	const parent = item.related_item_id ? p.ctx.items.find((row) => row.id === item.related_item_id) : undefined;
+
+	if (parent?.end_date && to > parent.end_date)
+		return fail(`"${name}" ajusta "${parent.product_name}", que termina el ${parent.end_date}: el ajuste no puede terminar después`);
+	const adjustment = p.ctx.items.find((row) => row.related_item_id === item.id && row.id !== item.id && row.start_date && row.start_date > to);
+
+	if (adjustment)
+		return fail(`"${adjustment.product_name}" ajusta este ítem desde el ${adjustment.start_date}: el fin no puede quedar antes de esa fecha`);
+	const anchorAfter = anchorDayOf(
+		p.ctx.contract,
+		p.ctx.items.map((row) => (row.id === item.id ? { ...row, end_date: to } : row))
+	);
+
+	if (anchorAfter !== contractAnchor)
+		return fail(`Con ese fin cambiaría el día de facturación del contrato (día ${contractAnchor} → día ${anchorAfter}): revisa la fecha`);
+	p.assertOpenPeriod(addDays(to < from ? to : from, 1), 'El fin del ítem');
+
+	return endValueFields(item, to, contractAnchor);
+}
+
+/**
+ * Facturas de un ítem con el fin corregido (`item.end_date` → `row.end_date`), como el inicio en `moveItemStartInvoices`:
+ * - Bloqueo si una factura vigente que el cambio no puede tocar cobra el ítem después del nuevo fin: emitida sin anular
+ *   (`issued_invoice_after_end`: anularla con NC sin reemitir) o Por Emitir unificada/heredada (`pending_invoice_after_end`).
+ * - Acortar: se quitan las líneas Por Emitir del ítem con período después del nuevo fin (la factura sin líneas se cancela en
+ *   `closeHeaders`); la que contiene el nuevo fin se rehace con el generador hasta él (último tramo prorrateado como el motor).
+ * - Alargar: si el fin anterior no calzaba con el ciclo, su tramo parcial Por Emitir se rehace junto con los días nuevos (un solo
+ *   período); el generador agrega los períodos que faltan hasta el nuevo fin (solo los días sin factura vigente).
+ */
+function moveItemEndInvoices(p: Planner, item: ChangeItemRow, row: ChangeItemRow, contractAnchor: number) {
+	const from = item.end_date!;
+	const to = row.end_date!;
+	const name = item.product_name ?? 'el ítem';
+	const lineEnd = (line: ChangeInvoiceLineRow) => line.billing_period_end ?? line.billing_period_start ?? '';
+	const itemLines = (invoice: ChangeInvoiceRow) => invoice.lines.filter((line) => line.contract_item_id === item.id);
+	let restoreFrom: string | null = null;
+
+	if (to < from) {
+		for (const invoice of p.ctx.invoices) {
+			if (invoice.status === 'Cancelada' || !invoice.is_active || /^(NC|ND)$/i.test(invoice.document_type ?? '') || isEditablePending(invoice))
+				continue;
+			if (!itemLines(invoice).some((line) => lineEnd(line) && lineEnd(line) > to)) continue;
+			if (isIssued(invoice))
+				p.block(
+					'issued_invoice_after_end',
+					`Anula con nota de crédito la factura ${invoiceName(invoice)} antes de mover el fin: cobra "${name}" después del ${to}`,
+					'Anúlala desde su vista rápida con una nota de crédito, sin reemitir, y vuelve a corregir la fecha'
+				);
+			else if (invoice.status === PENDING_STATUS)
+				p.block(
+					'pending_invoice_after_end',
+					`La factura ${invoiceName(invoice)} cobra "${name}" después del ${to} y el cambio no puede ajustarla`,
+					'Desunifícala o cancélala desde Facturación y vuelve a corregir la fecha'
+				);
+		}
+		for (const invoice of p.ctx.invoices.filter(isEditablePending)) {
+			const lines = itemLines(invoice).filter((line) => lineEnd(line) > to);
+
+			if (!lines.length || p.skipPartial(invoice)) continue;
+			for (const line of lines) {
+				const start = line.billing_period_start ?? lineEnd(line);
+
+				if (start <= to && isConsumptionLine(line)) {
+					p.warn(
+						'consumption_line_kept',
+						`La factura ${invoiceName(invoice)} lleva el consumo registrado de "${line.description ?? line.id}" (${line.quantity}): se conserva sin prorratear`
+					);
+					continue;
+				}
+				const manual = line.quantity_source === 'manual';
+
+				p.deleteLine(invoice, line);
+				if (!manual && start <= to && (!restoreFrom || start < restoreFrom)) restoreFrom = start;
+			}
+		}
+	} else {
+		// El tramo parcial del fin anterior (fin a mitad de ciclo) se rehace con los días nuevos: un solo período, como lo arma el motor.
+		const partial = lastPartialPeriod(engineShape(item), contractAnchor);
+
+		restoreFrom = addDays(from, 1);
+		if (partial)
+			for (const invoice of p.ctx.invoices.filter(isEditablePending)) {
+				const lines = itemLines(invoice).filter(
+					(line) => line.billing_period_start === partial.period_start && !isConsumptionLine(line) && line.quantity_source !== 'manual'
+				);
+
+				if (!lines.length || p.skipPartial(invoice)) continue;
+				for (const line of lines) p.deleteLine(invoice, line);
+				restoreFrom = partial.period_start;
+			}
+	}
+	if (!restoreFrom) return;
+	// Las NC no descubren días (el tramo a rehacer ya pasó por los bloqueos); las anuladas y canceladas no cubren.
+	const creditNotes = new Set(p.ctx.invoices.filter((invoice) => /^NC$/i.test(invoice.document_type ?? '')).map((invoice) => invoice.id));
+
+	p.addRestoredInvoices(
+		p.restoreItemBilling(row, restoreFrom, creditNotes, { through: to, note: 'fin corregido' }),
+		'se suma el tramo del nuevo fin'
+	);
+}
+
+/**
+ * D3/MF-h: los ajustes vivos (UPSELL/DOWNSELL con `related_item_id`) que terminaban con el ítem original terminan con él en su fin corregido:
+ * mismo `end_date`, sus meses y valor y sus facturas (`moveItemEndInvoices`). Devuelve los ajustes movidos.
+ */
+function correctAdjustmentEnds(p: Planner, item: ChangeItemRow, to: string, contractAnchor: number) {
+	const moved: Array<{ item_id: string; product_name: string | null }> = [];
+
+	for (const child of p.ctx.items) {
+		if (child.related_item_id !== item.id || child.id === item.id || !DELTA_CATEGORIES.has(child.categoria ?? '')) continue;
+		if (child.churn_date || child.renewed_by_item_id || !child.end_date || child.end_date !== item.end_date) continue;
+		const set = endValueFields(child, to, contractAnchor);
+		const row = p.itemsAfter.find((candidate) => candidate.id === child.id)!;
+
+		p.ops.push({ kind: 'update_item', item_id: child.id, set });
+		Object.assign(row, set);
+		p.adjusted.push(previewOf(row));
+		moveItemEndInvoices(p, child, row, contractAnchor);
+		moved.push({ item_id: child.id, product_name: child.product_name });
+	}
+
+	return moved;
 }
 
 /**

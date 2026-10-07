@@ -2,8 +2,11 @@
 jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
 
 import { BadRequestException, ConflictException } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 
-import { issueDayOf, planRuleGroups, type RuleInvoice, type RuleUnified, validateRuleInput } from './invoice-consolidation-rules';
+import { InvoiceConsolidationRuleDto } from './dtos/invoice-consolidation-rule.dto';
+import { emissionDayOf, planRuleGroups, type RuleInvoice, type RuleUnified, validateRuleInput } from './invoice-consolidation-rules';
 import { InvoiceConsolidationRulesService } from './invoice-consolidation-rules.service';
 
 const inv = (overrides: Partial<RuleInvoice> = {}): RuleInvoice => ({
@@ -71,10 +74,10 @@ describe('unificación recurrente (spec-unificacion-recurrente.md)', () => {
 		});
 	});
 
-	it('issueDayOf: día de la próxima Por Emitir; sin próximas, el de la última', () => {
-		expect(issueDayOf(['2026-09-15', '2026-10-20', '2026-11-20'], '2026-10-05')).toBe(20);
-		expect(issueDayOf(['2026-08-10', '2026-09-10'], '2026-10-05')).toBe(10);
-		expect(issueDayOf([], '2026-10-05')).toBeNull();
+	it('emissionDayOf: día de la próxima Por Emitir; sin próximas, el de la última', () => {
+		expect(emissionDayOf(['2026-09-15', '2026-10-20', '2026-11-20'], '2026-10-05')).toBe(20);
+		expect(emissionDayOf(['2026-08-10', '2026-09-10'], '2026-10-05')).toBe(10);
+		expect(emissionDayOf([], '2026-10-05')).toBeNull();
 	});
 
 	it('validateRuleInput: 2+ contratos activos de la razón social y el principal dentro de la lista', () => {
@@ -86,6 +89,19 @@ describe('unificación recurrente (spec-unificacion-recurrente.md)', () => {
 			'contract_ids',
 			'main_contract_id',
 		]);
+	});
+
+	it('DTO: contratos, principal y la confirmación de la fecha (la del principal) bastan', async () => {
+		const base = {
+			contract_ids: ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'],
+			main_contract_id: '11111111-1111-4111-8111-111111111111',
+			confirm_issue_date: true,
+		};
+		const errors = async (extra: Record<string, unknown>) =>
+			(await validate(plainToInstance(InvoiceConsolidationRuleDto, { ...base, ...extra }))).map((error) => error.property);
+
+		expect(await errors({})).toEqual([]);
+		expect(await errors({ confirm_issue_date: false })).toEqual(['confirm_issue_date']);
 	});
 
 	describe('InvoiceConsolidationRulesService', () => {
@@ -105,7 +121,8 @@ describe('unificación recurrente (spec-unificacion-recurrente.md)', () => {
 		const build = (
 			options: { rule?: Record<string, unknown> | null; invoices?: Record<string, unknown>[]; unified?: Record<string, unknown>[] } = {}
 		) => {
-			const query = jest.fn(async (sql: string, ..._params: unknown[]) => {
+			const query = jest.fn(async (sql: string, ...params: unknown[]) => {
+				void params;
 				if (sql.includes('FROM users WHERE auth_id')) return [{ id: 'user-1' }];
 				if (sql.includes('FROM client_entities WHERE id')) return [{ '?column?': 1 }];
 				if (sql.includes('holding_settings')) return [{ timezone: 'America/Santiago' }];
@@ -166,8 +183,43 @@ describe('unificación recurrente (spec-unificacion-recurrente.md)', () => {
 				return [];
 			});
 			const consolidation = {
-				preview: jest.fn().mockResolvedValue({ blockers: [], warnings: [], header: { issue_date: '2026-10-20' } }),
+				preview: jest.fn().mockResolvedValue({
+					blockers: [],
+					warnings: [{ code: 'references_inherited', label: 'Pide OC', message: 'Pide OC: …' }],
+					header: { issue_date: '2026-10-20', due_date: '2026-11-19' },
+					lines: [
+						{
+							source_line_id: 'l-a',
+							contract_id: 'c-a',
+							contract_number: 'CTR-A',
+							description: 'PLATAFORMA - CTR-A',
+							description_before: 'PLATAFORMA',
+							description_fitted: false,
+							currency: 'CLP',
+							quantity: 1,
+							subtotal: 100,
+							subtotal_invoice_currency: 100,
+							is_visible: true,
+							fx: 1,
+						},
+						{
+							source_line_id: 'l-b',
+							contract_id: 'c-b',
+							contract_number: 'CTR-B',
+							description: 'SOPORTE - CTR-B',
+							description_before: 'SOPORTE',
+							description_fitted: false,
+							currency: 'CLP',
+							quantity: 0,
+							subtotal: 0,
+							subtotal_invoice_currency: 0,
+							is_visible: false,
+							fx: 1,
+						},
+					],
+				}),
 				applyInvoices: jest.fn().mockResolvedValue({ applied: true }),
+				reunifyInvoices: jest.fn().mockResolvedValue({ applied: true, undone: { undone: true } }),
 				undoInvoice: jest.fn().mockResolvedValue({ undone: true }),
 			};
 			const runner = {
@@ -209,6 +261,7 @@ describe('unificación recurrente (spec-unificacion-recurrente.md)', () => {
 			)!;
 
 			expect(insert[0]).toContain('ON CONFLICT (holding_id, client_entity_id)');
+			expect(insert[0]).not.toMatch(/issue_?day/);
 			expect(insert[1]).toEqual(['h-1', 'e-1', 'c-a', ['c-a', 'c-b'], 'user-1']);
 			expect(consolidation.applyInvoices).toHaveBeenCalledWith(
 				['i-a', 'i-b'],
@@ -220,7 +273,7 @@ describe('unificación recurrente (spec-unificacion-recurrente.md)', () => {
 			expect(result.result).toEqual({ unified: 1, blocked: 0 });
 			// Contrato activo fuera de la regla: aviso (no se suma solo).
 			expect(result.new_contract_ids).toEqual(['c-c']);
-			expect(result.contracts.find((contract) => contract.id === 'c-a')).toMatchObject({ in_rule: true, issue_day: 20 });
+			expect(result.contracts.find((contract) => contract.id === 'c-a')).toMatchObject({ in_rule: true, emission_day: 20 });
 		});
 
 		it('un grupo bloqueado por la consolidación no frena al resto ni rompe la respuesta', async () => {
@@ -238,7 +291,7 @@ describe('unificación recurrente (spec-unificacion-recurrente.md)', () => {
 			expect(result.result).toEqual({ unified: 0, blocked: 1 });
 		});
 
-		it('re-unifica: deshace la unificada que sigue Por Emitir y la vuelve a armar con la factura nueva', async () => {
+		it('re-unifica: deshace la unificada que sigue Por Emitir y la vuelve a armar con la factura nueva, en una operación', async () => {
 			const { service, consolidation } = build({
 				invoices: [
 					{
@@ -277,21 +330,39 @@ describe('unificación recurrente (spec-unificacion-recurrente.md)', () => {
 			const results = await service.runAll(AT);
 
 			expect(results).toEqual([{ holding_id: 'h-1', success: true, events: 1 }]);
-			expect(consolidation.undoInvoice).toHaveBeenCalledWith('u-1', expect.any(String), 'h-1', 'user-1', AT, 'consolidation_rule_job');
-			expect(consolidation.applyInvoices).toHaveBeenCalledWith(
+			// Deshacer y volver a armar en una sola transacción (`reunifyInvoices`), que traspasa referencias, glosas y fechas reprogramadas.
+			expect(consolidation.reunifyInvoices).toHaveBeenCalledWith(
+				'u-1',
 				['o-a', 'o-b', 'n-b'],
+				expect.any(String),
 				'h-1',
 				'user-1',
-				expect.objectContaining({ rule_id: 'rule-1' }),
+				expect.objectContaining({ rule_id: 'rule-1', source: 'consolidation_rule_job' }),
 				AT
 			);
+			expect(consolidation.undoInvoice).not.toHaveBeenCalled();
+			expect(consolidation.applyInvoices).not.toHaveBeenCalled();
 		});
 
 		it('vista: estado por mes desde las facturas (pendiente con la fecha del principal) y pausar con deshacer', async () => {
 			const { service, consolidation, query } = build();
 			const view = await service.view('e-1', 'h-1', AT);
 
-			expect(view.months).toEqual([expect.objectContaining({ month: '2026-10', state: 'pending', issue_date: '2026-10-20' })]);
+			expect(view.months).toEqual([
+				expect.objectContaining({
+					month: '2026-10',
+					state: 'pending',
+					issue_date: '2026-10-20',
+					due_date: '2026-11-19',
+					warnings: [{ code: 'references_inherited', label: 'Pide OC', message: 'Pide OC: …' }],
+				}),
+			]);
+			// Líneas del plan: la de cantidad 0 va con is_visible: false (el front la pliega).
+			expect(view.months[0].lines.map((line) => [line.source_line_id, line.description, line.is_visible])).toEqual([
+				['l-a', 'PLATAFORMA - CTR-A', true],
+				['l-b', 'SOPORTE - CTR-B', false],
+			]);
+			expect(Object.keys(view.rule ?? {}).some((key) => key.endsWith('_day'))).toBe(false);
 			expect(consolidation.preview).toHaveBeenCalledWith({ invoice_ids: ['i-a', 'i-b'] }, 'h-1', 'c-a');
 			expect(view.summary).toEqual({ unified: 0, pending: 1, blocked: 0, single: 0 });
 			const paused = await service.pause('e-1', { undo_pending: true }, 'h-1', 'auth', AT);
