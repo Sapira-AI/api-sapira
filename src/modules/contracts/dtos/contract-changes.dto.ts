@@ -361,7 +361,7 @@ export class RenewalItemDto {
 
 /**
  * Ítem de `item_update` = "Corregir un dato mal cargado" (§9.2, F4): cuenta, glosa (`product_name`), tipo y, para un solo ítem por cambio,
- * cantidad, precio (`unit_price` en el modo `price_entry_mode`) y descuento %. Corrección en su lugar: sin ítems espejo ni UPSELL/DOWNSELL;
+ * cantidad, precio (`unit_price` en el modo `price_entry_mode`), descuento % o fecha de inicio (`start_date`). Corrección en su lugar: sin ítems espejo ni UPSELL/DOWNSELL;
  * con valor, reescribe las Por Emitir y reparte la diferencia de lo emitido. La forma (al menos un campo, rangos) la valida el plan
  * (`contract-changes.ts` `planItemUpdate`).
  */
@@ -407,6 +407,13 @@ export class ItemUpdateItemDto {
 	@IsNumber({ maxDecimalPlaces: 4 }, { message: 'Descuento inválido' })
 	@IsOptional()
 	discount_value?: number;
+	@ApiPropertyOptional({
+		description:
+			'Fecha de inicio correcta (YYYY-MM-DD, ≤ fin del ítem). Bloquea si una emitida vigente cobra el ítem antes; las Por Emitir anteriores se quitan y el primer período se prorratea como al crear',
+	})
+	@Matches(ISO_DATE, { message: 'Fecha de inicio inválida (YYYY-MM-DD)' })
+	@IsOptional()
+	start_date?: string;
 }
 
 /** Ítem de `reactivate` (§9.3.2): sin lista = todo lo cancelado. Cantidad/unitario solo cambian en la rama de mes cerrado (REACTIVATION nuevo). */

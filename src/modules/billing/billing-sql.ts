@@ -115,6 +115,18 @@ export interface CteOptions {
 }
 
 /**
+ * Dígitos de un folio buscado ("FAC 028209" → "28209"): la tira de dígitos más larga, de 3 o más, sin ceros a la izquierda. `null` si
+ * la búsqueda no trae un número así (un nombre con un dígito suelto no busca por folio).
+ */
+export function folioDigits(q: string | null | undefined): string | null {
+	const runs: string[] = (q ?? '').match(/\d{3,}/g) ?? [];
+	const longest = runs.reduce<string>((best, run) => (run.length > best.length ? run : best), '');
+	const digits = longest.replace(/^0+/, '');
+
+	return digits || null;
+}
+
+/**
  * `WITH base AS (…), d AS (…)` + el WHERE de `d` (filtros por estado derivado). El holding va siempre como `$1`-equivalente del `params`.
  * Columnas de `d`: las de la factura (fechas como texto), contrato, cliente (con `client_segment`/`client_market`), razón social, compañía (con
  * `company_country`), documento acreditado, desvío, el documento
@@ -175,9 +187,12 @@ export function invoicesCte(
 	if (currencies.length) base.push(`UPPER(COALESCE(i.invoice_currency, i.contract_currency)) = ANY(${params.add(currencies)}::text[])`);
 	if (filters.q) {
 		const like = params.add(`%${filters.q.replace(/[\\%_]/g, (char) => `\\${char}`)}%`);
+		const digits = folioDigits(filters.q);
+		// Folio con prefijo o ceros ("FAC 028209", "F-28209", "028209"): también calza por sus dígitos.
+		const byDigits = digits ? ` OR ltrim(regexp_replace(COALESCE(i.invoice_number, ''), '[^0-9]', '', 'g'), '0') = ${params.add(digits)}` : '';
 
 		base.push(
-			`(i.invoice_number ILIKE ${like} OR cl.name_commercial ILIKE ${like} OR ce.legal_name ILIKE ${like} OR c.contract_number ILIKE ${like})`
+			`(i.invoice_number ILIKE ${like} OR cl.name_commercial ILIKE ${like} OR ce.legal_name ILIKE ${like} OR c.contract_number ILIKE ${like}${byDigits})`
 		);
 	}
 	if (options.creditNotes) {

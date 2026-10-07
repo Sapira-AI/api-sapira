@@ -9,6 +9,7 @@ import {
 	buildSchedule,
 	computeBlockers,
 	computeFinancial,
+	computeWarnings,
 	contractDocumentPath,
 	countedInvoices,
 	fixedFxRate,
@@ -21,6 +22,7 @@ import {
 	paymentTermsLabel,
 	periodLabel,
 	pickNextInvoice,
+	referenceRequirement,
 	type ScheduleInvoice,
 	type ScheduleRow,
 	scheduleState,
@@ -204,6 +206,35 @@ describe('computeBlockers', () => {
 			expect(blocker.message).not.toMatch(/odoo|_id|fx_|partner/i);
 		}
 		expect(codes(invoice({ requires_references: true }), context())).toEqual(['needs_reference']);
+	});
+
+	it('prefactura sin OC (Domi 07-10): como borrador la referencia faltante es un aviso; si se emite (o no se sabe), bloquea', () => {
+		const draft = invoice({ requires_references: true, auto_invoice: false });
+
+		expect(codes(draft, context())).toEqual([]);
+		expect(computeWarnings(draft, context())).toEqual([
+			{
+				code: 'needs_reference',
+				message: 'Va como borrador sin la referencia que exige el contrato (por ejemplo, la OC). Agrégala antes de emitir.',
+			},
+		]);
+		expect(computeWarnings(invoice({ auto_invoice: false }), context({ requires_references: true })).map((w) => w.code)).toEqual([
+			'needs_reference',
+		]);
+		expect(codes(invoice({ requires_references: true, auto_invoice: true }), context())).toEqual(['needs_reference']);
+		expect(computeWarnings(invoice({ requires_references: true, auto_invoice: true }), context())).toEqual([]);
+		expect(computeWarnings(invoice({ requires_references: true, auto_invoice: false, references_count: 1 }), context())).toEqual([]);
+		expect(referenceRequirement({ requires_references: true, references_count: 0 })).toBe('blocker');
+		expect(referenceRequirement({ requires_references: false, references_count: 0, auto_invoice: true })).toBe('ok');
+	});
+
+	it('el calendario lleva los avisos de cada factura por emitir en su fila', () => {
+		const rows = buildSchedule(
+			[invoice({ id: 'd', status: 'Por Emitir', issue_date: '2026-10-01', requires_references: true, auto_invoice: false })],
+			{ includeCancelled: false, tcv: 0, today: TODAY, blockerContext: context() }
+		).rows;
+
+		expect(rows[0]).toMatchObject({ blockers: [], warnings: [expect.objectContaining({ code: 'needs_reference' })] });
 	});
 
 	it('no bloquea si ya tiene referencias, la moneda coincide, no se envía solo o la emisión es de este mes', () => {
@@ -1004,7 +1035,12 @@ describe('Contract360Service', () => {
 			auto_send_to_erp: true,
 			erp_partner_linked: false,
 		});
-		expect(result.next_invoice?.blockers.map((blocker) => blocker.code)).toEqual(['needs_reference', 'fixed_fx_without_rate', 'no_erp_partner']);
+		// i-2 va como borrador (sin `auto_invoice`): la falta de OC es un aviso, no un bloqueo (prefactura sin OC, Domi 07-10).
+		expect(result.next_invoice?.blockers.map((blocker) => blocker.code)).toEqual(['fixed_fx_without_rate', 'no_erp_partner']);
+		expect(result.next_invoice?.warnings.map((warning) => warning.code)).toEqual(['needs_reference']);
+		expect(query.mock.calls.find(([sql]) => (sql as string).includes('references_count'))![0]).toContain(
+			'COALESCE(i.auto_invoice, false) AS auto_invoice'
+		);
 		const recognizedCall = query.mock.calls.find(([sql]) => (sql as string).includes('AS recognized'))!;
 
 		expect(recognizedCall[1]).toEqual([CONTRACT_ID, 'h-1', '2026-09-25']);

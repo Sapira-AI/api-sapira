@@ -886,6 +886,8 @@ export class ContractChangesService {
 					if (op.set.renewed_by_key !== undefined) add('renewed_by_item_id', resolveKey(op.set.renewed_by_key));
 					// §9.3.7: el ítem cortado termina el día antes del corte con su valor por los meses que quedan (mismo mensual).
 					if (op.set.end_date !== undefined) add('end_date', op.set.end_date);
+					// §9.2 `item_update` con fecha de inicio (CTR-2026-191): el inicio corregido (con `term_months`, `price` y `final_price`).
+					if (op.set.start_date !== undefined) add('start_date', op.set.start_date);
 					if (op.set.term_months !== undefined) add('term_months', op.set.term_months);
 					if (op.set.price !== undefined) add('price', op.set.price);
 					if (op.set.final_price !== undefined) add('final_price', op.set.final_price);

@@ -85,7 +85,8 @@ export function contractTargetsOf(
 	if (normalizeQuoteType(quote.quote_type) === 'new_business')
 		blockers.push({
 			code: 'new_business_quote_on_existing_contract',
-			message: 'La cotización es de nuevo negocio: crea un contrato nuevo desde ella (S3-3)',
+			message:
+				'Esta cotización es de nuevo negocio (cliente nuevo) y no se suma a un contrato existente. Si es un producto nuevo para este cliente, cámbiala a Cross-sell; si amplía uno que ya tiene, a Upsell.',
 		});
 
 	return contracts.map((contract) => {

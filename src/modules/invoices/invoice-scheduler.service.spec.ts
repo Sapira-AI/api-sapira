@@ -861,4 +861,70 @@ describe('InvoiceSchedulerService', () => {
 			await expect(service.mapInvoiceToOdooFormat(invoiceWith([line('a', 'p-x')]))).rejects.toThrow('product_without_erp_mapping');
 		});
 	});
+
+	describe('prefactura sin OC (Domi 07-10): sin la referencia exigida se emite solo con OC; como borrador se envía igual', () => {
+		const withLinks = (links: number) => {
+			const ctx = createService();
+			const internals = ctx.service as unknown as Record<string, unknown>;
+			const query = jest.fn().mockResolvedValue([{ count: links }]);
+			const createDraftInvoice = jest.fn();
+
+			internals.dataSource = { query };
+			internals.odooInvoicesService = { createDraftInvoice };
+			const sendLog = jest.spyOn(ctx.service as never, 'createOdooSendLog').mockResolvedValue(undefined as never);
+
+			return { ...ctx, query, createDraftInvoice, sendLog };
+		};
+		const invoiceWith = (overrides: Record<string, unknown>) =>
+			({ ...buildInvoice('Chile', null, []), contract: { requires_references_for_billing: true }, ...overrides }) as any;
+
+		it('con emisión automática y sin referencias (propias ni vinculadas) se omite con motivo, se registra y no llega al ERP', async () => {
+			const { service, createDraftInvoice, sendLog, notificationsService, query } = withLinks(0);
+
+			const result = await service.sendInvoiceToOdoo(invoiceWith({ auto_invoice: true }), false, 'automatic');
+
+			expect(result).toMatchObject({
+				status: 'skipped',
+				errorType: 'needs_reference',
+				error: 'El contrato exige una referencia (por ejemplo, la OC) y la factura se emite sin ninguna: no se envía al ERP',
+			});
+			expect(query).toHaveBeenCalledWith(expect.stringContaining('invoice_reference_links'), ['invoice-1']);
+			expect(sendLog).toHaveBeenCalledWith(expect.objectContaining({ status: 'skipped', errorType: 'needs_reference' }));
+			expect(createDraftInvoice).not.toHaveBeenCalled();
+			expect(notificationsService.createOrUpdate).not.toHaveBeenCalled();
+		});
+
+		it('la exigencia puede venir de la factura misma', async () => {
+			const { service } = withLinks(0);
+
+			await expect(
+				service.missingReferenceForIssue(invoiceWith({ auto_invoice: true, contract: null, requires_references_for_billing: true }))
+			).resolves.toContain('no se envía al ERP');
+		});
+
+		it('como borrador (sin emisión automática) no se omite: el borrador viaja sin OC', async () => {
+			const { service, query } = withLinks(0);
+
+			await expect(service.missingReferenceForIssue(invoiceWith({ auto_invoice: false }))).resolves.toBeNull();
+			expect(query).not.toHaveBeenCalled();
+		});
+
+		it('con una referencia propia o vinculada desde el contrato, o sin exigencia, se envía', async () => {
+			const linked = withLinks(1);
+
+			await expect(linked.service.missingReferenceForIssue(invoiceWith({ auto_invoice: true }))).resolves.toBeNull();
+
+			const own = withLinks(0);
+
+			await expect(
+				own.service.missingReferenceForIssue({
+					...buildInvoice('Chile', new Date('2026-07-01')),
+					contract: { requires_references_for_billing: true },
+					auto_invoice: true,
+				})
+			).resolves.toBeNull();
+			expect(own.query).not.toHaveBeenCalled();
+			await expect(own.service.missingReferenceForIssue(invoiceWith({ auto_invoice: true, contract: null }))).resolves.toBeNull();
+		});
+	});
 });

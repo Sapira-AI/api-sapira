@@ -13,6 +13,7 @@ import { InvoiceItem } from '@/databases/postgresql/entities/facturacion/invoice
 import { InvoiceReference } from '@/databases/postgresql/entities/facturacion/invoice-reference.entity';
 import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
 import { OdooProductMapping } from '@/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity';
+import { NEEDS_REFERENCE_CODE, referenceRequirement } from '@/modules/contracts/contract-360';
 import { pairKey, type PairLine, upperCode, valuateLinesByPair } from '@/modules/contracts/multicurrency';
 import { INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE, NotificationsService } from '@/modules/notifications/notifications.service';
 
@@ -356,6 +357,32 @@ export class InvoiceSchedulerService {
 						schedulerSource,
 					});
 				}
+
+				return result;
+			}
+
+			// Prefactura sin OC (Domi 07-10): sin la referencia exigida, una factura que se EMITE (`auto_invoice`) no sale; como borrador sí.
+			const missingReference = await this.missingReferenceForIssue(invoice);
+
+			if (missingReference) {
+				result.status = 'skipped';
+				result.error = missingReference;
+				result.details = 'La factura no se envía: agrega la referencia (por ejemplo, la OC) o envíala como borrador';
+				result.errorType = NEEDS_REFERENCE_CODE;
+				this.logger.warn(`⚠️ Factura ${invoice.invoice_number || invoice.id} omitida: ${missingReference}`);
+				await this.createOdooSendLog({
+					holdingId: invoice.holding_id,
+					operation: 'create_draft',
+					status: 'skipped',
+					invoiceId: invoice.id,
+					invoiceNumber: invoice.invoice_number || 'SIN-NUMERO',
+					clientName: invoice.clientEntity?.legal_name?.trim() || result.clientName,
+					companyName: invoice.company?.legal_name?.trim() || result.companyName,
+					invoiceCurrency: invoice.invoice_currency,
+					errorMessage: missingReference,
+					errorType: NEEDS_REFERENCE_CODE,
+					errorDetails: { auto_invoice: true, references_count: 0 },
+				});
 
 				return result;
 			}
@@ -1355,6 +1382,29 @@ export class InvoiceSchedulerService {
 			l10n_pe_edi_operation_type: l10nPeEdiOperationType,
 			l10n_cl_reference_ids: l10nClReferenceIds,
 		};
+	}
+
+	/**
+	 * Prefactura sin OC (`referenceRequirement` de `contract-360.ts`, la misma regla del 360, la cola y el envío manual): si el contrato o la
+	 * factura exigen referencias, la factura no tiene ninguna (propias ni vinculadas desde el contrato) y se emite (`auto_invoice`), devuelve
+	 * el motivo del salto; null si puede enviarse (con referencia, sin exigencia, o como borrador).
+	 */
+	async missingReferenceForIssue(invoice: InvoiceWithRelations): Promise<string | null> {
+		const required = invoice.requires_references_for_billing === true || invoice.contract?.requires_references_for_billing === true;
+
+		if (!required || !invoice.auto_invoice || (invoice.references?.length ?? 0) > 0) return null;
+		const [row] = (await this.dataSource.query(`SELECT COUNT(*)::int AS count FROM invoice_reference_links WHERE invoice_id = $1`, [
+			invoice.id,
+		])) as Array<{ count: number | string }>;
+		const requirement = referenceRequirement({
+			requires_references: required,
+			references_count: Number(row?.count ?? 0),
+			auto_invoice: invoice.auto_invoice,
+		});
+
+		return requirement === 'blocker'
+			? 'El contrato exige una referencia (por ejemplo, la OC) y la factura se emite sin ninguna: no se envía al ERP'
+			: null;
 	}
 
 	validateInvoiceForOdoo(invoice: InvoiceWithRelations): { valid: boolean; error?: string } {

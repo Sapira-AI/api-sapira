@@ -8,7 +8,7 @@
  */
 import { escapeHtml } from '@/core/utils/escape-html';
 import { diffDays } from '@/modules/contracts/billing-engine';
-import { CANCELLED_STATUS, creditNotePendingEmission, isCreditNote, PENDING_STATUS } from '@/modules/contracts/contract-360';
+import { CANCELLED_STATUS, creditNotePendingEmission, isCreditNote, NEEDS_REFERENCE_CODE, PENDING_STATUS } from '@/modules/contracts/contract-360';
 
 // ---------------------------------------------------------------- catálogos
 
@@ -722,6 +722,32 @@ export function queueBlockers(blockers: BillingBlocker[], issuePath: IssuePath):
 	}
 
 	return out;
+}
+
+/**
+ * Prefactura sin OC por camino de emisión (Domi 07-10): por el ERP, una Por Emitir que va como borrador sin la referencia exigida trae el
+ * aviso `needs_reference` de `planSendNow` y no cuenta como bloqueada. Fuera del ERP (`external`) no hay borrador: la emisión externa
+ * es la emisión, así que el aviso vuelve a ser el bloqueo `needs_reference` (como antes).
+ */
+export function draftReferenceByPath<W extends { code: string; message: string }>(
+	plan: { blockers: BillingBlocker[]; warnings: W[] },
+	issuePath: IssuePath
+): { blockers: BillingBlocker[]; warnings: W[] } {
+	const draft = plan.warnings.find((warning) => warning.code === NEEDS_REFERENCE_CODE);
+
+	if (issuePath === 'erp' || !draft) return { blockers: plan.blockers, warnings: plan.warnings };
+
+	return {
+		blockers: [
+			...plan.blockers,
+			{
+				code: NEEDS_REFERENCE_CODE,
+				message: 'El contrato exige referencias para facturar (por ejemplo, una orden de compra) y esta factura todavía no tiene ninguna',
+				next_step: 'Agrega la referencia a la factura',
+			},
+		],
+		warnings: plan.warnings.filter((warning) => warning !== draft),
+	};
 }
 
 /** Grupo de la cola: en el ERP como borrador > con bloqueo > rezagada (emisión < hoy) > lista. */

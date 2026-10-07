@@ -5,7 +5,7 @@ import { DataSource } from 'typeorm';
 
 import { BillingPaymentsService } from './billing-payments.service';
 import { BillingReadService } from './billing-read.service';
-import { documentKindSql, invoicesCte, monthEndOf, nextMonthStart, SOURCE_SQL, SqlParams, subscriptionSql } from './billing-sql';
+import { documentKindSql, folioDigits, invoicesCte, monthEndOf, nextMonthStart, SOURCE_SQL, SqlParams, subscriptionSql } from './billing-sql';
 import { INVOICE_SOURCES } from './billing-states';
 
 const HOLDING = '05583c6e-9364-4672-a610-0744324e44b4';
@@ -663,6 +663,24 @@ describe('CTE de facturas', () => {
 		expect(cte).toContain('tdt.name AS tax_document_name');
 	});
 
+	it('búsqueda de folio: "FAC 028209" también calza por los dígitos del folio (sin prefijo ni ceros); un nombre sin número no', () => {
+		expect(folioDigits('FAC 028209')).toBe('28209');
+		expect(folioDigits('28209')).toBe('28209');
+		expect(folioDigits('F-1046 y 12')).toBe('1046');
+		expect(folioDigits('Acme 2')).toBeNull();
+		expect(folioDigits('000')).toBeNull();
+
+		const params = new SqlParams();
+		const { cte } = invoicesCte(HOLDING, { q: 'FAC 028209' }, params, { today: '2026-10-01' });
+
+		expect(cte).toContain(`ltrim(regexp_replace(COALESCE(i.invoice_number, ''), '[^0-9]', '', 'g'), '0') = $4`);
+		expect(params.values).toEqual([HOLDING, '2026-10-01', '%FAC 028209%', '28209']);
+
+		const plain = new SqlParams();
+
+		expect(invoicesCte(HOLDING, { q: 'acme' }, plain, { today: '2026-10-01' }).cte).not.toContain('regexp_replace(COALESCE(i.invoice_number');
+	});
+
 	it('con status explícito no excluye Canceladas; include_inactive suma orígenes consolidados', () => {
 		const params = new SqlParams();
 		const { cte } = invoicesCte(HOLDING, { status: 'Cancelada', include_inactive: true }, params, {
@@ -714,10 +732,13 @@ describe('cola Por emitir: bloqueos del 360 por factura y grupos', () => {
 		...overrides,
 	});
 	const rows = [
-		invoice('a', K1, { requires_references_for_billing: true }),
+		invoice('a', K1, { requires_references_for_billing: true, auto_invoice: true }),
 		invoice('b', K2, { issue_date: '2026-09-25' }),
 		invoice('c', K1, { odoo_invoice_id: 77, sent_to_odoo_at: '2026-09-30T12:00:00Z' }),
 		invoice('d', K2, { tax_rate: null }),
+		// Prefactura sin OC (Domi 07-10): por el ERP como borrador avisa y queda lista; sin ERP la emisión externa sigue bloqueada.
+		invoice('e', K1, { requires_references_for_billing: true, auto_invoice: false }),
+		invoice('f', K2, { requires_references_for_billing: true, auto_invoice: false }),
 	];
 	const contexts = [
 		{
@@ -740,7 +761,7 @@ describe('cola Por emitir: bloqueos del 360 por factura y grupos', () => {
 		},
 	];
 
-	it('ERP: needs_reference bloquea, borrador en el ERP aparte; sin ERP: rezagada y lista (los bloqueos del envío no aplican)', async () => {
+	it('ERP: needs_reference bloquea si se emite y avisa si va como borrador, borrador en el ERP aparte; sin ERP: rezagada y lista (los bloqueos del envío no aplican)', async () => {
 		const { read } = build((sql) => {
 			if (sql.includes('SELECT d.id, d.contract_id, d.invoice_currency, d.total_due FROM d'))
 				return rows.map((row) => ({
@@ -759,10 +780,10 @@ describe('cola Por emitir: bloqueos del 360 por factura y grupos', () => {
 		const byId = Object.fromEntries(result.data.map((row) => [row.id, row]));
 
 		expect(result.until).toBe('2026-10-31');
-		expect(result.groups).toMatchObject({ ready: 1, blocked: { count: 1, by_code: { needs_reference: 1 } }, late: 1, erp_draft: 1 });
+		expect(result.groups).toMatchObject({ ready: 2, blocked: { count: 2, by_code: { needs_reference: 2 } }, late: 1, erp_draft: 1 });
 		expect(result.groups.amount_invoice_currency_by_currency).toEqual({
-			ready: [{ currency: 'CLP', amount: 1190, invoices: 1, unvalued: 0 }],
-			blocked: [{ currency: 'CLP', amount: 1190, invoices: 1, unvalued: 0 }],
+			ready: [{ currency: 'CLP', amount: 2380, invoices: 2, unvalued: 0 }],
+			blocked: [{ currency: 'CLP', amount: 2380, invoices: 2, unvalued: 0 }],
 			late: [{ currency: 'CLP', amount: 0, invoices: 1, unvalued: 1 }],
 			erp_draft: [{ currency: 'CLP', amount: 1190, invoices: 1, unvalued: 0 }],
 		});
@@ -772,7 +793,12 @@ describe('cola Por emitir: bloqueos del 360 por factura y grupos', () => {
 		expect(byId.c.group).toBe('erp_draft');
 		expect(byId.c.blocked_reasons.map((blocker) => blocker.code)).toEqual(['already_sent', 'sent_to_erp_draft']);
 		expect(byId.d).toMatchObject({ group: 'ready', issue_path: 'external', blocked_reasons: [] });
-		expect(result).toMatchObject({ total: 4, currentPage: 1, pages: 1, limit: 10, truncated: false });
+		expect(byId.e).toMatchObject({ group: 'ready', issue_path: 'erp', blocked_reasons: [] });
+		expect(byId.e.warnings).toEqual([expect.objectContaining({ code: 'needs_reference', message: expect.stringContaining('Va como borrador') })]);
+		expect(byId.f).toMatchObject({ group: 'blocked', issue_path: 'external' });
+		expect(byId.f.blocked_reasons).toEqual([expect.objectContaining({ code: 'needs_reference', action: 'references' })]);
+		expect(byId.f.warnings.map((warning: { code: string }) => warning.code)).not.toContain('needs_reference');
+		expect(result).toMatchObject({ total: 6, currentPage: 1, pages: 1, limit: 10, truncated: false });
 	});
 });
 

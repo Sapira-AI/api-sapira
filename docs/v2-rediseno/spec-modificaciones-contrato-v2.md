@@ -453,7 +453,7 @@ Reemplaza los chips técnicos de §5 por un paso 1 **"¿Qué pasó con el contra
 #### 9.2.1 Corregir un dato mal cargado (`item_update`, F4 · decisión de Domi 01-10)
 
 El "editar ítem" de la app vieja, como **corrección** (no modificación). `items[{ item_id, account?, product_name? (glosa), item_type?,
-quantity?, unit_price?, price_entry_mode?, discount_value? (%) }]`; el front agrupa por producto + cuenta (la cuenta, la glosa y el tipo van a
+quantity?, unit_price?, price_entry_mode?, discount_value? (%), start_date? }]`; el front agrupa por producto + cuenta (la cuenta, la glosa y el tipo van a
 todos los ítems del grupo; los valores, al ítem madre vigente). Cualquier estado salvo En revisión y Cancelado. Construido en
 `contract-changes.ts` `planItemUpdate` / `correctItemInvoices` / `correctedLine`.
 
@@ -475,7 +475,26 @@ todos los ítems del grupo; los valores, al ítem madre vigente). Cualquier esta
    F-0123 emitida por este ítem: la diferencia de USD 120,00 se distribuye entre las 3 facturas por emitir. Si lo que quieres es cambiar el
    acuerdo desde una fecha, usa Cambió el precio o la cantidad". Sin Por Emitir donde repartir → bloqueo `no_pending_invoices_for_correction`
    (next_step: usa "Cambió el precio o la cantidad"); una parte que dejaría una factura en negativo → `correction_difference_exceeds_pending`.
-5. **Evento** `ITEM_CORRECTED` (subtipo `value` o `data`, `amount_delta` 0) con `metadata.items[{ item_id, product_name, changes[{ field,
+5. **Fecha de inicio** (`start_date`, caso Ninja Hubs CTR-2026-191, decisión de Domi 07-10: un cross-sell cargado desde septiembre que parte
+   en octubre). Un ítem por cambio, sola o con cuenta/glosa/tipo (no junto al valor: 400 en `change.items`). Reglas (`startCorrectionSet`,
+   400 en `change.items.N.start_date`): fecha ISO real; ítem recurrente que no es baja ni renovación; nuevo inicio ≤ fin del ítem y antes de su
+   baja; un ítem de ciclo propio (§9.3.9) parte su día; si el día de ciclo del contrato sale del inicio de los ítems, no puede cambiar; sus
+   ajustes (`related_item_id`) no pueden partir antes. El mes del inicio más temprano (antes o después) debe estar abierto (`period_closed`).
+   Facturas (`moveItemStartInvoices`):
+   - **Bloqueo** `issued_invoice_before_start` si una emitida **vigente** (no anulada con NC de anulación, `voidedSql`; no cancelada) cobra el
+     ítem con período antes del nuevo inicio: "Anula con nota de crédito la factura F-0123 antes de mover el inicio…" (next_step: anularla
+     desde su vista rápida, sin reemitir). Una Por Emitir que el cambio no puede tocar (unificada, heredada) → `pending_invoice_before_start`.
+   - **Por Emitir** del ítem con período antes del nuevo inicio: se quita su línea (la factura sin líneas se cancela); al adelantar, también el
+     tramo inicial prorrateado del inicio anterior. Las facturadas por OC y las líneas editadas a mano no se tocan (avisos de siempre).
+   - El generador (`restoreItemBilling` con `through`) rehace **solo los días sin factura vigente** entre el nuevo inicio y el fin del primer
+     período (o el día antes del inicio anterior al adelantar, o el fin de lo quitado): mismo prorrateo que al crear el ítem; se funde con la
+     Por Emitir del mes (F3) o va aparte. **Adelantar** el inicio, por eso, genera las Por Emitir del tramo que falta (emisión = la del ciclo o
+     hoy si ya pasó); nunca rehace un período posterior.
+   - Ítem: `start_date`, `term_months` (meses cubiertos) y `price`/`final_price` escalados por los meses de ciclo (`monthsBetween`, como al
+     crear; respeta modelo de precio y monto fijo). Sin cambio de MRR del evento (`amount_delta` 0); devengo reconstruido desde el mes del inicio
+     más temprano. La glosa de las Por Emitir que quedan no se regenera. Tests `contract-changes.spec.ts` "item_update · corregir la fecha de
+     inicio" y `contract-changes.service.spec.ts` "fecha de inicio (CTR-2026-191)".
+6. **Evento** `ITEM_CORRECTED` (subtipo `value`, `start` o `data`, `amount_delta` 0) con `metadata.items[{ item_id, product_name, changes[{ field,
    before, after }] }]`, `issued_difference` y `preserved`. Reemplaza a `ITEM_UPDATED` (el 360 sigue leyendo los eventos viejos).
 
 Desde Cotizaciones, "Asociar a contrato" entra directo a la intención "Agregó un producto" o "Cambió el precio…" según el tipo de la cotización.
