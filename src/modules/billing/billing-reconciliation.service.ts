@@ -119,7 +119,7 @@ const movementsCte = (holding: string) => `WITH mv AS (
 	FROM bank_movements m
 	LEFT JOIN bank_upload_batches b ON b.id = m.batch_id AND b.holding_id = m.holding_id
 	LEFT JOIN company_bank_accounts ba ON ba.id = b.bank_account_id AND ba.holding_id = m.holding_id
-	LEFT JOIN users ru ON ru.id = m.reconciled_by
+	LEFT JOIN users ru ON ru.auth_id = m.reconciled_by
 	${APPLIED_LATERAL}
 	WHERE m.holding_id = ${holding}
 )`;
@@ -489,7 +489,7 @@ export class BillingReconciliationService {
 	 * refresca las sugerencias persistidas de los abonos nuevos (aparte, sin bloquear la importación).
 	 */
 	async importStatement(holdingId: string, dto: StatementImportDto, authId: string, now = new Date()) {
-		const userId = await resolveUserId(this.dataSource, authId);
+		await resolveUserId(this.dataSource, authId);
 		const result = await withApiWriter(this.dataSource, async (runner) => {
 			await runner.query(`SELECT pg_advisory_xact_lock(hashtext('bank_movements:' || $1))`, [holdingId]);
 			const prepared = await this.prepareStatement(runner, holdingId, dto);
@@ -526,7 +526,8 @@ export class BillingReconciliationService {
 						skipped_duplicates: prepared.summary.duplicates,
 						errors: prepared.summary.errors,
 					}),
-					userId,
+					// uploaded_by / reconciled_by apuntan a auth.users: van con el authId, no con el id de `users`.
+					authId,
 				]
 			)) as Row[];
 			const batchId = String(batch.id);
@@ -615,7 +616,7 @@ export class BillingReconciliationService {
 					EXISTS (SELECT 1 FROM invoice_payments p JOIN bank_movements m ON m.id = p.bank_movement_id AND m.holding_id = p.holding_id
 						WHERE m.batch_id = b.id AND p.holding_id = b.holding_id) AS has_payments
 				FROM bank_upload_batches b
-				LEFT JOIN users u ON u.id = b.uploaded_by
+				LEFT JOIN users u ON u.auth_id = b.uploaded_by
 				LEFT JOIN company_bank_accounts ba ON ba.id = b.bank_account_id AND ba.holding_id = b.holding_id
 				WHERE b.holding_id = $1
 				ORDER BY b.created_at DESC, b.id LIMIT ${Number(limit)} OFFSET ${(page - 1) * Number(limit)}`,
@@ -848,7 +849,7 @@ export class BillingReconciliationService {
 
 	/** Ignorar / "No es una factura" (motivo obligatorio): solo un abono o cargo pendiente sin pagos. */
 	async ignore(holdingId: string, movementId: string, dto: IgnoreMovementDto, authId: string) {
-		const userId = await resolveUserId(this.dataSource, authId);
+		await resolveUserId(this.dataSource, authId);
 
 		return await withApiWriter(this.dataSource, async (runner) => {
 			const movement = await this.lockMovement(runner, holdingId, movementId);
@@ -871,7 +872,7 @@ export class BillingReconciliationService {
 				`UPDATE bank_movements SET status = '${MOVEMENT_STATUS.ignored}', ignore_reason = $3, reconciled_by = $4, reconciled_at = now(),
 					suggested_invoice_id = NULL, match_confidence = NULL, match_score = NULL
 				WHERE id = $1 AND holding_id = $2`,
-				[movementId, holdingId, dto.reason, userId]
+				[movementId, holdingId, dto.reason, authId]
 			);
 
 			return { movement_id: movementId, state: 'ignored' as MovementState };
@@ -1368,7 +1369,7 @@ export class BillingReconciliationService {
 					`UPDATE bank_movements SET status = '${MOVEMENT_STATUS.reconciled}', reconciled_invoice_id = $3, reconciled_at = now(), reconciled_by = $4,
 						match_confidence = COALESCE($5, match_confidence), match_score = COALESCE($6::numeric, match_score)
 					WHERE id = $1 AND holding_id = $2`,
-					[movement.id, holdingId, firstInvoice, userId, persisted.confidence, persisted.score]
+					[movement.id, holdingId, firstInvoice, authId, persisted.confidence, persisted.score]
 				);
 			} else {
 				await runner.query(

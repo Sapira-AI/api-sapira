@@ -302,7 +302,7 @@ describe('Conciliación: conciliar (single path de pagos)', () => {
 		]);
 		const update = runners[0].query.mock.calls.find(([sql]) => String(sql).includes("SET status = 'Conciliado'"))!;
 
-		expect(update[1]).toEqual([MOV, HOLDING, INV, 'user-1', 'high', 100]);
+		expect(update[1]).toEqual([MOV, HOLDING, INV, 'auth-1', 'high', 100]);
 		expect(result.items[0]).toMatchObject({ ok: true, applied: true, payment_ids: ['pay-1'], movements: [{ state_after: 'reconciled' }] });
 		expect(result.summary).toMatchObject({ ok: 1, blocked: 0 });
 	});
@@ -542,7 +542,7 @@ describe('Conciliación: deshacer, ignorar, reabrir', () => {
 		expect(await service.ignore(HOLDING, MOV, { reason: 'Préstamo' }, 'auth-1')).toEqual({ movement_id: MOV, state: 'ignored' });
 		const update = runners[0].query.mock.calls.find(([sql]) => String(sql).includes("SET status = 'Ignorado'"))!;
 
-		expect(update[1]).toEqual([MOV, HOLDING, 'Préstamo', 'user-1']);
+		expect(update[1]).toEqual([MOV, HOLDING, 'Préstamo', 'auth-1']);
 	});
 
 	it('reabrir: solo un ignorado (movement_not_ignored); vuelve a Pendiente', async () => {
