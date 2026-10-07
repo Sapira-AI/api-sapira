@@ -16,7 +16,7 @@ import {
 	CONSOLIDATION_RULE_PAUSE_REASON,
 	CONSOLIDATION_RULE_SOURCE,
 	CONSOLIDATION_RULE_UNDO_REASON,
-	issueDayOf,
+	emissionDayOf,
 	planRuleGroups,
 	type RuleGroup,
 	type RuleInvoice,
@@ -47,7 +47,8 @@ export interface RuleContract {
 	invoice_currency: string | null;
 	document_type: string | null;
 	in_rule: boolean;
-	issue_day: number | null;
+	/** Día del mes en que emite el contrato (el de su próxima Por Emitir): la unificada se emite el del principal. */
+	emission_day: number | null;
 }
 
 interface RuleRow {
@@ -153,7 +154,7 @@ export class InvoiceConsolidationRulesService {
 		const main = contracts.find((contract) => contract.id === dto.main_contract_id)!;
 
 		return {
-			main_contract: { id: main.id, contract_number: main.contract_number, issue_day: main.issue_day },
+			main_contract: { id: main.id, contract_number: main.contract_number, emission_day: main.emission_day },
 			months,
 			summary: {
 				will_unify: months.filter((month) => month.state === 'will_unify').length,
@@ -291,7 +292,8 @@ export class InvoiceConsolidationRulesService {
 
 	/**
 	 * Aplica una regla: por cada grupo (mes y documento) une las sueltas, o deshace y vuelve a armar la unificada si apareció una factura
-	 * nueva del mes. Cada grupo en su propia transacción (la de la consolidación): uno bloqueado no frena al resto.
+	 * nueva del mes (`reunifyInvoices`: en una sola transacción, y la nueva hereda las referencias OC/HES y las glosas escritas a mano de la
+	 * anterior). Cada grupo en su propia transacción (la de la consolidación): uno bloqueado no frena al resto.
 	 */
 	private async runRule(rule: RuleRow, userId: string, source: string, at: Date): Promise<{ unified: number; blocked: number }> {
 		const groups = await this.groupsFor(rule.holding_id, rule.contract_ids);
@@ -305,9 +307,18 @@ export class InvoiceConsolidationRulesService {
 				continue;
 			}
 			try {
+				// Re-unificar: deshacer y volver a armar en una transacción, con las referencias y glosas a mano de la anterior (Domi 07-10).
 				if (group.action === 'reunify' && group.unified)
-					await this.consolidation.undoInvoice(group.unified.id, CONSOLIDATION_RULE_UNDO_REASON, rule.holding_id, userId, at, source);
-				await this.consolidation.applyInvoices(group.to_consolidate, rule.holding_id, userId, options, at);
+					await this.consolidation.reunifyInvoices(
+						group.unified.id,
+						group.to_consolidate,
+						CONSOLIDATION_RULE_UNDO_REASON,
+						rule.holding_id,
+						userId,
+						options,
+						at
+					);
+				else await this.consolidation.applyInvoices(group.to_consolidate, rule.holding_id, userId, options, at);
 				unified += 1;
 			} catch (error) {
 				if (!(error instanceof ConflictException)) throw error;
@@ -364,20 +375,49 @@ export class InvoiceConsolidationRulesService {
 
 	/**
 	 * Un mes para la tarjeta (`state`: unified · pending · blocked · single) o para la vista previa (`will_unify` · `already_unified` ·
-	 * `blocked` · `single`). Los grupos por unir pasan por `planConsolidation` (con el principal fijado) para mostrar sus bloqueos y la fecha
-	 * de emisión que tendría la unificada.
+	 * `blocked` · `single`). Los grupos por unir pasan por `planConsolidation` (con el principal de la regla) para mostrar
+	 * sus bloqueos, avisos (`{ code, label, message }`), la fecha de emisión y el vencimiento que tendría la unificada y sus líneas
+	 * (`is_visible: false` = cantidad 0, no va al ERP).
 	 */
 	private async monthView(holdingId: string, group: RuleGroup, mainContractId: string | null, mode: 'state' | 'preview') {
 		let blockers: InvoiceBlocker[] = group.blockers;
-		let warnings: Array<{ code: string; message: string }> = [];
+		let warnings: Array<{ code: string; label: string; message: string }> = [];
 		let issueDate: string | null = group.unified?.issue_date ?? null;
+		let dueDate: string | null = null;
+		let lines: Array<{
+			source_line_id: string;
+			contract_id: string | null;
+			contract_number: string | null;
+			description: string;
+			description_before: string;
+			description_fitted: boolean;
+			currency: string;
+			quantity: number;
+			subtotal: number;
+			subtotal_invoice_currency: number | null;
+			is_visible: boolean;
+		}> = [];
 
 		if (group.action === 'unify' || group.action === 'reunify') {
 			const plan = await this.consolidation.preview({ invoice_ids: group.to_consolidate }, holdingId, mainContractId);
 
 			blockers = plan.blockers;
-			warnings = plan.warnings.map((warning) => ({ code: warning.code, message: warning.message }));
+			warnings = plan.warnings.map((warning) => ({ code: warning.code, label: warning.label, message: warning.message }));
 			issueDate = plan.header.issue_date;
+			dueDate = plan.header.due_date;
+			lines = plan.lines.map((line) => ({
+				source_line_id: line.source_line_id,
+				contract_id: line.contract_id,
+				contract_number: line.contract_number,
+				description: line.description,
+				description_before: line.description_before,
+				description_fitted: line.description_fitted,
+				currency: line.currency,
+				quantity: line.quantity,
+				subtotal: line.subtotal,
+				subtotal_invoice_currency: line.subtotal_invoice_currency,
+				is_visible: line.is_visible,
+			}));
 		}
 		const visible = [...group.origins, ...group.loose];
 		const totals = new Map<string, number>();
@@ -409,6 +449,7 @@ export class InvoiceConsolidationRulesService {
 			month: group.month,
 			state,
 			issue_date: issueDate,
+			due_date: dueDate,
 			unified_invoice: group.unified
 				? {
 						id: group.unified.id,
@@ -428,6 +469,7 @@ export class InvoiceConsolidationRulesService {
 				currency: invoice.invoice_currency,
 			})),
 			totals: [...totals.entries()].map(([currency, total]) => ({ currency, total })),
+			lines,
 			blockers: blockers.map((blocker) => ({ code: blocker.code, message: blocker.message })),
 			warnings,
 		};
@@ -455,7 +497,7 @@ export class InvoiceConsolidationRulesService {
 			invoice_currency: text(row.invoice_currency),
 			document_type: text(row.document_type),
 			in_rule: inRule.has(String(row.id)),
-			issue_day: issueDayOf(Array.isArray(row.pending_dates) ? row.pending_dates.map((value) => String(value).slice(0, 10)) : [], today),
+			emission_day: emissionDayOf(Array.isArray(row.pending_dates) ? row.pending_dates.map((value) => String(value).slice(0, 10)) : [], today),
 		}));
 	}
 

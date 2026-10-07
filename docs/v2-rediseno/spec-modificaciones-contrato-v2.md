@@ -453,7 +453,7 @@ Reemplaza los chips técnicos de §5 por un paso 1 **"¿Qué pasó con el contra
 #### 9.2.1 Corregir un dato mal cargado (`item_update`, F4 · decisión de Domi 01-10)
 
 El "editar ítem" de la app vieja, como **corrección** (no modificación). `items[{ item_id, account?, product_name? (glosa), item_type?,
-quantity?, unit_price?, price_entry_mode?, discount_value? (%), start_date? }]`; el front agrupa por producto + cuenta (la cuenta, la glosa y el tipo van a
+quantity?, unit_price?, price_entry_mode?, discount_value? (%), start_date?, end_date? }]`; el front agrupa por producto + cuenta (la cuenta, la glosa y el tipo van a
 todos los ítems del grupo; los valores, al ítem madre vigente). Cualquier estado salvo En revisión y Cancelado. Construido en
 `contract-changes.ts` `planItemUpdate` / `correctItemInvoices` / `correctedLine`.
 
@@ -494,7 +494,35 @@ todos los ítems del grupo; los valores, al ítem madre vigente). Cualquier esta
      crear; respeta modelo de precio y monto fijo). Sin cambio de MRR del evento (`amount_delta` 0); devengo reconstruido desde el mes del inicio
      más temprano. La glosa de las Por Emitir que quedan no se regenera. Tests `contract-changes.spec.ts` "item_update · corregir la fecha de
      inicio" y `contract-changes.service.spec.ts` "fecha de inicio (CTR-2026-191)".
-6. **Evento** `ITEM_CORRECTED` (subtipo `value`, `start` o `data`, `amount_delta` 0) con `metadata.items[{ item_id, product_name, changes[{ field,
+6. **Fecha de fin** (`end_date`, caso S02762 de SimpliRoute, decisión de Domi 07-10: **el prorrateo solo va en el primer mes, nunca al final;
+   el fin de un ítem debe calzar con el ciclo**). Con ciclo 21 → 20 y un upsell que termina el 31-07-2027, el motor cobra el último tramo
+   21-07 → 31-07 prorrateado (11/31) y la Por Emitir heredada del front viejo cobraba el mes completo. Un ítem por cambio, sola o con
+   cuenta/glosa/tipo (no junto al inicio ni al valor: 400 en `change.items`). Reglas (`endCorrectionSet`, 400 en `change.items.N.end_date`):
+   fecha ISO real; ítem recurrente con fin (un indefinido se termina con "Quitó un producto"), que no es baja, sin `churn_date` ni renovación;
+   nuevo fin ≥ inicio; un ajuste no termina después que su ítem original; sus ajustes no pueden partir después del nuevo fin; el día de ciclo
+   del contrato no cambia. El mes del día siguiente al fin más temprano debe estar abierto (`period_closed`). Facturas (`moveItemEndInvoices`):
+   - **Bloqueo** `issued_invoice_after_end` si una emitida **vigente** cobra el ítem con período después del nuevo fin ("Anula con nota de
+     crédito la factura F-0123 antes de mover el fin…"); Por Emitir intocable (unificada, heredada) → `pending_invoice_after_end`.
+   - **Acortar**: las líneas Por Emitir del ítem con período después del nuevo fin se quitan (la factura sin líneas se cancela); la que
+     contiene el nuevo fin se quita y el generador (`restoreItemBilling` con `through` = nuevo fin) la rehace hasta él, prorrateada como el
+     motor. Un consumo registrado que cruza el nuevo fin se conserva (`consumption_line_kept`).
+   - **Alargar**: si el fin anterior no calzaba con el ciclo, su tramo parcial Por Emitir se quita y se rehace junto con los días nuevos (un
+     solo período); el generador agrega los períodos que faltan hasta el nuevo fin (solo días sin factura vigente).
+   - Ítem: `end_date`, `term_months` y `price`/`final_price` escalados por los meses de ciclo (como el inicio). Los ajustes vivos
+     (UPSELL/DOWNSELL con `related_item_id`) que terminaban con el ítem lo siguen (D3/MF-h; `metadata.aligned_adjustments`). El fin del contrato
+     sigue al mayor fin de los recurrentes vivos. Devengo reconstruido desde el inicio del ítem; `amount_delta` 0.
+   - Sugerencia pura `cycleAlignedEnd(item, contractAnchor)` (`end-off-cycle.ts`): el último fin de ciclo ≤ fin actual (el día anterior al
+     inicio del último período parcial; con ciclo 21, el 20), o null si ya calza. El front la ofrece como "Alinear al ciclo" (mismo cálculo en
+     `_lib/fin-de-ciclo.ts`). Tests `item-end-correction.spec.ts`.
+   - **Causa del desvío** (`GET /contracts/:id/invoices/deviations`): cada Por Emitir trae `cause` (y `deviation.by_item[].cause`) cuando la
+     detecta: `{ code: 'end_off_cycle', item_id, product_name, item_end, cycle_day, suggested_end, period_start, period_end, plan_amount,
+     invoice_amount, days, line }` = la línea es el último período del ítem, es parcial porque el fin no calza con el ciclo y la factura cobra
+     más que el plan (`endOffCycleCause`). Otras causas: `null` (desconocida, se explica con motivo libre). `line` (si el ítem tiene una sola
+     línea en ese período) es lo que "Cobrar solo los días" reescribe con `PUT …/edit` (`amount_basis: exact_total` = `plan_amount`).
+   - **Un solo aviso**: la alerta `invoices_vs_total` del 360 trae `amount_diff`; `GET …/deviations` devuelve `invoices_vs_total { difference,
+     deviations_total, explained_by_deviations }` (misma suma, tolerancia 1 centavo por factura). El front oculta "Las facturas del contrato
+     suman…" si los desvíos la explican.
+7. **Evento** `ITEM_CORRECTED` (subtipo `value`, `start`, `end` o `data`, `amount_delta` 0) con `metadata.items[{ item_id, product_name, changes[{ field,
    before, after }] }]`, `issued_difference` y `preserved`. Reemplaza a `ITEM_UPDATED` (el 360 sigue leyendo los eventos viejos).
 
 Desde Cotizaciones, "Asociar a contrato" entra directo a la intención "Agregó un producto" o "Cambió el precio…" según el tipo de la cotización.

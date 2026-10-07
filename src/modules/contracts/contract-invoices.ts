@@ -141,6 +141,11 @@ export interface ContractInvoiceRow {
 	nc_revenue_treatment?: string | null;
 	/** Alguna línea tiene una tasa fijada explícitamente desde el 360 (`fx_rate_source` manual o net_exact, `EXPLICIT_FX_SOURCES`). */
 	fx_explicit?: boolean;
+	/**
+	 * Documento `Unificada` **v2** (con evento `INVOICE_CONSOLIDATED`, `unifiedV2Sql`); false en las históricas, los orígenes y el resto.
+	 * Ausente = no se cargó (cuenta como no v2).
+	 */
+	unified_v2?: boolean;
 }
 
 /** Orígenes de tasa que fijan la factura aunque el contrato sea spot (mismo criterio que el envío al ERP del scheduler). */
@@ -188,6 +193,13 @@ export interface ContractInvoiceLineRow {
 export const CREDIT_NOTE_SEND_PENDING_CODE = 'credit_note_send_pending';
 
 export const UNIFY_STEP = 'Desunifica el documento en Facturación y vuelve a intentarlo';
+
+/** Tipo de cambio de una unificada v2 con líneas de varios pares: no se ajusta en la unificada (Domi 07-10). */
+export const UNIFIED_MIXED_PAIRS_MESSAGE = 'Tiene líneas con distintos tipos de cambio: ajústalos en cada contrato de origen y se re-copian';
+export const UNIFIED_MIXED_PAIRS_STEP = 'Cambia el tipo de cambio en la factura de cada contrato de origen';
+/** Aviso del tipo de cambio de una unificada v2: una re-copia desde los orígenes (consumo, re-unificar) vuelve a la tasa de cada origen. */
+export const UNIFIED_RECOPY_FX_WARNING =
+	'Es una factura unificada: si se vuelve a copiar desde sus contratos de origen (por ejemplo, al cambiar un consumo), vuelve a la tasa de cada origen';
 
 // ---------------------------------------------------------------- producto sin mapeo al ERP
 
@@ -238,6 +250,45 @@ export function commonBlockers(invoice: ContractInvoiceRow): InvoiceBlocker[] {
 	}
 
 	return blockers;
+}
+
+/**
+ * ¿Es una unificada **v2** Por Emitir activa (Domi 07-10, caso Brightcell)? Esa sale como cualquier factura: Enviar al ERP ahora, Reprogramar,
+ * Restablecer borrador del ERP y Tipo de cambio (con un solo par) no la bloquean por `unified_invoice`. Sus orígenes
+ * (`consolidated_into_invoice_id`), las unificadas históricas (sin evento) y las `Consolidada` siguen bloqueadas; editar líneas, anular, NC,
+ * facturar por OC y reorganizar también (usan `commonBlockers` tal cual).
+ */
+export function isPendingUnifiedV2(
+	invoice: Pick<ContractInvoiceRow, 'unified_v2' | 'status' | 'is_active' | 'invoice_type' | 'consolidated_into_invoice_id'>
+): boolean {
+	return (
+		invoice.unified_v2 === true &&
+		invoice.status === PENDING_STATUS &&
+		invoice.is_active &&
+		invoice.invoice_type === 'Unificada' &&
+		!invoice.consolidated_into_invoice_id
+	);
+}
+
+/** `commonBlockers` sin `unified_invoice` para la unificada v2 Por Emitir (`isPendingUnifiedV2`): envío, reprogramar, FX y restablecer. */
+export function operationBlockers(invoice: ContractInvoiceRow): InvoiceBlocker[] {
+	const blockers = commonBlockers(invoice);
+
+	return isPendingUnifiedV2(invoice) ? blockers.filter((blocker) => blocker.code !== 'unified_invoice') : blockers;
+}
+
+/**
+ * Bloqueos para cambiar la descripción de las líneas de una factura (`PATCH …/invoices/descriptions`): los comunes y el borrador en el ERP.
+ * Excepción (Domi 07-10): una unificada **v2** (con evento `INVOICE_CONSOLIDATED`) Por Emitir admite el texto manual (`mode: 'set'`) en
+ * sus líneas: solo la glosa, sin montos. Las plantillas no (renderizarían con el contrato principal las líneas de otros contratos); los
+ * orígenes inactivos de una unificada y las unificadas históricas siguen bloqueados (`unified_invoice`).
+ */
+export function descriptionBlockers(invoice: ContractInvoiceRow, options: { unified_v2?: boolean; mode?: string | null } = {}): InvoiceBlocker[] {
+	const blockers = [...commonBlockers(invoice), erpDraftBlocker(invoice)].filter((blocker): blocker is InvoiceBlocker => !!blocker);
+	const manualOnUnified =
+		options.unified_v2 === true && options.mode === 'set' && invoice.invoice_type === 'Unificada' && !invoice.consolidated_into_invoice_id;
+
+	return manualOnUnified ? blockers.filter((blocker) => blocker.code !== 'unified_invoice') : blockers;
 }
 
 /**
@@ -324,7 +375,7 @@ export interface SendNowPlan {
  */
 export function planSendNow(invoice: ContractInvoiceRow, context: ContractInvoiceContext): SendNowPlan {
 	// NC/ND: el envío al ERP (`out_refund`) todavía no existe (Leon); se rechaza con un código propio, no el genérico de edición.
-	const blockers = commonBlockers(invoice).map((blocker) =>
+	const blockers = operationBlockers(invoice).map((blocker) =>
 		blocker.code === 'credit_note'
 			? {
 					code: CREDIT_NOTE_SEND_PENDING_CODE,
@@ -600,7 +651,8 @@ export interface ReschedulePlanItem {
 
 /** Una factura a una fecha: conserva `original_issue_date` (se fija la primera vez), vencimiento por condición de pago, período intacto. */
 export function planRescheduleOne(invoice: ContractInvoiceRow, context: ContractInvoiceContext, issueDate: string): ReschedulePlanItem {
-	const blockers = commonBlockers(invoice);
+	// Unificada v2: se reprograma sola (sus orígenes no cambian; el devengo sigue al período de servicio de las líneas, no a la emisión).
+	const blockers = operationBlockers(invoice);
 	const warnings: InvoiceWarning[] = [];
 	const draft = erpDraftBlocker(invoice);
 
@@ -1043,7 +1095,7 @@ function planFxByPair(
 
 /** Política y tasa de UNA factura: bloqueos comunes + `same_currency`, `uf_invoice_currency`, `sent_to_erp_draft`; matemática por política. */
 export function planFx(invoice: ContractInvoiceRow, lines: ContractInvoiceLineRow[], context: ContractInvoiceContext, input: FxInput): FxPlanItem {
-	const blockers = commonBlockers(invoice);
+	const blockers = operationBlockers(invoice);
 	const warnings: InvoiceWarning[] = [];
 	const draft = erpDraftBlocker(invoice);
 	const before = fxSnapshot(invoice);
@@ -1062,6 +1114,20 @@ export function planFx(invoice: ContractInvoiceRow, lines: ContractInvoiceLineRo
 	const partial = partialBillingBlocker(invoice);
 
 	if (partial) blockers.push(partial);
+	// Unificada v2: un solo par que convierte (o ninguno) se ajusta aquí; con varios pares, en cada contrato de origen (se re-copian).
+	if (isPendingUnifiedV2(invoice)) {
+		const invoiceCurrency = upperCode(invoice.invoice_currency) || upperCode(invoice.contract_currency);
+		const pairs = new Set(
+			lines.map((line) => upperCode(line.currency) || upperCode(invoice.contract_currency)).filter((currency) => currency !== invoiceCurrency)
+		);
+
+		if (pairs.size > 1) {
+			blockers.push({ code: 'unified_invoice', message: UNIFIED_MIXED_PAIRS_MESSAGE, next_step: UNIFIED_MIXED_PAIRS_STEP });
+
+			return empty();
+		}
+		if (pairs.size === 1) warnings.push({ code: 'unified_recopy_fx', message: UNIFIED_RECOPY_FX_WARNING });
+	}
 	// Multimoneda: el documento se valoriza por par (líneas en monedas de ítem distintas).
 	if (hasPairLines(invoice, lines)) {
 		if ((invoice.invoice_currency ?? '').toUpperCase() === 'CLF') {
@@ -1215,7 +1281,7 @@ export interface ErpResetPlan {
  * (pendiente con Leon): aviso `erp_draft_remains` siempre.
  */
 export function planErpReset(invoice: ContractInvoiceRow, context: ContractInvoiceContext, lines: ContractInvoiceLineRow[] = []): ErpResetPlan {
-	const blockers = commonBlockers(invoice);
+	const blockers = operationBlockers(invoice);
 
 	if (!blockers.some((blocker) => blocker.code === 'credit_note') && invoice.odoo_invoice_id === null && invoice.sent_to_odoo_at === null) {
 		blockers.push({ code: 'not_sent_to_erp', message: 'La factura no está vinculada al ERP: no hay borrador que restablecer', next_step: null });
@@ -1306,11 +1372,22 @@ const referenceKey = (code: string, number: string) => `${code.trim().toUpperCas
  * `document_number`, `name` ← `document_type_name`, `date` ← `reference_date`); OC = SII 801, HES = HES, OTHER con su código. Editable
  * en Por Emitir (con aviso si ya hay borrador en el ERP) y en emitidas **solo** si aún no se enviaron al ERP; nunca en NC/ND, legacy,
  * unificadas, canceladas o inactivas.
+ * Excepción (Domi 07-10, caso "Pide OC" de una unificación recurrente): la unificada **v2** (`options.unified_v2`, con evento
+ * `INVOICE_CONSOLIDATED`) Por Emitir y activa admite sus referencias igual que una factura normal, pero sin borrador en el ERP (como el
+ * texto manual de sus líneas: con borrador, `sent_to_erp_draft` con `action: 'erp_reset'`). Sus orígenes inactivos, las unificadas ya
+ * emitidas y las históricas siguen bloqueados (`unified_invoice`).
  */
-export function planReferences(invoice: ContractInvoiceRow, input: ReferenceInput[], existing: InvoiceReferenceRow[]): ReferencesPlan {
+export function planReferences(
+	invoice: ContractInvoiceRow,
+	input: ReferenceInput[],
+	existing: InvoiceReferenceRow[],
+	options: { unified_v2?: boolean } = {}
+): ReferencesPlan {
 	const blockers: InvoiceBlocker[] = [];
 	const warnings: InvoiceWarning[] = [];
 	const pending = invoice.status === PENDING_STATUS;
+	const unifiedV2Pending =
+		options.unified_v2 === true && pending && invoice.is_active && invoice.invoice_type === 'Unificada' && !invoice.consolidated_into_invoice_id;
 
 	if (isCreditNote(invoice.document_type) || invoice.document_type === 'ND') {
 		blockers.push({
@@ -1322,7 +1399,11 @@ export function planReferences(invoice: ContractInvoiceRow, input: ReferenceInpu
 		if (!invoice.is_active || invoice.status === 'Cancelada') {
 			blockers.push({ code: 'not_editable', message: 'La factura está cancelada o inactiva', next_step: null });
 		}
-		if (invoice.consolidated_into_invoice_id || invoice.invoice_type === 'Unificada' || invoice.invoice_type === 'Consolidada') {
+		if (unifiedV2Pending) {
+			const draft = erpDraftBlocker(invoice);
+
+			if (draft) blockers.push(draft);
+		} else if (invoice.consolidated_into_invoice_id || invoice.invoice_type === 'Unificada' || invoice.invoice_type === 'Consolidada') {
 			blockers.push({ code: 'unified_invoice', message: 'Es un documento unificado o consolidado entre facturas', next_step: UNIFY_STEP });
 		}
 		if (invoice.is_legacy) {
@@ -1335,7 +1416,7 @@ export function planReferences(invoice: ContractInvoiceRow, input: ReferenceInpu
 				next_step: 'Corrígelas en el ERP',
 			});
 		}
-		if (pending && invoice.odoo_invoice_id !== null) {
+		if (pending && invoice.odoo_invoice_id !== null && !unifiedV2Pending) {
 			warnings.push({
 				code: 'sent_to_erp_draft',
 				message: 'La factura ya está en el ERP como borrador: el borrador no se actualiza con las referencias nuevas',

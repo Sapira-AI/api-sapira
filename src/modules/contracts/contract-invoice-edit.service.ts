@@ -7,13 +7,14 @@ import { validationException } from '@/core/utils/validation-errors';
 
 import { setApiWriter } from './api-writer';
 import { refreshInvoiceSystemAmounts } from './api-written-fields';
-import { addDays, generateInvoices, round2, type TaxDocumentRate } from './billing-engine';
+import { addDays, defaultAnchorDay, generateInvoices, round2, type TaxDocumentRate } from './billing-engine';
 import { isCreditNote, PENDING_STATUS } from './contract-360';
 import { ContractActivationService } from './contract-activation.service';
 import { cleanPaymentTerms, resolveUserId } from './contract-drafts.service';
 import { type ContractInvoiceRow, INVOICE_EVENT_TYPES, type InvoiceBlocker, type InvoiceWarning } from './contract-invoices';
 import { ContractInvoicesService } from './contract-invoices.service';
 import { ContractsService, ISSUED_INVOICE_STATUSES } from './contracts.service';
+import { invoicesVsTotalSummary, withDeviationCauses } from './end-off-cycle';
 import { type DescriptionReference, parseStoredTemplate, referenceKind } from './invoice-description';
 import {
 	type BulkHeaderPlanItem,
@@ -198,6 +199,18 @@ export interface InvoiceEditPreview {
  * encabezado = Σ líneas con la convención FX de la factura, montos en moneda del sistema (`refreshInvoiceSystemAmounts`), devengo
  * (`revenue_schedule_rebuild`) solo si cambió un monto, y evento en `contract_lifecycle_events`. Nunca escribe `invoices.updated_at`.
  */
+/** Ítems del contrato al formato del generador (con su baja) y día de ciclo, para detectar la causa de un desvío (`end-off-cycle.ts`). */
+export function deviationCauseContext(data: Pick<ContractPlanData, 'contract' | 'items'>) {
+	const items = new Map(
+		data.items.map((row) => [String(row.id), { item: ContractActivationService.engineItem(row), churned: Boolean(toText(row.churn_date)) }])
+	);
+	const saved = Number(data.contract.billing_anchor_day);
+	const anchor =
+		Number.isInteger(saved) && saved >= 1 && saved <= 31 ? saved : (defaultAnchorDay([...items.values()].map((entry) => entry.item)) ?? 1);
+
+	return { items, anchor };
+}
+
 @Injectable()
 export class ContractInvoiceEditService {
 	private readonly logger = new Logger(ContractInvoiceEditService.name);
@@ -560,33 +573,39 @@ export class ContractInvoiceEditService {
 		const contract = await this.contracts.resolveContract(idOrNumber, holdingId);
 		const invoices = await this.invoices.loadPendingInvoices(this.dataSource, contract.id, holdingId);
 
-		if (!invoices.length) return { data: [], total: 0 };
+		if (!invoices.length) return { data: [], total: 0, invoices_vs_total: null };
 		const ids = invoices.map((invoice) => invoice.id);
-		const [data, lines, adjustments] = await Promise.all([
+		const [data, lines, adjustments, invoiced] = await Promise.all([
 			this.loadPlanData(this.dataSource, contract.id, holdingId),
 			this.loadLines(this.dataSource, ids, holdingId),
 			this.dataSource.query(LATEST_ADJUSTMENTS_SQL, [ids, holdingId]) as Promise<Row[]>,
+			this.contracts.invoicedVsTotal(contract.id, holdingId),
 		]);
 		const explained = new Set(adjustments.filter((row) => toText(row.notes)?.trim()).map((row) => String(row.invoice_id)));
+		const causes = deviationCauseContext(data);
 		const result = [];
 
 		for (const invoice of invoices) {
 			if (explained.has(invoice.id)) continue;
-			const current = (lines.get(invoice.id) ?? []).map((row) => stateOf(row));
+			const invoiceLines = lines.get(invoice.id) ?? [];
+			const current = invoiceLines.map((row) => stateOf(row));
 			const deviation = reconcileDeviation(this.deviationPlan(data, invoice.id), current, current, invoice.contract_currency);
 
 			if (!deviation.has_deviation) continue;
+			const withCauses = withDeviationCauses(deviation, invoiceLines, causes);
+
 			result.push({
 				invoice_id: invoice.id,
 				invoice_number: invoice.invoice_number,
 				issue_date: invoice.issue_date,
 				billing_period_start: invoice.period_start,
 				billing_period_end: invoice.period_end,
-				deviation: { ...deviation, inherited: true, changed: false },
+				deviation: { ...withCauses.deviation, inherited: true, changed: false },
+				cause: withCauses.cause,
 			});
 		}
 
-		return { data: result, total: result.length };
+		return { data: result, total: result.length, invoices_vs_total: invoicesVsTotalSummary(invoiced, result) };
 	}
 
 	// ---------------------------------------------------------------- masivo de encabezado

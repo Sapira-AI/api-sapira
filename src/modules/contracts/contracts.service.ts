@@ -199,6 +199,11 @@ export interface ContractAlert {
 	severity: 'error' | 'warning' | 'info';
 	message: string;
 	count?: number;
+	/**
+	 * `invoices_vs_total`: diferencia (facturas − valor total) en moneda de contrato. El front la compara con `GET …/invoices/deviations`
+	 * (`invoices_vs_total.explained_by_deviations`): si las Por Emitir que no calzan con el contrato la explican, muestra un solo aviso.
+	 */
+	amount_diff?: number;
 }
 
 export type { ContractDerivedStatus } from './contract-status';
@@ -836,6 +841,26 @@ export class ContractsService {
 		return row ? ContractsService.buildAlerts(row) : [];
 	}
 
+	/**
+	 * Lo facturado del contrato contra su valor total (los mismos números que la alerta `invoices_vs_total`), para que
+	 * `GET …/invoices/deviations` diga si las Por Emitir que no calzan con el contrato explican esa diferencia (caso S02762).
+	 */
+	async invoicedVsTotal(contractId: string, holdingId: string): Promise<{ invoices_count: number; invoiced_total: number; total_value: number }> {
+		const [row] = await this.dataSource.query<Row[]>(
+			`SELECT c.total_value, inv.invoices_count, inv.invoiced_total
+			FROM contracts c
+			LEFT JOIN LATERAL (${INVOICED_BY_CONTRACT_SQL}) inv ON true
+			WHERE c.id = $1 AND c.holding_id = $2`,
+			[contractId, holdingId]
+		);
+
+		return {
+			invoices_count: toNumber(row?.invoices_count),
+			invoiced_total: toNumber(row?.invoiced_total),
+			total_value: toNumber(row?.total_value),
+		};
+	}
+
 	/** Arma las alertas a partir de la fila de chequeos (pura, para poder probarla). */
 	static buildAlerts(row: Row): ContractAlert[] {
 		const alerts: ContractAlert[] = [];
@@ -884,6 +909,7 @@ export class ContractsService {
 			alerts.push({
 				code: 'invoices_vs_total',
 				severity: 'info',
+				amount_diff: Math.round((invoicedTotal - totalValue) * 100) / 100,
 				message: `Las facturas del contrato suman ${money(invoicedTotal, currency)} y el valor total es ${money(totalValue, currency)} (diferencia de ${money(invoicedTotal - totalValue, currency)}). Puede ser normal si hay cobros variables o ajustes.`,
 			});
 		}
@@ -1154,7 +1180,7 @@ export class ContractsService {
 				has_manual_lines: row.has_manual_lines === true,
 				no_charge: row.no_charge === true,
 				erp_sync_state: erpSyncStateOf(row),
-				erp_reset_available: ContractsService.erpResetAvailable(row),
+				erp_reset_available: ContractsService.erpResetAvailable(row, unified.get(String(row.id))?.legacy_unified === false),
 				// NC/ND creada por la API sin emisión electrónica todavía (nace con el estado de su factura; Leon: emisión de NC en Odoo).
 				...electronicEmissionOf(row),
 				// Etapa 6 (spec facturas §3.7b–3.8): anulada con NC (derivado), documentos vinculados (NC y reemisión, ambos sentidos), facturación
@@ -1376,7 +1402,10 @@ export class ContractsService {
 			erp_sync_state: erpSyncStateOf(header),
 			...electronicEmissionOf(header),
 			// "Restablecer borrador del ERP" disponible (Por Emitir activa vinculada al ERP, no NC/unificada).
-			erp_reset_available: ContractsService.erpResetAvailable({ ...header, doc_type: header.document_type }),
+			erp_reset_available: ContractsService.erpResetAvailable(
+				{ ...header, doc_type: header.document_type },
+				unified.get(String(header.id))?.legacy_unified === false
+			),
 			// Sin cobro: Cancelada porque todas sus líneas quedaron en 0 (evento INVOICE_NO_CHARGE); se reactiva al recuperar cantidad.
 			no_charge: header.no_charge === true,
 			// Devengo del descuento puntual de la factura (mismo campo que las NC de descuento).
@@ -1555,8 +1584,11 @@ export class ContractsService {
 		};
 	}
 
-	/** Se puede "Restablecer borrador del ERP": Por Emitir activa vinculada al ERP que no es NC ni documento unificado. */
-	static erpResetAvailable(row: Row): boolean {
+	/**
+	 * Se puede "Restablecer borrador del ERP": Por Emitir activa vinculada al ERP que no es NC ni documento unificado. Excepción (Domi 07-10):
+	 * la unificada **v2** (`unifiedV2`: con evento `INVOICE_CONSOLIDATED`) sí, como cualquier factura; sus orígenes y las históricas no.
+	 */
+	static erpResetAvailable(row: Row, unifiedV2 = false): boolean {
 		const docType = toText(row.doc_type) ?? '';
 
 		return (
@@ -1565,7 +1597,7 @@ export class ContractsService {
 			erpSyncStateOf(row) === 'draft' &&
 			!/^(NC|ND|NOTA)/i.test(docType) &&
 			!row.consolidated_into_invoice_id &&
-			row.invoice_type !== 'Unificada' &&
+			(row.invoice_type !== 'Unificada' || unifiedV2) &&
 			row.invoice_type !== 'Consolidada'
 		);
 	}

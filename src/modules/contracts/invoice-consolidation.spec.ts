@@ -6,10 +6,12 @@ import {
 	dedupeReferences,
 	groupBlockers,
 	invoiceBlockers,
+	keptUnifiedDates,
+	keptUnifiedDescriptions,
 	mainContractOf,
 	pairBlockers,
 	planConsolidation,
-	prefixDescription,
+	suffixContractNumber,
 	undoBlockers,
 	unifiedReadFields,
 	valueLinesForConsolidation,
@@ -178,21 +180,112 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 		});
 	});
 
-	describe('glosa', () => {
-		it('antepone "<contrato> - " con guion ASCII y no duplica el prefijo', () => {
-			expect(prefixDescription('CTR-2026-12', 'PLATAFORMA', null)).toEqual({ text: 'CTR-2026-12 - PLATAFORMA', fitted: false });
-			expect(prefixDescription('CTR-2026-12', 'CTR-2026-12 - PLATAFORMA', null).text).toBe('CTR-2026-12 - PLATAFORMA');
-			expect(prefixDescription(null, 'PLATAFORMA', null).text).toBe('PLATAFORMA');
-			expect(prefixDescription('CTR-2026-12', '', null).text).toBe('CTR-2026-12');
+	describe('glosa (Domi 07-10: número de contrato al final)', () => {
+		it('pospone " - <contrato>" con guion ASCII y no duplica el número (ni al final ni el prefijo de antes)', () => {
+			expect(suffixContractNumber('CTR-2026-12', 'PLATAFORMA', null)).toEqual({
+				text: 'PLATAFORMA - CTR-2026-12',
+				fitted: false,
+				contract_dropped: false,
+				trimmed: false,
+			});
+			expect(suffixContractNumber('CTR-2026-12', 'PLATAFORMA - CTR-2026-12', null).text).toBe('PLATAFORMA - CTR-2026-12');
+			expect(suffixContractNumber('CTR-2026-12', 'CTR-2026-12 - PLATAFORMA', null).text).toBe('PLATAFORMA - CTR-2026-12');
+			expect(suffixContractNumber(null, 'PLATAFORMA', null).text).toBe('PLATAFORMA');
+			expect(suffixContractNumber('CTR-2026-12', '', null).text).toBe('CTR-2026-12');
+			expect(suffixContractNumber('CTR-2026-12', 'PLATAFORMA — Periodo', null).text).toBe('PLATAFORMA - Periodo - CTR-2026-12');
 		});
 
-		it('respeta el límite del documento con fitDescription: recorta la glosa y conserva el número', () => {
-			const long = 'PLATAFORMA DE RUTEO Cuenta Operaciones Norte - Periodo 01/10/2026 a 31/10/2026 - Tramos: gratis 100';
-			const fitted = prefixDescription('CTR-2026-12', long, 80);
+		it('si no cabe, primero se quita el número de contrato y la glosa queda entera (con su período)', () => {
+			const glosa = 'PLATAFORMA DE RUTEO Cuenta Operaciones - Periodo 01/10/2026 a 31/10/2026'; // 74
+			const result = suffixContractNumber('CTR-2026-12', glosa, 80);
 
-			expect(fitted.fitted).toBe(true);
-			expect(fitted.text.length).toBeLessThanOrEqual(80);
-			expect(fitted.text.startsWith('CTR-2026-12 - ')).toBe(true);
+			expect(result).toEqual({ text: glosa, fitted: true, contract_dropped: true, trimmed: false });
+		});
+
+		it('si la glosa sola tampoco cabe, se recorta su final, nunca el comienzo', () => {
+			const long = 'PLATAFORMA DE RUTEO Cuenta Operaciones Norte - Periodo 01/10/2026 a 31/10/2026 - Tramos: gratis 100';
+			const result = suffixContractNumber('CTR-2026-12', long, 80);
+
+			expect(result.fitted).toBe(true);
+			expect(result.contract_dropped).toBe(true);
+			expect(result.trimmed).toBe(true);
+			expect(result.text.length).toBeLessThanOrEqual(80);
+			expect(long.startsWith(result.text)).toBe(true);
+			expect(result.text).toContain('Periodo 01/10/2026 a 31/10/2026');
+			expect(result.text).not.toContain('CTR-2026-12');
+		});
+
+		it('cabe justo con el número: no se ajusta', () => {
+			const glosa = 'X'.repeat(66);
+
+			expect(suffixContractNumber('CTR-2026-12', glosa, 80)).toMatchObject({ text: `${glosa} - CTR-2026-12`, fitted: false });
+		});
+	});
+
+	describe('re-unificar: fechas de la unificada anterior (Domi 07-10)', () => {
+		const header = { issue_date: '2026-10-05', scheduled_at: '2026-10-05', due_date: '2026-11-04', vat: 1 };
+
+		it('reprogramada (emisión o programada distintas a las del plan) → la nueva conserva sus tres fechas', () => {
+			expect(keptUnifiedDates(header, { issue_date: '2026-10-20', scheduled_at: '2026-10-20', due_date: '2026-11-19' })).toEqual({
+				header: { issue_date: '2026-10-20', scheduled_at: '2026-10-20', due_date: '2026-11-19', vat: 1 },
+				kept: true,
+			});
+			expect(keptUnifiedDates(header, { issue_date: '2026-10-05', scheduled_at: '2026-10-12', due_date: null }).kept).toBe(true);
+		});
+
+		it('sin reprogramar (o sin anterior) → las fechas del plan', () => {
+			expect(keptUnifiedDates(header, { issue_date: '2026-10-05', scheduled_at: '2026-10-05T00:00:00', due_date: '2026-12-01' })).toEqual({
+				header,
+				kept: false,
+			});
+			expect(keptUnifiedDates(header, null)).toEqual({ header, kept: false });
+		});
+	});
+
+	describe('re-copia: glosas editadas en la unificada', () => {
+		const key = {
+			contract_id: 'ctr-a',
+			contract_item_id: 'item-a',
+			billing_period_start: '2026-10-01',
+			billing_period_end: '2026-10-31',
+			tier_index: null,
+		};
+
+		it('conserva la glosa escrita a mano si identifica una sola línea y difiere de la copia', () => {
+			const kept = keptUnifiedDescriptions(
+				[{ ...key, description: 'Texto propio' }],
+				[{ ...key, source_line_id: 'line-a', description: 'PLATAFORMA - CTR-1' }]
+			);
+
+			expect([...kept.entries()]).toEqual([['line-a', 'Texto propio']]);
+		});
+
+		it('igual a la copia, o ambigua (dos filas con la misma clave): se regenera', () => {
+			expect(
+				keptUnifiedDescriptions(
+					[{ ...key, description: 'PLATAFORMA - CTR-1' }],
+					[{ ...key, source_line_id: 'line-a', description: 'PLATAFORMA - CTR-1' }]
+				).size
+			).toBe(0);
+			expect(
+				keptUnifiedDescriptions(
+					[{ ...key, description: 'Texto propio' }],
+					[
+						{ ...key, source_line_id: 'line-a', description: 'A' },
+						{ ...key, source_line_id: 'line-b', description: 'B' },
+					]
+				).size
+			).toBe(0);
+			// La fila del tramo distingue dos líneas del mismo ítem y período.
+			expect(
+				keptUnifiedDescriptions(
+					[{ ...key, tier_index: '1', description: 'Tramo 2 propio' }],
+					[
+						{ ...key, tier_index: '0', source_line_id: 'line-a', description: 'A' },
+						{ ...key, tier_index: '1', source_line_id: 'line-b', description: 'B' },
+					]
+				)
+			).toEqual(new Map([['line-b', 'Tramo 2 propio']]));
 		});
 	});
 
@@ -265,10 +358,28 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 				deduped: 2,
 			});
 		});
+
+		it('re-unificar: hereda las de la unificada anterior (propias y vinculadas) sin repetir tipo+folio con las de los orígenes', () => {
+			const plan = planConsolidation(
+				ctx({
+					references: [{ id: 'r-1', source: 'invoice', invoice_id: 'inv-a', type: '801', name: 'Orden de Compra', code: '4500' }],
+					carried_references: [
+						// Copia en la anterior de la OC del origen: se descarta (ya viene del origen).
+						{ id: 'r-old-1', source: 'invoice', invoice_id: 'u-old', type: '801', name: 'Orden de Compra', code: '4500' },
+						// OC agregada a mano a la unificada anterior (caso "Pide OC"): pasa.
+						{ id: 'r-old-2', source: 'invoice', invoice_id: 'u-old', type: '801', name: 'Orden de Compra', code: '7788' },
+						// Referencia del contrato vinculada a la anterior: se vincula.
+						{ id: 'br-9', source: 'contract', invoice_id: 'u-old', type: 'HES', name: null, code: 'H-1' },
+					],
+				})
+			);
+
+			expect(plan.references).toMatchObject({ invoice_reference_ids: ['r-1', 'r-old-2'], contract_reference_ids: ['br-9'], deduped: 1 });
+		});
 	});
 
 	describe('planConsolidation', () => {
-		it('aporte por contrato, principal = mayor aporte, encabezado = Σ líneas, prefijo y contract_id de la línea', () => {
+		it('aporte por contrato, principal = mayor aporte, encabezado = Σ líneas, número de contrato al final y contract_id de la línea', () => {
 			const plan = planConsolidation(ctx());
 
 			expect(plan.can_apply).toBe(true);
@@ -293,10 +404,16 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 				requires_references_for_billing: false,
 			});
 			expect(plan.lines.map((entry) => [entry.contract_id, entry.description])).toEqual([
-				['ctr-b', 'CTR-2026-2 - SOPORTE'],
-				['ctr-a', 'CTR-2026-1 - PLATAFORMA - Periodo 01/10/2026 a 31/10/2026'],
+				['ctr-b', 'SOPORTE - CTR-2026-2'],
+				['ctr-a', 'PLATAFORMA - Periodo 01/10/2026 a 31/10/2026 - CTR-2026-1'],
 			]);
-			expect(codes(plan.warnings)).toEqual(['auto_invoice_differs']);
+			expect(plan.warnings).toEqual([
+				{
+					code: 'auto_invoice_differs',
+					label: 'Emisión manual',
+					message: 'Un contrato se emite solo y otro no: la factura unificada no se emite sola; emítela tú.',
+				},
+			]);
 		});
 
 		it('unificación recurrente (Domi 05-10): el principal fijado por la regla lleva el encabezado y la fecha de su factura del mes', () => {
@@ -315,13 +432,44 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 			expect(planConsolidation(ctx({ main_contract_id: 'ctr-x' })).main_contract_id).toBe('ctr-b');
 		});
 
-		it('AND de banderas: aviso si difieren envío automático; requisito de referencias heredado', () => {
+		it('envío al ERP: sigue al contrato principal (el job lee el contrato de la factura); requisito de OC heredado', () => {
+			// Principal (ctr-b, mayor aporte) no envía solo → la unificada tampoco.
 			const plan = planConsolidation(
 				ctx({ invoices: [A, { ...B, auto_invoice: true, contract_auto_send_to_erp: false, contract_requires_references: true }] })
 			);
 
 			expect(plan.header).toMatchObject({ auto_invoice: true, auto_send_to_erp: false, requires_references_for_billing: true });
-			expect(codes(plan.warnings)).toEqual(['auto_send_to_erp_differs', 'references_inherited']);
+			expect(plan.warnings).toEqual([
+				{
+					code: 'auto_send_to_erp_differs',
+					label: 'Envío al ERP: manual',
+					message:
+						'Un contrato envía solo al ERP y otro no: la factura unificada sigue al contrato principal (CTR-2026-2) y no se envía sola; envíala tú.',
+				},
+				{
+					code: 'references_inherited',
+					label: 'Pide OC',
+					message: 'Pide OC: puedes enviarla como borrador y agregar la OC antes de emitir.',
+				},
+			]);
+
+			// Principal que sí envía solo (aunque otro no) → la unificada se envía sola.
+			const sends = planConsolidation(ctx({ invoices: [{ ...A, contract_auto_send_to_erp: false }, B] }));
+
+			expect(sends.header.auto_send_to_erp).toBe(true);
+			expect(sends.warnings.find((warning) => warning.code === 'auto_send_to_erp_differs')).toMatchObject({
+				label: 'Envío al ERP: automático',
+				message: 'Un contrato envía solo al ERP y otro no: la factura unificada sigue al contrato principal (CTR-2026-2) y se envía sola.',
+			});
+		});
+
+		it('líneas con cantidad 0 → is_visible: false (se copian igual, no van al ERP)', () => {
+			const plan = planConsolidation(ctx({ lines: [line({ quantity: 0, subtotal: 0, subtotal_invoice: 0 }), lineB] }));
+
+			expect(plan.lines.map((entry) => [entry.source_line_id, entry.is_visible])).toEqual([
+				['line-b', true],
+				['line-a', false],
+			]);
 		});
 
 		it('spot propagado: encabezado en moneda de factura NULL, FX NULL y VAT en moneda de contrato', () => {
@@ -385,12 +533,45 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 			});
 		});
 
-		it('glosa ajustada al límite del contrato principal → aviso description_fitted', () => {
+		it('glosa que no cabe con el número al límite del contrato principal → aviso description_fitted con label', () => {
 			const long = 'PLATAFORMA DE RUTEO Cuenta Operaciones Norte - Periodo 01/10/2026 a 31/10/2026 - Tramos: gratis 100';
 			const plan = planConsolidation(ctx({ lines: [line({ description: long }), lineB], max_chars_by_contract: new Map([['ctr-b', 80]]) }));
 
 			expect(plan.lines[1].description_fitted).toBe(true);
-			expect(codes(plan.warnings)).toContain('description_fitted');
+			expect(plan.lines[1].description.startsWith('PLATAFORMA DE RUTEO')).toBe(true);
+			expect(plan.warnings.find((warning) => warning.code === 'description_fitted')).toEqual({
+				code: 'description_fitted',
+				label: 'Descripciones acortadas',
+				message: '1 descripción no cabe en el documento: va sin número de contrato o acortada al final.',
+			});
+		});
+
+		it('cada aviso lleva label corto (2–4 palabras) y mensaje de una línea', () => {
+			const plan = planConsolidation(
+				ctx({
+					invoices: [A, { ...B, contract_auto_send_to_erp: false, contract_requires_references: true }],
+					lines: [
+						line({ description: 'X'.repeat(90) }),
+						{ ...lineB, fx: null, subtotal_invoice: null, unit_price_invoice: null, tax_invoice: null, total_invoice: null },
+					],
+					max_chars_by_contract: new Map([['ctr-b', 80]]),
+					main_contract_id: 'ctr-b',
+				})
+			);
+
+			expect(codes(plan.warnings)).toEqual([
+				'auto_invoice_differs',
+				'auto_send_to_erp_differs',
+				'spot_document',
+				'references_inherited',
+				'description_fitted',
+			]);
+			for (const warning of plan.warnings) {
+				expect(warning.label.split(' ').length).toBeGreaterThanOrEqual(2);
+				expect(warning.label.split(' ').length).toBeLessThanOrEqual(4);
+				expect(warning.message.length).toBeLessThanOrEqual(140);
+				expect(warning.message).not.toMatch(/consolidado|origen|HES/);
+			}
 		});
 
 		it('mainContractOf desempata por número de contrato', () => {

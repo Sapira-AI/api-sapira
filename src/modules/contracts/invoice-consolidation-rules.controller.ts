@@ -35,7 +35,8 @@ export class InvoiceConsolidationRulesController {
 	@Post('preview')
 	@HttpCode(200)
 	@ApiOperation({
-		summary: 'Vista previa por mes (will_unify · already_unified · blocked · single) con la fecha de emisión del principal. No escribe',
+		summary:
+			'Vista previa por mes (will_unify · already_unified · blocked · single) con la fecha de emisión (la de la factura del principal) y el vencimiento, líneas (`is_visible`) y avisos `{ code, label, message }`. No escribe',
 	})
 	@ApiParam(ENTITY_PARAM)
 	async preview(@Param('id', ParseUUIDPipe) id: string, @Body() body: InvoiceConsolidationRulePreviewDto, @HoldingId() holdingId: string) {
