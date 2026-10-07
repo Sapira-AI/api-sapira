@@ -107,7 +107,26 @@ describe('price_model_change (cambiar el modelo de precio de un ítem)', () => {
 			planChange(context({ billable_metrics: new Map([['m-1', 'active']]) }), request(change(metered), { effective_date: '2026-11-01' }))
 		);
 
-		expect(errors).toEqual(expect.arrayContaining([{ field: 'change.items.0.price', message: METERED_ADVANCE_MESSAGE }]));
+		expect(errors).toEqual(expect.arrayContaining([{ field: 'change.items.0.billing_method', message: METERED_ADVANCE_MESSAGE }]));
+		// Caso Ninja (07-10): el ítem vigente es Anticipado y el cambio lo pasa a Vencido → el RENEWAL nace Vencido.
+		const toArrears = planChange(
+			context({ billable_metrics: new Map([['m-1', 'active']]) }),
+			request(change(metered, { billing_method: 'Vencido' }), { effective_date: '2026-11-01' })
+		);
+
+		expect(toArrears.preview.blockers).toEqual([]);
+		expect(ofKind(toArrears.ops, 'insert_item')[0].item).toMatchObject({ billing_method: 'Vencido', start_date: '2026-11-01' });
+		// Vencido: cada período se emite al cerrar (noviembre el 01-12, en la Por Emitir de diciembre; diciembre el 01-01).
+		expect(
+			ofKind(toArrears.ops, 'create_invoices')[0].invoices.map((invoice) => [invoice.issue_date, invoice.lines[0]?.billing_period_start])
+		).toEqual([
+			['2026-12-01', '2026-11-01'],
+			['2027-01-01', '2026-12-01'],
+		]);
+		expect(toArrears.event.metadata).toMatchObject({ price_model: { billing_method_before: 'Anticipado', billing_method_after: 'Vencido' } });
+		expect(
+			fieldErrors(() => planChange(context(), request(change(TIERS, { billing_method: 'Mensual' }), { effective_date: '2026-11-01' })))
+		).toEqual(expect.arrayContaining([{ field: 'change.items.0.billing_method', message: 'Modo de cobro inválido: Anticipado o Vencido' }]));
 		const unknown = fieldErrors(() =>
 			planChange(
 				context({ items: [itemRow({ billing_method: 'Vencido' })], billable_metrics: new Map() }),
