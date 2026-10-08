@@ -336,9 +336,13 @@ describe('modificaciones multimoneda', () => {
 			invoices: [pending],
 		});
 
+		// Domi 08-10: pasar a fijo sin la tasa de un par avisa (se carga antes de emitir), no bloquea.
 		expect(
-			codeOf(() => planChange(ctx, request({ type: 'billing_conditions', fx_invoice_policy: 'fixed' }, { effective_date: '2026-11-15' })))
-		).toBe('fixed_fx_without_rate');
+			planChange(
+				ctx,
+				request({ type: 'billing_conditions', fx_invoice_policy: 'fixed' }, { effective_date: '2026-11-15' })
+			).preview.warnings.map((warning) => warning.code)
+		).toContain('fixed_fx_without_rate');
 		const plan = planChange(
 			ctx,
 			request({ type: 'billing_conditions', fx_invoice_policy: 'fixed', fx_invoice_rates: [{ from_currency: 'USD', rate: 950.5 }] })
