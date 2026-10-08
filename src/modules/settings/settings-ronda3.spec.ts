@@ -376,7 +376,8 @@ describe('Campos personalizados con más tipos (§8.7)', () => {
 		const handlers: Handler[] = [
 			['SELECT * FROM custom_field_definitions WHERE id = $1', () => [row]],
 			['custom_fields ->> $2 = ANY($3::text[])', () => [{ value: 'smb', n: '4' }]],
-			['UPDATE custom_field_definitions', () => [row]],
+			// UPDATE … RETURNING: TypeORM (postgres) devuelve [filas, rowCount].
+			['UPDATE custom_field_definitions', () => [[row], 1]],
 		];
 
 		await expect(

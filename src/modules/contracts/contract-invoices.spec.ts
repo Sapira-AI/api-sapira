@@ -201,7 +201,6 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 
 			expect(codes(plan.blockers)).toEqual([
 				'already_sent',
-				'erp_send_disabled',
 				'no_erp_integration',
 				'no_erp_partner',
 				'needs_reference',
@@ -210,6 +209,13 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 			]);
 			expect(plan.can_apply).toBe(false);
 			expect(plan.blockers.find((blocker) => blocker.code === 'item_without_product')?.message).toContain('2 líneas');
+		});
+
+		it('envío automático apagado: el envío manual sigue disponible si la compañía tiene ERP (Domi 08-10)', () => {
+			const plan = planSendNow(invoice(), context({ auto_send_to_erp: false }));
+
+			expect(codes(plan.blockers)).not.toContain('erp_send_disabled');
+			expect(plan.can_apply).toBe(true);
 		});
 
 		it('prefactura sin OC (Domi 07-10): sin la referencia exigida, como borrador avisa y se envía; si se emite, bloquea', () => {

@@ -1,6 +1,7 @@
 import { ConflictException, HttpException, Injectable, Logger } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
+import { rowsOf } from '@/core/utils/query-rows';
 import { type FieldError, validationException } from '@/core/utils/validation-errors';
 
 import { setApiWriter } from './api-writer';
@@ -235,12 +236,14 @@ export class ContractInvoiceVoidService {
 						)
 					: null;
 			// Consumos del período (S7-8): los que llevaba la anulada pasan a la reemisión o quedan libres para registrarse de nuevo.
-			const released = (await runner.query(
-				`UPDATE consumption_entries SET invoice_id = $4, updated_at = now(), updated_by = $5
-				WHERE invoice_id = $1 AND holding_id = $2 AND contract_id = $3 RETURNING id`,
-				[invoice.id, holdingId, contract.id, reissueId, userId]
-			)) as Row[];
-			const releasedIds = (Array.isArray(released) ? released : []).map((row) => String(row.id));
+			const released = rowsOf<Row>(
+				await runner.query(
+					`UPDATE consumption_entries SET invoice_id = $4, updated_at = now(), updated_by = $5
+					WHERE invoice_id = $1 AND holding_id = $2 AND contract_id = $3 RETURNING id`,
+					[invoice.id, holdingId, contract.id, reissueId, userId]
+				)
+			);
+			const releasedIds = released.map((row) => String(row.id));
 			const rsmFrom = [plan.rsm_from_month, reissue?.rsm_from_month ?? null].filter((value): value is string => !!value).sort()[0] ?? null;
 
 			if (rsmFrom) await runner.query(`SELECT revenue_schedule_rebuild($1::uuid, $2::date)`, [contract.id, rsmFrom]);

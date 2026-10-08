@@ -185,7 +185,8 @@ const build = (fixture: Fixture = {}) => {
 		if (sql.includes("nc.credit_type = 'discount'")) return fixture.previous ?? [];
 		if (sql.includes('FROM consumption_entries e') && sql.includes('e.invoice_id = $1'))
 			return [{ id: 'entry-1', contract_item_id: ITEM, period_start: '2026-09-01' }];
-		if (sql.includes('UPDATE consumption_entries')) return [{ id: 'entry-1' }];
+		// UPDATE … RETURNING: TypeORM (postgres) devuelve [filas, rowCount].
+		if (sql.includes('UPDATE consumption_entries')) return [[{ id: 'entry-1' }], 1] as unknown as Row[];
 		if (sql.includes('SELECT company_id, client_id')) return [{ ...invoice, contract_id: CONTRACT_ID }];
 		if (sql.includes('INSERT INTO invoices') && sql.includes(`'NC', $17`)) return [{ id: 'nc-1' }];
 		if (sql.includes('INSERT INTO invoices')) return [{ id: 'reissue-1' }];

@@ -6,6 +6,7 @@ import { DataSource } from 'typeorm';
 import { AuthMailer, MailResult } from '@/auth/accounts/auth-mailer';
 import { renderAlertEmail } from '@/auth/accounts/email-templates/alert';
 import { RenderedEmail } from '@/auth/accounts/email-templates/layout';
+import { rowsOf } from '@/core/utils/query-rows';
 import type { AppNotification } from '@/databases/postgresql/entities/automatizaciones-ia/app-notification.entity';
 import type { NotificationEmailKind } from '@/databases/postgresql/entities/automatizaciones-ia/notification-email-log.entity';
 
@@ -227,10 +228,12 @@ export class NotificationEmailService {
 					result.discarded += 1;
 					continue;
 				}
-				const [taken] = (await this.dataSource.query(
-					`UPDATE notification_email_log SET sent_at = now() WHERE id = $1 AND status = 'pending' AND sent_at IS NULL RETURNING id`,
-					[id]
-				)) as Row[];
+				const [taken] = rowsOf<Row>(
+					await this.dataSource.query(
+						`UPDATE notification_email_log SET sent_at = now() WHERE id = $1 AND status = 'pending' AND sent_at IS NULL RETURNING id`,
+						[id]
+					)
+				);
 
 				if (!taken) {
 					result.skipped += 1;

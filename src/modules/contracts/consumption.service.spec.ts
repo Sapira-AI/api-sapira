@@ -153,7 +153,8 @@ const build = (handler: Handler = () => undefined) => {
 		if (sql.includes('FROM consumption_entries e WHERE e.contract_item_id')) return [];
 		if (sql.includes('e.idempotency_key = $2')) return [];
 		if (sql.includes('INSERT INTO consumption_entries')) return [{ id: 'entry-1' }];
-		if (sql.includes('UPDATE consumption_entries')) return [{ id: 'entry-1' }];
+		// TypeORM (postgres): UPDATE … RETURNING devuelve [filas, conteo], no las filas (08-10: corregir un consumo daba 500).
+		if (sql.includes('UPDATE consumption_entries')) return [[{ id: 'entry-1' }], 1];
 		if (sql.includes('SELECT COALESCE(SUM(subtotal_contract_currency)')) return [{ subtotal: '178.30', tax: '33.88' }];
 
 		return [];

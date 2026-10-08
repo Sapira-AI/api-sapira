@@ -1,5 +1,7 @@
 import { Logger } from '@nestjs/common';
 
+import { rowsOf } from '@/core/utils/query-rows';
+
 import { INDEFINITE_HORIZON_PERIODS } from './billing-engine';
 
 import type { QueryRunner } from 'typeorm';
@@ -351,16 +353,18 @@ export async function mirrorInvoiceSystemAmounts(db: Db, holdingId: string, cred
 	const byInvoice = MIRROR_BY_INVOICE_SQL;
 	const amount = `ROUND(CASE WHEN ${byInvoice} THEN n.amount_invoice_currency * o.amount_system_currency / o.amount_invoice_currency
 		ELSE n.amount_contract_currency * o.amount_system_currency / o.amount_contract_currency END, 2)`;
-	const updated = (await db.query(
-		`UPDATE invoices n SET fx_contract_to_system = o.fx_contract_to_system, system_currency = o.system_currency,
+	const updated = rowsOf<Row>(
+		await db.query(
+			`UPDATE invoices n SET fx_contract_to_system = o.fx_contract_to_system, system_currency = o.system_currency,
 			amount_system_currency = ${amount},
 			total_system_currency = ROUND(${amount} * (1 + ${taxRatePctSql('n.tax_rate')} / 100.0), 2)
 		FROM invoices o
 		WHERE n.id = $1 AND n.holding_id = $3 AND o.id = $2 AND o.holding_id = $3
 			AND o.amount_system_currency IS NOT NULL AND (${byInvoice} OR COALESCE(o.amount_contract_currency, 0) <> 0)
 		RETURNING n.id`,
-		[creditNoteId, originalId, holdingId]
-	)) as Row[];
+			[creditNoteId, originalId, holdingId]
+		)
+	);
 
 	if (!updated.length) await refreshInvoiceSystemAmounts(db, holdingId, [creditNoteId]);
 }

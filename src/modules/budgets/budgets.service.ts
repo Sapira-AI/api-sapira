@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { rowsOf } from '@/core/utils/query-rows';
 import { validationException } from '@/core/utils/validation-errors';
 import type { BudgetDimensionType } from '@/databases/postgresql/entities/revenue/budget-line.entity';
 import type { BudgetGranularity, BudgetKind, BudgetScenario, BudgetStatus } from '@/databases/postgresql/entities/revenue/budget.entity';
@@ -288,9 +289,14 @@ export class BudgetsService {
 
 	/** `POST /budgets/:id/archive`: lo archiva (libera el lugar de su kind · año · escenario). Idempotente; 404 si no es del holding. */
 	async archive(holdingId: string, id: string): Promise<BudgetDetail> {
-		const rows = (await withApiWriter(this.dataSource, async (runner) =>
-			runner.query(`UPDATE budgets SET status = 'archived', updated_at = now() WHERE holding_id = $1 AND id = $2 RETURNING id`, [holdingId, id])
-		)) as Row[];
+		const rows = rowsOf<Row>(
+			await withApiWriter(this.dataSource, async (runner) =>
+				runner.query(`UPDATE budgets SET status = 'archived', updated_at = now() WHERE holding_id = $1 AND id = $2 RETURNING id`, [
+					holdingId,
+					id,
+				])
+			)
+		);
 
 		if (!rows.length) throw new NotFoundException('El presupuesto no existe en este holding');
 

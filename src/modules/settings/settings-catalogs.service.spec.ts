@@ -275,7 +275,8 @@ describe('SettingsCustomFieldsService', () => {
 		const { db, service } = build([
 			['FROM custom_field_definitions WHERE id = $1', () => [field]],
 			['FROM contract_items WHERE holding_id', () => [{ n: 5 }]],
-			['UPDATE custom_field_definitions', () => [{ ...field, field_label: 'Corte' }]],
+			// UPDATE … RETURNING: TypeORM (postgres) devuelve [filas, rowCount].
+			['UPDATE custom_field_definitions', () => [[{ ...field, field_label: 'Corte' }], 1]],
 		]);
 
 		await expect(service.remove(HOLDING, ID)).rejects.toThrow('Este campo tiene valores en 5 registros: desactívalo en vez de eliminarlo');

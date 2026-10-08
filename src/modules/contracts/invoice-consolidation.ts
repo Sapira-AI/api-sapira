@@ -21,7 +21,8 @@ export const CONSOLIDATION_MAX_INVOICES = 50;
 export const CONSOLIDATION_NOTES_MAX = 500;
 /** Separador del número de contrato al final de la glosa (guion ASCII, regla del DTE). */
 export const CONSOLIDATION_CONTRACT_SEPARATOR = ' - ';
-export const LEGACY_UNIFIED_STEP = 'Es una factura unificada histórica (de antes del cambio de versión): no se deshace desde Sapira';
+export const LEGACY_UNIFIED_STEP =
+	'Es una factura unificada histórica (de antes del cambio de versión) sin sus facturas de origen: no se deshace desde Sapira';
 
 /** Códigos de bloqueo de la consolidación (409 `blocked`). */
 export const CONSOLIDATION_BLOCKERS = {
@@ -941,7 +942,7 @@ export function candidateView(base: ConsolidationInvoice, candidate: Consolidati
 	};
 }
 
-/** Bloqueos de deshacer: solo un consolidado v2 (con evento) Por Emitir, sin borrador en el ERP y con orígenes. */
+/** Bloqueos de deshacer: un consolidado (v2 o histórico con orígenes ligados) Por Emitir, sin borrador en el ERP y con orígenes. */
 export function undoBlockers(
 	consolidated: Pick<
 		ConsolidationInvoice,
@@ -962,10 +963,12 @@ export function undoBlockers(
 			},
 		];
 	}
-	if (!hasEvent) {
+	// Histórica (sin evento INVOICE_CONSOLIDATED, del front anterior): mientras siga Por Emitir, fuera del ERP y con sus orígenes ligados por
+	// `consolidated_into_invoice_id`, se deshace igual que una v2 y se vuelve a unificar con el flujo nuevo (08-10, ILUMI CTR-2026-72).
+	if (!hasEvent && originsCount === 0) {
 		blockers.push({
 			code: CONSOLIDATION_BLOCKERS.legacy_unified,
-			message: `${name} es un documento unificado histórico (sin evento INVOICE_CONSOLIDATED): es de solo lectura en v2`,
+			message: `${name} es un documento unificado histórico sin facturas de origen ligadas: es de solo lectura en v2`,
 			next_step: LEGACY_UNIFIED_STEP,
 		});
 	}

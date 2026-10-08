@@ -1,6 +1,8 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { rowsOf } from '@/core/utils/query-rows';
+
 import { EmailsService } from '../emails/emails.service';
 
 import { ListRunsQueryDto } from './dtos/list-runs.dto';
@@ -91,12 +93,14 @@ export class AgentsService {
 			throw new ConflictException('La ejecución no tiene mensajes para enviar');
 		}
 
-		const claimed = await this.dataSource.query(
-			`UPDATE ai_runs SET status = 'approved', approver_user_id = $3 WHERE id = $1 AND holding_id = $2 AND status = 'queued' RETURNING id`,
-			[runId, holdingId, approverUserId ?? null]
+		const claimed = rowsOf(
+			await this.dataSource.query(
+				`UPDATE ai_runs SET status = 'approved', approver_user_id = $3 WHERE id = $1 AND holding_id = $2 AND status = 'queued' RETURNING id`,
+				[runId, holdingId, approverUserId ?? null]
+			)
 		);
 
-		if (!claimed?.length) {
+		if (!claimed.length) {
 			throw new ConflictException('Solo se puede aprobar una ejecución pendiente de aprobación');
 		}
 
@@ -495,14 +499,16 @@ export class AgentsService {
 
 	/** Descarta una ejecución pendiente de aprobación: no envía nada y sus mensajes no cuentan para la frecuencia de cobranza. */
 	async cancelRun(runId: string, holdingId: string, userId?: string | null) {
-		const rows = await this.dataSource.query(
-			`UPDATE ai_runs SET status = 'cancelled', approver_user_id = $3, ended_at = NOW()
-			WHERE id = $1 AND holding_id = $2 AND status = 'queued'
-			RETURNING id, status`,
-			[runId, holdingId, userId ?? null]
+		const rows = rowsOf(
+			await this.dataSource.query(
+				`UPDATE ai_runs SET status = 'cancelled', approver_user_id = $3, ended_at = NOW()
+				WHERE id = $1 AND holding_id = $2 AND status = 'queued'
+				RETURNING id, status`,
+				[runId, holdingId, userId ?? null]
+			)
 		);
 
-		if (rows?.length) return rows[0];
+		if (rows.length) return rows[0];
 
 		await this.getRun(runId, holdingId);
 		throw new ConflictException('Solo se puede descartar una ejecución pendiente de aprobación');
@@ -510,12 +516,14 @@ export class AgentsService {
 
 	/** Borra la configuración propia del cliente: desde ahí usa la configuración global del holding. */
 	async deleteClientConfig(clientId: string, agentType: string, holdingId: string) {
-		const rows = await this.dataSource.query(
-			`DELETE FROM client_agent_configs WHERE client_id = $1 AND agent_type = $2 AND holding_id = $3 RETURNING id`,
-			[clientId, agentType, holdingId]
+		const rows = rowsOf(
+			await this.dataSource.query(
+				`DELETE FROM client_agent_configs WHERE client_id = $1 AND agent_type = $2 AND holding_id = $3 RETURNING id`,
+				[clientId, agentType, holdingId]
+			)
 		);
 
-		if (!rows?.length) throw new NotFoundException('El cliente no tiene configuración propia para este agente');
+		if (!rows.length) throw new NotFoundException('El cliente no tiene configuración propia para este agente');
 	}
 
 	/** Cuántos clientes tienen configuración propia (y cuántas habilitadas) por tipo, y qué clientes la tienen. */

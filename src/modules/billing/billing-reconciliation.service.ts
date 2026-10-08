@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, HttpException, Injectable, NotF
 import { DataSource, type QueryRunner } from 'typeorm';
 
 import { holdingTimezone } from '@/core/utils/holding-preferences';
+import { rowsOf } from '@/core/utils/query-rows';
 import { withApiWriter } from '@/modules/contracts/api-writer';
 import { todayFor } from '@/modules/contracts/business-date';
 import { resolveUserId } from '@/modules/contracts/contract-drafts.service';
@@ -686,10 +687,9 @@ export class BillingReconciliationService {
 					},
 				]);
 			}
-			const removed = (await runner.query(`DELETE FROM bank_movements WHERE batch_id = $1 AND holding_id = $2 RETURNING id`, [
-				batchId,
-				holdingId,
-			])) as Row[];
+			const removed = rowsOf<Row>(
+				await runner.query(`DELETE FROM bank_movements WHERE batch_id = $1 AND holding_id = $2 RETURNING id`, [batchId, holdingId])
+			);
 
 			await runner.query(
 				`UPDATE bank_upload_batches SET status = 'Revertido',
@@ -738,11 +738,13 @@ export class BillingReconciliationService {
 					templateId,
 				]);
 			}
-			const [row] = (await runner.query(
-				`UPDATE bank_column_mappings SET bank_name = $3, mapping_name = $4, column_mapping = $5::jsonb, is_default = $6
-				WHERE id = $1 AND holding_id = $2 RETURNING *`,
-				[templateId, holdingId, dto.bank_name, dto.mapping_name, JSON.stringify(dto.column_mapping), dto.is_default === true]
-			)) as Row[];
+			const [row] = rowsOf<Row>(
+				await runner.query(
+					`UPDATE bank_column_mappings SET bank_name = $3, mapping_name = $4, column_mapping = $5::jsonb, is_default = $6
+					WHERE id = $1 AND holding_id = $2 RETURNING *`,
+					[templateId, holdingId, dto.bank_name, dto.mapping_name, JSON.stringify(dto.column_mapping), dto.is_default === true]
+				)
+			);
 
 			return templateOf(row);
 		});
@@ -750,10 +752,9 @@ export class BillingReconciliationService {
 
 	async deleteTemplate(holdingId: string, templateId: string) {
 		return await withApiWriter(this.dataSource, async (runner) => {
-			const removed = (await runner.query(`DELETE FROM bank_column_mappings WHERE id = $1 AND holding_id = $2 RETURNING id`, [
-				templateId,
-				holdingId,
-			])) as Row[];
+			const removed = rowsOf<Row>(
+				await runner.query(`DELETE FROM bank_column_mappings WHERE id = $1 AND holding_id = $2 RETURNING id`, [templateId, holdingId])
+			);
 
 			if (!removed.length) throw new NotFoundException('Plantilla no encontrada');
 
