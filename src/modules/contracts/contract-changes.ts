@@ -1265,6 +1265,9 @@ class Planner {
 		const contract = this.ctx.contract;
 
 		return engineContract(contract, {
+			// Día de ciclo efectivo del contrato (guardado o el de sus ítems vivos): sin él, el generador lo deduce solo de los ítems
+			// nuevos y un ajuste desde el 14 quedaba con ciclo del 14 en vez de prorratear hasta el ciclo del contrato (Brightcell 08-10).
+			billing_anchor_day: anchorDayOf(contract, this.ctx.items),
 			fixed_invoice_rates: [...contract.fx_invoice_rates, ...this.extraInvoiceRates],
 			fixed_item_rates: [...(contract.fx_item_rates ?? []), ...this.extraItemRates],
 			multicurrency: this.multicurrency,
