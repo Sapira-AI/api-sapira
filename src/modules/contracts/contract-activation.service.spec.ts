@@ -139,7 +139,8 @@ const build = (contracts: Row[], contractItems: Row[], handler: Handler = () => 
 		}
 		if (sql.includes('INSERT INTO invoices')) return [{ id: `inv-${++sequence}` }];
 		if (sql.includes('INSERT INTO invoice_items')) return [{ id: `line-${++sequence}` }];
-		if (sql.includes('UPDATE contracts SET status')) return [{ id: params[0] }];
+		// UPDATE … RETURNING: TypeORM (postgres) devuelve [filas, rowCount].
+		if (sql.includes('UPDATE contracts SET status')) return [[{ id: params[0] }], 1];
 
 		return [];
 	};
@@ -661,7 +662,7 @@ describe('ContractActivationService.activate', () => {
 	});
 
 	it('si el contrato cambió de estado entre la lectura y el UPDATE, falla sin confirmar', async () => {
-		const { service, runners } = build([draft(A)], items(A), (sql) => (sql.includes('UPDATE contracts SET status') ? [] : undefined));
+		const { service, runners } = build([draft(A)], items(A), (sql) => (sql.includes('UPDATE contracts SET status') ? [[], 0] : undefined));
 
 		const result = await service.activate([A], 'h-1', 'auth-1');
 

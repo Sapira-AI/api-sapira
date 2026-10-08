@@ -369,7 +369,7 @@ export interface SendNowPlan {
 }
 
 /**
- * Los mismos bloqueos de la columna Bloqueos del 360 más los del envío puntual (`already_sent`, `erp_send_disabled`, `tax_rate_missing`,
+ * Los mismos bloqueos de la columna Bloqueos del 360 más los del envío puntual (`already_sent`, `tax_rate_missing`,
  * `product_without_erp_mapping`). La falta de la referencia exigida bloquea solo si la factura se emite (`auto_invoice`); como borrador
  * es el aviso `needs_reference` (`referenceRequirement`).
  */
@@ -397,13 +397,8 @@ export function planSendNow(invoice: ContractInvoiceRow, context: ContractInvoic
 			next_step: 'Retírala del ERP y vuelve a enviarla (próxima etapa)',
 		});
 	}
-	if (!context.auto_send_to_erp) {
-		blockers.push({
-			code: 'erp_send_disabled',
-			message: 'El contrato no envía facturas al ERP',
-			next_step: 'Actívalo en Condiciones de facturación o registra la emisión externa',
-		});
-	}
+	// "Envío automático al ERP" apagado solo detiene el envío del job; el envío manual sigue disponible si la compañía tiene ERP
+	// (08-10, Domi: las usuarias lo encendían y apagaban para poder enviar a mano). Sin ERP bloquea `no_erp_integration`.
 	if (!context.has_erp_integration) {
 		blockers.push({
 			code: 'no_erp_integration',

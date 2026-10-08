@@ -519,6 +519,47 @@ describe('item_add (M1 alta)', () => {
 		expect(plan.event).toMatchObject({ type: 'CROSS_SELL', amount_delta: 600, rsm_from_month: '2026-11-01' });
 		expect(plan.preview.contract.after.mrr).toBe(1800);
 	});
+	it('contrato sin día de ciclo guardado: el ítem nuevo a mitad de mes prorratea hasta el ciclo de sus ítems (día 1), no toma su propio inicio (Brightcell 08-10)', () => {
+		const plan = planChange(
+			context({ contract: contractRow({ billing_anchor_day: null }) }),
+			request(
+				{ type: 'item_add', items: [{ product_id: PRODUCT_NUEVO, quantity: 2, unit_price: 300, end_date: '2027-06-30' }] },
+				{ reason: 'Nuevo módulo' }
+			)
+		);
+		const [create] = ops(plan, 'create_invoices') as Array<{
+			invoices: Array<{ issue_date: string; lines: Array<{ subtotal: number; billing_period_start: string; billing_period_end: string }> }>;
+			merge_into: Array<string | null>;
+		}>;
+
+		expect(plan.preview.warnings.find((warning) => warning.code === 'generator')?.message).toMatch(/^Primer período prorrateado: 16 días/);
+		expect(create.invoices[0].lines.map((line) => [line.billing_period_start, line.billing_period_end, line.subtotal])).toEqual([
+			['2026-11-15', '2026-11-30', 320],
+			['2026-12-01', '2026-12-31', 600],
+		]);
+		expect(create.merge_into).toEqual(['inv-12']);
+	});
+	it('tasa fija: la línea que se suma a una Por Emitir hereda su tasa (sin bloqueo ni aviso); la factura que nace aparte sí pide tasa (Brightcell 08-10)', () => {
+		const fixed = (overrides: Parameters<typeof contractRow>[0] = {}) =>
+			contractRow({ contract_currency: 'USD', invoice_currency: 'CLP', fx_invoice_policy: 'fixed', fx_invoice_rates: [], ...overrides });
+		const body = request(
+			{ type: 'item_add', items: [{ product_id: PRODUCT_NUEVO, quantity: 2, unit_price: 300, end_date: '2027-06-30' }] },
+			{ reason: 'Nuevo módulo' }
+		);
+		const usd = {
+			items: [itemRow({ currency: 'USD' }), soporteRow({ currency: 'USD' })],
+			invoices: context().invoices.map((row) => ({ ...row, invoice_currency: 'CLP' })),
+		};
+		const merged = planChange(context({ contract: fixed(), ...usd }), body);
+
+		expect((ops(merged, 'create_invoices')[0] as { merge_into: Array<string | null> }).merge_into).toEqual(['inv-12']);
+		expect(merged.preview.blockers.map((blocker) => blocker.code)).not.toContain('fixed_fx_without_rate');
+		expect(merged.preview.warnings.map((warning) => warning.message).join(' ')).not.toMatch(/no hay tasa/);
+
+		const separate = planChange(context({ contract: fixed({ group_invoices_by_period: false }), ...usd }), body);
+
+		expect(separate.preview.blockers.map((blocker) => blocker.code)).toContain('fixed_fx_without_rate');
+	});
 	it('tramo inicial suelto (S3-17): la factura del 15-11 nace aparte y no se fusiona; diciembre sí', () => {
 		const plan = planChange(
 			context(),

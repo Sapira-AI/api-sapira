@@ -138,7 +138,9 @@ const build = (fixture: Fixture = {}) => {
 		if (sql.includes("event_type = 'INVOICE_CONSOLIDATED'")) return fixture.event === null ? [] : [fixture.event ?? { id: 'ev-0', metadata: {} }];
 		if (sql.includes('INSERT INTO invoices')) return [{ id: CONS }];
 		if (sql.includes('INSERT INTO contract_lifecycle_events')) return [{ id: `event-${String(params[0])}` }];
-		if (sql.includes('UPDATE invoices SET is_active = true')) return (fixture.origins ?? []).map((row) => ({ id: row.id }));
+		// UPDATE … RETURNING: TypeORM (postgres) devuelve [filas, rowCount].
+		if (sql.includes('UPDATE invoices SET is_active = true'))
+			return [(fixture.origins ?? []).map((row) => ({ id: row.id })), (fixture.origins ?? []).length] as unknown as Row[];
 		if (sql.includes('FROM invoices i') && sql.includes('JOIN contracts c ON c.id = i.contract_id') && sql.includes('holding_settings'))
 			return [
 				{ id: CONS, source_currency: 'USD', from_invoice: false, fx_date: '2026-10-05', system_currency: 'USD', fx_policy: 'monthly_avg' },
@@ -350,8 +352,18 @@ describe('ContractInvoiceConsolidationService (spec multimoneda §7)', () => {
 			expect(result).toMatchObject({ undone: true, status: 'Cancelada', restored_invoice_ids: [INV_A, INV_B] });
 		});
 
-		it('legacy (sin evento INVOICE_CONSOLIDATED) → 409 legacy_unified; enviado al ERP → sent_to_erp_draft', async () => {
-			const legacy = build({ consolidated, origins, event: null });
+		it('histórica (sin evento) Por Emitir con orígenes → se deshace (ILUMI 08-10); sin orígenes → 409 legacy_unified; enviado al ERP → sent_to_erp_draft', async () => {
+			const legacyOk = build({ consolidated, origins, event: null });
+			const undone = await legacyOk.service.undo(
+				CONS,
+				{ reason: 'Rehacer con el flujo nuevo' } as UndoConsolidationDto,
+				HOLDING,
+				'auth-1',
+				TODAY
+			);
+
+			expect(undone).toMatchObject({ undone: true });
+			const legacy = build({ consolidated, origins: [], event: null });
 			const legacyError = (await rejection(
 				legacy.service.undo(CONS, { reason: 'x' } as UndoConsolidationDto, HOLDING, 'auth-1', TODAY)
 			)) as ConflictException;

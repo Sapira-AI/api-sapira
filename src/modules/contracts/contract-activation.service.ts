@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
 import { holdingTimezone } from '@/core/utils/holding-preferences';
+import { rowsOf } from '@/core/utils/query-rows';
 
 import { setApiWriter } from './api-writer';
 import { invoiceTermsSql, latestContractEnd, refreshContractSystemFx, refreshInvoiceSystemAmounts } from './api-written-fields';
@@ -794,12 +795,14 @@ export class ContractActivationService {
 		);
 		await refreshContractSystemFx(runner, contractId, holdingId);
 
-		const updated = (await runner.query(`UPDATE contracts SET status = $3 WHERE id = $1 AND holding_id = $2 AND status = $4 RETURNING id`, [
-			contractId,
-			holdingId,
-			ACTIVE_STATUS,
-			DRAFT_STATUS,
-		])) as Row[];
+		const updated = rowsOf<Row>(
+			await runner.query(`UPDATE contracts SET status = $3 WHERE id = $1 AND holding_id = $2 AND status = $4 RETURNING id`, [
+				contractId,
+				holdingId,
+				ACTIVE_STATUS,
+				DRAFT_STATUS,
+			])
+		);
 
 		if (!updated.length) throw new Error('el contrato cambió de estado durante la activación');
 

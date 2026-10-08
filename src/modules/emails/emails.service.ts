@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, InternalServerErrorException, Logger, 
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 
+import { rowsOf } from '@/core/utils/query-rows';
+
 import { CheckStatusDto } from './dtos/check-status.dto';
 import { CreateSenderAddressDto } from './dtos/create-sender-address.dto';
 import { DeleteDomainDto } from './dtos/delete-domain.dto';
@@ -236,8 +238,9 @@ export class EmailsService {
 			const allValid = validationData.valid;
 			const domainStatus = allValid ? 'verified' : 'pending';
 
-			const updatedConfig = await this.dataSource.query(
-				`UPDATE holding_email_sender_settings 
+			const updatedConfig = rowsOf<EmailSenderConfig>(
+				await this.dataSource.query(
+					`UPDATE holding_email_sender_settings 
 				SET 
 					domain_status = $1,
 					domain_dns_records = $2,
@@ -245,7 +248,8 @@ export class EmailsService {
 					updated_at = NOW()
 				WHERE id = $3
 				RETURNING *`,
-				[domainStatus, JSON.stringify(dnsRecords), defaultDomain.id]
+					[domainStatus, JSON.stringify(dnsRecords), defaultDomain.id]
+				)
 			);
 
 			this.logger.log(`✓ Estado actualizado para holding ${dto.holding_id}: ${domainStatus}`);
@@ -469,7 +473,7 @@ export class EmailsService {
 				RETURNING *
 			`;
 
-			const result = await this.dataSource.query(query, params);
+			const result = rowsOf<EmailSenderConfig>(await this.dataSource.query(query, params));
 
 			this.logger.log(`✓ Dominio ${domainId} actualizado`);
 
@@ -548,7 +552,7 @@ export class EmailsService {
 				RETURNING *
 			`;
 
-			const result = await this.dataSource.query(query, params);
+			const result = rowsOf<EmailSenderAddress>(await this.dataSource.query(query, params));
 
 			this.logger.log(`✓ Remitente ${senderId} actualizado`);
 

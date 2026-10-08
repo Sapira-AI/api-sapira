@@ -33,6 +33,7 @@ interface Fixtures {
 	batchPayments?: number;
 	mv?: Row[];
 	candidates?: Row[];
+	template?: Row | null;
 }
 
 const payInvoice = (overrides: Row = {}): Row => ({
@@ -123,7 +124,12 @@ function build(fixtures: Fixtures = {}) {
 		if (sql.includes('FROM bank_upload_batches WHERE id = $1')) return fixtures.batch ? [fixtures.batch] : [];
 		if (sql.includes('COUNT(*) AS payments FROM invoice_payments p JOIN bank_movements'))
 			return [{ payments: String(fixtures.batchPayments ?? 0) }];
-		if (sql.includes('DELETE FROM bank_movements')) return [{ id: 'm1' }, { id: 'm2' }];
+		// DELETE … RETURNING: TypeORM (postgres) devuelve [filas, rowCount].
+		if (sql.includes('DELETE FROM bank_movements')) return [[{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }], 3];
+		if (sql.includes('FROM bank_column_mappings WHERE id = $1 AND holding_id = $2 FOR UPDATE'))
+			return fixtures.template ? [{ id: fixtures.template.id }] : [];
+		if (sql.includes('UPDATE bank_column_mappings SET bank_name')) return fixtures.template ? [[fixtures.template], 1] : [[], 0];
+		if (sql.includes('DELETE FROM bank_column_mappings')) return fixtures.template ? [[{ id: fixtures.template.id }], 1] : [[], 0];
 
 		return [];
 	};
@@ -248,6 +254,26 @@ describe('Conciliación: cartolas', () => {
 		expect(runnerSqls(runners[0]).some((sql) => sql.includes('INSERT INTO bank_upload_batches'))).toBe(false);
 	});
 
+	it('plantillas: editar devuelve la fila del UPDATE … RETURNING; borrar una inexistente → 404', async () => {
+		const template = {
+			id: 'tpl-1',
+			bank_name: 'Banco de Chile',
+			mapping_name: 'Cartola',
+			column_mapping: {},
+			is_default: false,
+			created_at: null,
+		};
+		const dto = { bank_name: 'Banco de Chile', mapping_name: 'Cartola', column_mapping: {}, is_default: false } as never;
+
+		await expect(build({ template }).service.updateTemplate(HOLDING, 'tpl-1', dto)).resolves.toMatchObject({
+			id: 'tpl-1',
+			bank_name: 'Banco de Chile',
+			mapping_name: 'Cartola',
+		});
+		await expect(build({ template }).service.deleteTemplate(HOLDING, 'tpl-1')).resolves.toEqual({ id: 'tpl-1', deleted: true });
+		await expect(build().service.deleteTemplate(HOLDING, 'tpl-1')).rejects.toBeInstanceOf(NotFoundException);
+	});
+
 	it('revertir: bloqueado si algún movimiento del lote tiene pagos o ya está revertido; si no, borra sus líneas y marca Revertido con motivo', async () => {
 		await expect(
 			build({ batch: { id: 'batch-1', status: 'Procesado' }, batchPayments: 2 }).service.revertStatement(
@@ -265,7 +291,7 @@ describe('Conciliación: cartolas', () => {
 		const statements = runnerSqls(runners[0]);
 
 		expect(statements[0]).toBe(API_WRITER_SQL);
-		expect(result).toEqual({ batch_id: 'batch-1', removed: 2 });
+		expect(result).toEqual({ batch_id: 'batch-1', removed: 3 });
 		expect(statements.some((sql) => sql.includes("SET status = 'Revertido'") && sql.includes("jsonb_build_object('revert'"))).toBe(true);
 	});
 });

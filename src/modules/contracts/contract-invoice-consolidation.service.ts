@@ -1,6 +1,8 @@
 import { ConflictException, HttpException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
+import { rowsOf } from '@/core/utils/query-rows';
+
 import { setApiWriter } from './api-writer';
 import { refreshInvoiceSystemAmounts } from './api-written-fields';
 import { CANCELLED_STATUS, PENDING_STATUS } from './contract-360';
@@ -429,11 +431,13 @@ export class ContractInvoiceConsolidationService {
 			invoiceId,
 			holdingId,
 		]);
-		const restored = (await runner.query(
-			`UPDATE invoices SET is_active = true, consolidated_into_invoice_id = NULL
-			WHERE consolidated_into_invoice_id = $1 AND holding_id = $2 RETURNING id`,
-			[invoiceId, holdingId]
-		)) as Row[];
+		const restored = rowsOf<Row>(
+			await runner.query(
+				`UPDATE invoices SET is_active = true, consolidated_into_invoice_id = NULL
+				WHERE consolidated_into_invoice_id = $1 AND holding_id = $2 RETURNING id`,
+				[invoiceId, holdingId]
+			)
+		);
 		const restoredIds = restored.map((row) => String(row.id));
 		const byContract = new Map<string, string[]>();
 

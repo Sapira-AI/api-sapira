@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, InternalServerErrorException, Logger, 
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 
+import { rowsOf } from '@/core/utils/query-rows';
+
 import { CheckStatusDto } from './dto/check-status.dto';
 import { GetSenderConfigDto } from './dto/get-sender-config.dto';
 import { SendTestEmailDto } from './dto/send-test-email.dto';
@@ -72,8 +74,9 @@ export class EmailService {
 			let savedConfig;
 
 			if (existingConfig && existingConfig.length > 0) {
-				savedConfig = await this.dataSource.query(
-					`UPDATE holding_email_sender_settings 
+				savedConfig = rowsOf<EmailSenderConfig>(
+					await this.dataSource.query(
+						`UPDATE holding_email_sender_settings 
 					SET 
 						sender_domain = $1,
 						from_name = $2,
@@ -85,15 +88,16 @@ export class EmailService {
 						updated_at = NOW()
 					WHERE holding_id = $7
 					RETURNING *`,
-					[
-						dto.sender_domain,
-						dto.from_name,
-						dto.from_email,
-						resendData.id,
-						resendData.status,
-						JSON.stringify(resendData.records),
-						dto.holding_id,
-					]
+						[
+							dto.sender_domain,
+							dto.from_name,
+							dto.from_email,
+							resendData.id,
+							resendData.status,
+							JSON.stringify(resendData.records),
+							dto.holding_id,
+						]
+					)
 				);
 			} else {
 				savedConfig = await this.dataSource.query(
@@ -157,8 +161,9 @@ export class EmailService {
 
 			const resendData: ResendDomainStatusResponse = await response.json();
 
-			const updatedConfig = await this.dataSource.query(
-				`UPDATE holding_email_sender_settings 
+			const updatedConfig = rowsOf<EmailSenderConfig>(
+				await this.dataSource.query(
+					`UPDATE holding_email_sender_settings 
 				SET 
 					domain_status = $1,
 					domain_dns_records = $2,
@@ -166,7 +171,8 @@ export class EmailService {
 					updated_at = NOW()
 				WHERE holding_id = $3
 				RETURNING *`,
-				[resendData.status, JSON.stringify(resendData.records), dto.holding_id]
+					[resendData.status, JSON.stringify(resendData.records), dto.holding_id]
+				)
 			);
 
 			this.logger.log(`✓ Estado actualizado para holding ${dto.holding_id}: ${resendData.status}`);

@@ -66,6 +66,19 @@ describe('ClientDocumentsService', () => {
 		expect((insert[1] as unknown[])[6]).toBe(input.path);
 	});
 
+	it('archivar: lee las filas del UPDATE … RETURNING; si no afectó ninguna → 404', async () => {
+		const archived = build();
+
+		// UPDATE … RETURNING: TypeORM (postgres) devuelve [filas, rowCount].
+		archived.query.mockImplementation(async (sql) => (sql.includes('UPDATE client_documents SET deleted_at') ? [[{ id: 'd-1' }], 1] : []));
+		await expect(archived.service.archive(C, 'd-1', H)).resolves.toEqual({ id: 'd-1' });
+
+		const missing = build();
+
+		missing.query.mockImplementation(async (sql) => (sql.includes('UPDATE client_documents SET deleted_at') ? [[], 0] : []));
+		await expect(missing.service.archive(C, 'd-1', H)).rejects.toBeInstanceOf(NotFoundException);
+	});
+
 	it('descarga solo si el usuario pertenece al holding del documento', async () => {
 		await expect(build().service.downloadUrl('d-1', 'auth-1')).resolves.toBe('https://storage/signed');
 		await expect(build({ member: false }).service.downloadUrl('d-1', 'auth-1')).rejects.toBeInstanceOf(NotFoundException);

@@ -472,7 +472,8 @@ describe('refreshInvoiceSystemAmounts: regla por estado → moneda de sistema, s
 
 describe('mirrorInvoiceSystemAmounts: NC espejo con la tasa de la original (regla v2, ROADMAP #10)', () => {
 	it('toma FX, moneda y tasa efectiva de la original (neto en moneda de factura × sistema ÷ neto de la original; respaldo: contrato); sin montos en la original cae al refresh', async () => {
-		const copied = db((sql) => (sql.startsWith('UPDATE invoices n') ? [{ id: 'nc-1' }] : undefined));
+		// UPDATE … RETURNING: TypeORM (postgres) devuelve [filas, rowCount].
+		const copied = db((sql) => (sql.startsWith('UPDATE invoices n') ? [[{ id: 'nc-1' }], 1] : undefined));
 
 		await mirrorInvoiceSystemAmounts(copied.runner, 'h-1', 'nc-1', 'inv-1');
 		expect(copied.query).toHaveBeenCalledTimes(1);
@@ -490,7 +491,7 @@ describe('mirrorInvoiceSystemAmounts: NC espejo con la tasa de la original (regl
 		expect(sql).toContain('(CASE WHEN n.tax_rate > 0 AND n.tax_rate <= 1 THEN n.tax_rate * 100 ELSE COALESCE(n.tax_rate, 0) END)');
 		expect(params).toEqual(['nc-1', 'inv-1', 'h-1']);
 
-		const fallback = db();
+		const fallback = db((sql) => (sql.startsWith('UPDATE invoices n') ? [[], 0] : undefined));
 
 		await mirrorInvoiceSystemAmounts(fallback.runner, 'h-1', 'nc-1', 'inv-1');
 		// Sin fila actualizada: `refreshInvoiceSystemAmounts` de la NC (lee la factura y su contrato).

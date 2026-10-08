@@ -164,7 +164,8 @@ describe('NotificationEmailService (correo inmediato, contrato §8.3)', () => {
 						{ ...alert, status: 'open' },
 						{ ...alert, id: 'n-2', status: 'resolved' },
 					];
-				if (sql.includes('SET sent_at = now()')) return taken(String(params[0])) ? [{ id: params[0] }] : [];
+				// UPDATE … RETURNING: TypeORM (postgres) devuelve [filas, rowCount].
+				if (sql.includes('SET sent_at = now()')) return taken(String(params[0])) ? [[{ id: params[0] }], 1] : [[], 0];
 				return undefined;
 			};
 

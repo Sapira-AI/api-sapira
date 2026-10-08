@@ -1265,6 +1265,9 @@ class Planner {
 		const contract = this.ctx.contract;
 
 		return engineContract(contract, {
+			// Día de ciclo efectivo del contrato (guardado o el de sus ítems vivos): sin él, el generador lo deduce solo de los ítems
+			// nuevos y un ajuste desde el 14 quedaba con ciclo del 14 en vez de prorratear hasta el ciclo del contrato (Brightcell 08-10).
+			billing_anchor_day: anchorDayOf(contract, this.ctx.items),
 			fixed_invoice_rates: [...contract.fx_invoice_rates, ...this.extraInvoiceRates],
 			fixed_item_rates: [...(contract.fx_item_rates ?? []), ...this.extraItemRates],
 			multicurrency: this.multicurrency,
@@ -1841,9 +1844,26 @@ class Planner {
 			? descriptionFittedWarning(engine.description_fitted_lines, contract.description_max_chars ?? null)
 			: null;
 
-		for (const warning of engine.warnings) this.warn(warning === fittedWarning ? DESCRIPTION_FITTED_CODE : 'generator', warning);
+		// El tramo suelto (S3-17) nunca se fusiona: es una factura propia el día de inicio del ítem.
+		const mergeInto = invoices.map((invoice, index) => (stubs.has(index) ? null : this.mergeTarget(invoice)));
+
+		// Aviso del generador "no hay tasa … para el período que empieza el dd/mm/aaaa": no aplica a los períodos que se suman a una Por Emitir
+		// (heredan su tasa); se omite solo para esos.
+		const mergedPeriods = new Set(
+			invoices.flatMap((invoice, index) => (mergeInto[index] ? [invoice.billing_period_start.split('-').reverse().join('/')] : []))
+		);
+
+		for (const warning of engine.warnings) {
+			const period = /^Tipo de cambio fijo: no hay tasa .* el (\d{2}\/\d{2}\/\d{4})$/.exec(warning)?.[1];
+
+			if (period && mergedPeriods.has(period)) continue;
+			this.warn(warning === fittedWarning ? DESCRIPTION_FITTED_CODE : 'generator', warning);
+		}
+		// Tasa fija: solo pide tasa la factura que nace aparte; la línea que se suma a una Por Emitir hereda su tasa (S6-2, F3).
+		// 08-10 (Brightcell): el upsell que se sumaba a las facturas del 12 bloqueaba por "falta tasa" de una factura que no se crea.
 		if (usesFixedFx) {
-			for (const invoice of invoices.filter((row) => row.fx === null)) {
+			for (const [index, invoice] of invoices.entries()) {
+				if (invoice.fx !== null || mergeInto[index]) continue;
 				this.block(
 					'fixed_fx_without_rate',
 					`Se factura en ${invoiceCurrency} con tipo de cambio fijo y la factura del ${invoice.issue_date} no tiene tasa ${contractCurrency} → ${invoiceCurrency}`,
@@ -1851,8 +1871,6 @@ class Planner {
 				);
 			}
 		}
-		// El tramo suelto (S3-17) nunca se fusiona: es una factura propia el día de inicio del ítem.
-		const mergeInto = invoices.map((invoice, index) => (stubs.has(index) ? null : this.mergeTarget(invoice)));
 
 		for (const [index, invoice] of invoices.entries()) {
 			const target = mergeInto[index];

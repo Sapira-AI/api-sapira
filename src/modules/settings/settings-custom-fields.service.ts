@@ -1,6 +1,8 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+import { rowsOf } from '@/core/utils/query-rows';
+
 import { plural, Row, toCount, withUniqueMessage } from './settings-common';
 
 import type {
@@ -264,22 +266,24 @@ export class SettingsCustomFieldsService {
 		}
 		const [row] = await withUniqueMessage(
 			async () =>
-				(await this.dataSource.query(
-					`UPDATE custom_field_definitions SET field_name = $3, field_label = $4, field_type = $5, is_required = $6, is_active = $7, display_order = $8,
+				rowsOf<Row>(
+					await this.dataSource.query(
+						`UPDATE custom_field_definitions SET field_name = $3, field_label = $4, field_type = $5, is_required = $6, is_active = $7, display_order = $8,
 						options = $9::jsonb
 					WHERE id = $1 AND holding_id = $2 RETURNING *`,
-					[
-						id,
-						holdingId,
-						dto.field_name ?? current.field_name,
-						dto.field_label ?? current.field_label,
-						fieldType,
-						dto.is_required ?? current.is_required,
-						dto.is_active ?? current.is_active,
-						dto.display_order ?? current.display_order,
-						options ? JSON.stringify(options) : null,
-					]
-				)) as Row[],
+						[
+							id,
+							holdingId,
+							dto.field_name ?? current.field_name,
+							dto.field_label ?? current.field_label,
+							fieldType,
+							dto.is_required ?? current.is_required,
+							dto.is_active ?? current.is_active,
+							dto.display_order ?? current.display_order,
+							options ? JSON.stringify(options) : null,
+						]
+					)
+				),
 			DUPLICATE
 		);
 
