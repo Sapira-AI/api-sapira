@@ -1824,10 +1824,9 @@ class Planner {
 
 		for (const missing of engine.fx_missing ?? []) {
 			if (missing.purpose === 'invoice')
-				this.block(
+				this.warn(
 					'fixed_fx_without_rate',
-					`Falta la tasa fija ${missing.from_currency} → ${missing.to_currency} para facturar desde el ${missing.period_start}`,
-					'Agrega la tasa del par en fx_invoice_rates o usa tipo de cambio del día'
+					`Falta la tasa fija ${missing.from_currency} → ${missing.to_currency} para facturar desde el ${missing.period_start} · se carga antes de emitir`
 				);
 			else
 				this.block(
@@ -1847,27 +1846,27 @@ class Planner {
 		// El tramo suelto (S3-17) nunca se fusiona: es una factura propia el día de inicio del ítem.
 		const mergeInto = invoices.map((invoice, index) => (stubs.has(index) ? null : this.mergeTarget(invoice)));
 
-		// Aviso del generador "no hay tasa … para el período que empieza el dd/mm/aaaa": no aplica a los períodos que se suman a una Por Emitir
-		// (heredan su tasa); se omite solo para esos.
-		const mergedPeriods = new Set(
-			invoices.flatMap((invoice, index) => (mergeInto[index] ? [invoice.billing_period_start.split('-').reverse().join('/')] : []))
-		);
-
+		// Tasa fija (Domi 08-10): avisa, no bloquea (la tasa se exige al emitir), y en UN solo aviso. Las líneas que se suman a una Por Emitir
+		// heredan su tasa (S6-2, F3) y no cuentan; los avisos por período del generador se reemplazan por este resumen.
 		for (const warning of engine.warnings) {
-			const period = /^Tipo de cambio fijo: no hay tasa .* el (\d{2}\/\d{2}\/\d{4})$/.exec(warning)?.[1];
-
-			if (period && mergedPeriods.has(period)) continue;
+			if (/^Tipo de cambio fijo: no hay tasa /.test(warning)) continue;
 			this.warn(warning === fittedWarning ? DESCRIPTION_FITTED_CODE : 'generator', warning);
 		}
-		// Tasa fija: solo pide tasa la factura que nace aparte; la línea que se suma a una Por Emitir hereda su tasa (S6-2, F3).
-		// 08-10 (Brightcell): el upsell que se sumaba a las facturas del 12 bloqueaba por "falta tasa" de una factura que no se crea.
 		if (usesFixedFx) {
-			for (const [index, invoice] of invoices.entries()) {
-				if (invoice.fx !== null || mergeInto[index]) continue;
-				this.block(
+			const withoutRate = invoices
+				.filter((invoice, index) => invoice.fx === null && !mergeInto[index])
+				.map((invoice) => invoice.issue_date)
+				.sort();
+
+			if (withoutRate.length) {
+				const range =
+					withoutRate.length === 1
+						? `la del ${withoutRate[0]}`
+						: `${withoutRate.length}, del ${withoutRate[0]} al ${withoutRate[withoutRate.length - 1]}`;
+
+				this.warn(
 					'fixed_fx_without_rate',
-					`Se factura en ${invoiceCurrency} con tipo de cambio fijo y la factura del ${invoice.issue_date} no tiene tasa ${contractCurrency} → ${invoiceCurrency}`,
-					'Cargar la tasa del período en las condiciones de facturación'
+					`Tipo de cambio fijo: ${withoutRate.length === 1 ? 'una factura nueva queda' : 'facturas nuevas quedan'} sin tasa ${contractCurrency} → ${invoiceCurrency} (${range}); se carga antes de emitir`
 				);
 			}
 		}
@@ -5001,7 +5000,7 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 
 	if (currencyAfter === UF_CURRENCY) p.block('uf_invoice_currency', 'La UF no se factura: elige la moneda en que se emite (por ejemplo, CLP)');
 	if (!multi && currencyAfter !== contractCurrency && policyAfter === 'fixed' && !contract.fx_invoice_rates.length && !newRates.length) {
-		p.error('change.fx_invoice_rates', 'Con tipo de cambio fijo indica al menos una tasa contrato → moneda de factura');
+		p.warn('fixed_fx_without_rate', 'Tipo de cambio fijo sin tasas cargadas: cada factura pide su tasa antes de emitir');
 	}
 	if (multi && policyAfter === 'fixed') {
 		// Multimoneda: una tasa por cada par nuevo (400 con el par faltante); la cobertura por período se bloquea por factura más abajo.
@@ -5015,11 +5014,7 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 			);
 
 			if (!covered)
-				p.error(
-					'change.fx_invoice_rates',
-					`Con tipo de cambio fijo falta la tasa ${code} → ${currencyAfter} (indica from_currency = ${code})`,
-					'fixed_fx_without_rate'
-				);
+				p.warn('fixed_fx_without_rate', `Con tipo de cambio fijo falta la tasa ${code} → ${currencyAfter}: se carga antes de emitir`);
 		}
 	}
 	if (currencyAfter !== currencyBefore || policyAfter !== policyBefore || newRates.length) {
@@ -5063,10 +5058,9 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 
 				if (policyAfter === 'fixed')
 					for (const line of valuation.lines.filter((row) => row.fx === null)) {
-						p.block(
+						p.warn(
 							'fixed_fx_without_rate',
-							`La factura del ${invoice.issue_date} no tiene tasa ${line.currency} → ${currencyAfter} para el período de una de sus líneas`,
-							'Agrega la tasa del par en fx_invoice_rates (con from_currency) o usa tipo de cambio del día'
+							`La factura del ${invoice.issue_date} no tiene tasa ${line.currency} → ${currencyAfter} para el período de una de sus líneas · se carga antes de emitir`
 						);
 					}
 				targets.push({
@@ -5097,10 +5091,9 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 			if (currencyAfter !== contractCurrency && policyAfter === 'fixed') {
 				fx = findFixedRate(allRates, contractCurrency, currencyAfter, periodStart);
 				if (fx === null) {
-					p.block(
+					p.warn(
 						'fixed_fx_without_rate',
-						`La factura del ${invoice.issue_date} no tiene tasa ${contractCurrency} → ${currencyAfter} para su período (desde el ${periodStart})`,
-						'Agrega la tasa del período en fx_invoice_rates o usa tipo de cambio del día'
+						`La factura del ${invoice.issue_date} no tiene tasa ${contractCurrency} → ${currencyAfter} para su período (desde el ${periodStart}) · se carga antes de emitir`
 					);
 				}
 			}

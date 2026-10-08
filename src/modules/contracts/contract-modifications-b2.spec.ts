@@ -372,7 +372,7 @@ describe('renewal: extensión de tasas de todo el contrato (§9.3.4, spec multim
 		expect(blockers(plan)).not.toContain('fixed_fx_without_rate');
 	});
 
-	it('tasas por período sin cobertura del nuevo término → fixed_fx_without_rate con el par; con tasa nueva en el pedido no se extiende', () => {
+	it('tasas por período sin cobertura del nuevo término → aviso fixed_fx_without_rate con el par (Domi 08-10: no bloquea); con tasa nueva en el pedido no se extiende', () => {
 		const periods = usdContract([
 			{ id: 'rate-1', start: '2026-01-01', end: '2026-06-30' },
 			{ id: 'rate-2', start: '2026-07-01', end: '2026-12-31' },
@@ -380,7 +380,7 @@ describe('renewal: extensión de tasas de todo el contrato (§9.3.4, spec multim
 		const plan = planChange(context({ contract: periods }), request({ type: 'renewal', items: [{ item_id: LICENCIA }] }));
 
 		expect(ops(plan, 'extend_fx_rates')).toEqual([]);
-		expect(plan.preview.blockers.find((blocker) => blocker.code === 'fixed_fx_without_rate')?.message).toContain('CLP → USD');
+		expect(plan.preview.warnings.find((warning) => warning.code === 'fixed_fx_without_rate')?.message).toContain('CLP → USD');
 		const sent = planChange(
 			context({ contract: usdContract([{ id: 'rate-1', start: '2026-01-01', end: '2026-12-31' }]) }),
 			request(

@@ -558,7 +558,11 @@ describe('item_add (M1 alta)', () => {
 
 		const separate = planChange(context({ contract: fixed({ group_invoices_by_period: false }), ...usd }), body);
 
-		expect(separate.preview.blockers.map((blocker) => blocker.code)).toContain('fixed_fx_without_rate');
+		// Domi 08-10: la tasa fija se exige al emitir, no al agregar un ítem: aviso, no bloqueo.
+		expect(separate.preview.blockers.map((blocker) => blocker.code)).not.toContain('fixed_fx_without_rate');
+		// Un solo aviso (no uno por período y por factura) y sin los avisos por período del generador.
+		expect(separate.preview.warnings.filter((warning) => warning.code === 'fixed_fx_without_rate')).toHaveLength(1);
+		expect(separate.preview.warnings.map((warning) => warning.message).join(' ')).not.toMatch(/para el período que empieza/);
 	});
 	it('tramo inicial suelto (S3-17): la factura del 15-11 nace aparte y no se fusiona; diciembre sí', () => {
 		const plan = planChange(
@@ -1190,7 +1194,9 @@ describe('billing_conditions (fase A)', () => {
 			)
 		);
 
-		expect(missing.preview.blockers.map((blocker) => blocker.code)).toEqual(['fixed_fx_without_rate']);
+		// Domi 08-10: definir la política fija no exige cargar todas las tasas ya; cada factura pide la suya al emitir.
+		expect(missing.preview.blockers).toEqual([]);
+		expect(missing.preview.warnings.map((warning) => warning.code)).toContain('fixed_fx_without_rate');
 		// Spot: las PE quedan con FX null (se valorizan al emitir).
 		const spot = planChange(
 			context(),
