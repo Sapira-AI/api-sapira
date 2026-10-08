@@ -539,6 +539,27 @@ describe('item_add (M1 alta)', () => {
 		]);
 		expect(create.merge_into).toEqual(['inv-12']);
 	});
+	it('tasa fija: la línea que se suma a una Por Emitir hereda su tasa (sin bloqueo ni aviso); la factura que nace aparte sí pide tasa (Brightcell 08-10)', () => {
+		const fixed = (overrides: Parameters<typeof contractRow>[0] = {}) =>
+			contractRow({ contract_currency: 'USD', invoice_currency: 'CLP', fx_invoice_policy: 'fixed', fx_invoice_rates: [], ...overrides });
+		const body = request(
+			{ type: 'item_add', items: [{ product_id: PRODUCT_NUEVO, quantity: 2, unit_price: 300, end_date: '2027-06-30' }] },
+			{ reason: 'Nuevo módulo' }
+		);
+		const usd = {
+			items: [itemRow({ currency: 'USD' }), soporteRow({ currency: 'USD' })],
+			invoices: context().invoices.map((row) => ({ ...row, invoice_currency: 'CLP' })),
+		};
+		const merged = planChange(context({ contract: fixed(), ...usd }), body);
+
+		expect((ops(merged, 'create_invoices')[0] as { merge_into: Array<string | null> }).merge_into).toEqual(['inv-12']);
+		expect(merged.preview.blockers.map((blocker) => blocker.code)).not.toContain('fixed_fx_without_rate');
+		expect(merged.preview.warnings.map((warning) => warning.message).join(' ')).not.toMatch(/no hay tasa/);
+
+		const separate = planChange(context({ contract: fixed({ group_invoices_by_period: false }), ...usd }), body);
+
+		expect(separate.preview.blockers.map((blocker) => blocker.code)).toContain('fixed_fx_without_rate');
+	});
 	it('tramo inicial suelto (S3-17): la factura del 15-11 nace aparte y no se fusiona; diciembre sí', () => {
 		const plan = planChange(
 			context(),
