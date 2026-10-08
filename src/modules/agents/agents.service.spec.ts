@@ -8,15 +8,17 @@ const CLIENT = 'client-1';
 
 type Responder = (sql: string, params: unknown[]) => unknown;
 
-/** DataSource falso: cada consulta responde según la primera regla cuyo patrón aparece en el SQL. */
+/**
+ * DataSource falso: cada consulta responde según la primera regla cuyo patrón aparece en el SQL. Como TypeORM sobre Postgres,
+ * UPDATE/DELETE devuelven `[filas, rowCount]` (no las filas planas).
+ */
 function fakeDataSource(rules: Array<[RegExp, Responder | unknown]>) {
 	return {
 		query: jest.fn(async (sql: string, params: unknown[] = []) => {
 			const rule = rules.find(([pattern]) => pattern.test(sql));
+			const rows = !rule ? [] : typeof rule[1] === 'function' ? (rule[1] as Responder)(sql, params) : rule[1];
 
-			if (!rule) return [];
-
-			return typeof rule[1] === 'function' ? (rule[1] as Responder)(sql, params) : rule[1];
+			return /^\s*(UPDATE|DELETE)\b/i.test(sql) ? [rows, Array.isArray(rows) ? rows.length : 0] : rows;
 		}),
 	};
 }

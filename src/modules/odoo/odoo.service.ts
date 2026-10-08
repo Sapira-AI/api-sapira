@@ -4,6 +4,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
+import { rowsOf } from '@/core/utils/query-rows';
 import { Company } from '@/databases/postgresql/entities/base-tenancy/companies.entity';
 import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
 import { Product } from '@/databases/postgresql/entities/cotizaciones-catalogo/products.entity';
@@ -2521,12 +2522,14 @@ export class OdooService {
 			if (existingMapping && existingMapping.length > 0) {
 				// Actualizar mapeo existente - REEMPLAZAR completamente el mapping_config
 
-				result = await this.fieldMappingsRepository.query(
-					`UPDATE field_mappings 
+				result = rowsOf(
+					await this.fieldMappingsRepository.query(
+						`UPDATE field_mappings 
 					 SET mapping_config = $1, updated_at = NOW()
 					 WHERE id = $2
 					 RETURNING *`,
-					[JSON.stringify(mapping_config), existingMapping[0].id]
+						[JSON.stringify(mapping_config), existingMapping[0].id]
+					)
 				);
 			} else {
 				// Crear nuevo mapeo

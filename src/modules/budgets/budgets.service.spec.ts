@@ -38,7 +38,8 @@ function build({ existing = false, companies = [COMPANY] }: { existing?: boolean
 		if (sql.includes('FROM users WHERE auth_id')) return [{ id: 'user-1' }];
 		if (sql.includes('FOR UPDATE')) return existing ? [{ id: BUDGET_ID }] : [];
 		if (sql.includes('INSERT INTO budgets')) return [{ id: BUDGET_ID }];
-		if (sql.includes("SET status = 'archived'")) return [{ id: BUDGET_ID }];
+		// UPDATE … RETURNING: TypeORM (postgres) devuelve [filas, rowCount].
+		if (sql.includes("SET status = 'archived'")) return [[{ id: BUDGET_ID }], 1];
 
 		return [];
 	});
@@ -176,13 +177,16 @@ describe('BudgetsService', () => {
 	});
 
 	it('list, get (404 fuera del holding) y archive', async () => {
-		const { service, query } = build();
+		const { service, query, runnerQuery } = build();
 
 		await expect(service.list(HOLDING, { kind: 'cash_in', fiscal_year: 2026 })).resolves.toEqual([
 			expect.objectContaining({ id: BUDGET_ID, total: 200, lines_count: 2 }),
 		]);
 		expect(query.mock.calls.find(([sql]) => sql.includes('FROM budgets b'))![1]).toEqual([HOLDING, 'cash_in', 2026]);
 		await expect(service.archive(HOLDING, BUDGET_ID)).resolves.toMatchObject({ id: BUDGET_ID });
+		// Archivar uno de otro holding: el UPDATE no afecta filas ([[], 0]) → 404.
+		runnerQuery.mockImplementation(async (sql: string) => (sql.includes("SET status = 'archived'") ? [[], 0] : []));
+		await expect(service.archive(HOLDING, BUDGET_ID)).rejects.toBeInstanceOf(NotFoundException);
 		query.mockImplementation(async () => []);
 		await expect(service.get(HOLDING, BUDGET_ID)).rejects.toBeInstanceOf(NotFoundException);
 	});

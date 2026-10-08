@@ -4,6 +4,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 
+import { rowsOf } from '@/core/utils/query-rows';
 import { UserHoldingsService } from '@/guards/user-holdings.service';
 
 import { CLIENT_FILES_BUCKET, ClientFilesStorageService } from './storage/client-files-storage.service';
@@ -181,9 +182,11 @@ export class ClientDocumentsService {
 	 * no conoce `deleted_at` y lo seguiría mostrando (pendiente: filtrar en su policy RLS o migrar esa pantalla).
 	 */
 	async archive(clientId: string, documentId: string, holdingId: string) {
-		const result = await this.dataSource.query<Row[]>(
-			`UPDATE client_documents SET deleted_at = now() WHERE id = $1 AND client_id = $2 AND holding_id = $3 AND deleted_at IS NULL RETURNING id`,
-			[documentId, clientId, holdingId]
+		const result = rowsOf<Row>(
+			await this.dataSource.query(
+				`UPDATE client_documents SET deleted_at = now() WHERE id = $1 AND client_id = $2 AND holding_id = $3 AND deleted_at IS NULL RETURNING id`,
+				[documentId, clientId, holdingId]
+			)
 		);
 
 		if (result.length === 0) throw new NotFoundException('Documento no encontrado');

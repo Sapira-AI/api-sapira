@@ -4,6 +4,7 @@ import { ConflictException, HttpException, Injectable, Logger, NotFoundException
 import { DataSource, type QueryRunner } from 'typeorm';
 
 import { holdingTimezone } from '@/core/utils/holding-preferences';
+import { rowsOf } from '@/core/utils/query-rows';
 import { validationException } from '@/core/utils/validation-errors';
 import { insertClientEntity } from '@/modules/clients/client-entity-writer';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
@@ -1178,11 +1179,13 @@ export class ContractChangesService {
 						contract.id,
 						holdingId,
 					])) as Row[];
-					const [after] = (await runner.query(
-						`UPDATE contracts SET ${columns.map((column, index) => `${column} = $${index + 3}`).join(', ')} WHERE id = $1 AND holding_id = $2
-						RETURNING ${fxColumns}`,
-						[contract.id, holdingId, ...columns.map((column) => resolveEntity(op.set[column]))]
-					)) as Row[];
+					const [after] = rowsOf<Row>(
+						await runner.query(
+							`UPDATE contracts SET ${columns.map((column, index) => `${column} = $${index + 3}`).join(', ')} WHERE id = $1 AND holding_id = $2
+							RETURNING ${fxColumns}`,
+							[contract.id, holdingId, ...columns.map((column) => resolveEntity(op.set[column]))]
+						)
+					);
 
 					// FX a la moneda del sistema del contrato (antes `auto_calculate_contract_fx`), con su misma condición; además, si cambió el
 					// valor total se refresca en cualquier estado (la cancelación pasa a Cancelado y el total en moneda del sistema debe seguirlo).

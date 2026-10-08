@@ -753,8 +753,9 @@ describe('ContractChangesService.apply (POST /contracts/:id/changes)', () => {
 
 	it('contract_cancel: refresca el total en moneda del sistema aunque el contrato quede Cancelado', async () => {
 		const { service, runner } = build((sql) =>
+			// UPDATE … RETURNING: TypeORM (postgres) devuelve [filas, rowCount].
 			sql.includes('UPDATE contracts SET') && sql.includes('RETURNING')
-				? [{ status: 'Cancelado', total_value: '13200', contract_currency: 'CLP', booking_date: '2026-01-01' }]
+				? [[{ status: 'Cancelado', total_value: '13200', contract_currency: 'CLP', booking_date: '2026-01-01' }], 1]
 				: sql.includes('SELECT status, total_value, contract_currency')
 					? [{ status: 'Activo', total_value: '14400', contract_currency: 'CLP', booking_date: '2026-01-01' }]
 					: sql.includes('fx_system_policy')
@@ -771,6 +772,31 @@ describe('ContractChangesService.apply (POST /contracts/:id/changes)', () => {
 			today
 		);
 		expect(calls(runner.query, 'total_value_system_currency').length).toBeGreaterThan(0);
+	});
+
+	it('update_contract sin cambio de total, moneda ni booking: no refresca el FX del contrato (lee la fila del UPDATE … RETURNING)', async () => {
+		const row = { status: 'Activo', total_value: '14400', contract_currency: 'CLP', booking_date: '2026-01-01' };
+		const { service, runner } = build((sql) =>
+			// UPDATE … RETURNING: TypeORM (postgres) devuelve [filas, rowCount].
+			sql.includes('UPDATE contracts SET') && sql.includes('RETURNING')
+				? [[row], 1]
+				: sql.includes('SELECT status, total_value, contract_currency')
+					? [row]
+					: sql.includes('fx_system_policy')
+						? [{ contract_currency: 'CLP', fx_date: '2026-01-01', system_currency: 'CLP', fx_policy: 'monthly_avg' }]
+						: undefined
+		);
+
+		await service.apply(
+			CONTRACT_ID,
+			request({ type: 'contract_cancel', invoice_decisions: [{ invoice_id: 'inv-12', action: 'cancel' }] }, { effective_date: '2026-12-01' }),
+			HOLDING,
+			'auth-1',
+			undefined,
+			today
+		);
+		expect(calls(runner.query, 'UPDATE contracts SET').length).toBeGreaterThan(0);
+		expect(calls(runner.query, 'total_value_system_currency')).toHaveLength(0);
 	});
 
 	it('update_invoices_fx en spot: origen y fecha de la tasa en NULL; nunca reescribe la cantidad de la línea', async () => {
