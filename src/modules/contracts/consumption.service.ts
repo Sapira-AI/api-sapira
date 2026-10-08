@@ -1895,7 +1895,8 @@ export class ConsumptionService {
 		let entryId: string;
 
 		if (existing) {
-			const [updated] = (await runner.query(
+			// UPDATE … RETURNING devuelve [filas, conteo] en TypeORM: el id es el de la entry existente (08-10: "undefined" → 500 al corregir).
+			await runner.query(
 				`UPDATE consumption_entries SET quantity = $3, amount_override = $4, apply_item_discount = $5, account = $6, is_estimated = $7,
 					source = $8, idempotency_key = COALESCE($9, idempotency_key), revision = $10, correction_reason = $11, notes = $12,
 					updated_at = now(), updated_by = $13, invoice_id = $14
@@ -1916,9 +1917,8 @@ export class ConsumptionService {
 					userId,
 					entry.invoice_id,
 				]
-			)) as Row[];
-
-			entryId = String(updated.id);
+			);
+			entryId = String(existing.id);
 		} else {
 			const [inserted] = (await runner.query(
 				`INSERT INTO consumption_entries (
