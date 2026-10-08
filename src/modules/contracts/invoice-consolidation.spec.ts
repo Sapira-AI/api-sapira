@@ -598,7 +598,9 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 		it('solo un consolidado v2 Por Emitir, sin ERP y con orígenes', () => {
 			expect(undoBlockers(consolidated, true, 2)).toEqual([]);
 			expect(codes(undoBlockers({ ...consolidated, invoice_type: 'Automatica' }, true, 2))).toEqual(['not_consolidated']);
-			expect(codes(undoBlockers(consolidated, false, 2))).toEqual(['legacy_unified']);
+			// Histórica Por Emitir con sus orígenes ligados: se puede deshacer (ILUMI 08-10); sin orígenes sigue de solo lectura.
+			expect(undoBlockers(consolidated, false, 2)).toEqual([]);
+			expect(codes(undoBlockers(consolidated, false, 0))).toEqual(['legacy_unified']);
 			expect(codes(undoBlockers({ ...consolidated, status: 'Emitida' }, true, 2))).toEqual(['not_pending']);
 			expect(undoBlockers({ ...consolidated, odoo_invoice_id: 5 }, true, 2)).toEqual([
 				expect.objectContaining({ code: 'sent_to_erp_draft', action: 'erp_reset' }),

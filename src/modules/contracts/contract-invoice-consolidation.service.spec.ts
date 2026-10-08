@@ -352,8 +352,18 @@ describe('ContractInvoiceConsolidationService (spec multimoneda §7)', () => {
 			expect(result).toMatchObject({ undone: true, status: 'Cancelada', restored_invoice_ids: [INV_A, INV_B] });
 		});
 
-		it('legacy (sin evento INVOICE_CONSOLIDATED) → 409 legacy_unified; enviado al ERP → sent_to_erp_draft', async () => {
-			const legacy = build({ consolidated, origins, event: null });
+		it('histórica (sin evento) Por Emitir con orígenes → se deshace (ILUMI 08-10); sin orígenes → 409 legacy_unified; enviado al ERP → sent_to_erp_draft', async () => {
+			const legacyOk = build({ consolidated, origins, event: null });
+			const undone = await legacyOk.service.undo(
+				CONS,
+				{ reason: 'Rehacer con el flujo nuevo' } as UndoConsolidationDto,
+				HOLDING,
+				'auth-1',
+				TODAY
+			);
+
+			expect(undone).toMatchObject({ undone: true });
+			const legacy = build({ consolidated, origins: [], event: null });
 			const legacyError = (await rejection(
 				legacy.service.undo(CONS, { reason: 'x' } as UndoConsolidationDto, HOLDING, 'auth-1', TODAY)
 			)) as ConflictException;
