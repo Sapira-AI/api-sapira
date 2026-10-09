@@ -927,4 +927,24 @@ describe('InvoiceSchedulerService', () => {
 			await expect(own.service.missingReferenceForIssue(invoiceWith({ auto_invoice: true, contract: null }))).resolves.toBeNull();
 		});
 	});
+
+	describe('precio al ERP con descuento (TOPGROUP 09-10): el ERP no descuenta dos veces', () => {
+		it('línea con modelo de precio (unitario ya descontado: cantidad × unitario = subtotal) → se manda el unitario sin descontar', () => {
+			// CTR-2026-85: 5,269 × 68.910,887401 = 363.091,46 (ya con el 25 %) → al ERP 91.881,18 con 25 %.
+			const unit = InvoiceSchedulerService.erpPriceUnit(68910.887401, 5.269, 25, 363091.46);
+
+			expect(unit).toBeCloseTo(91881.183201, 4);
+			expect(5.269 * unit * 0.75).toBeCloseTo(363091.46, 0);
+		});
+
+		it('línea estándar (subtotal = cantidad × unitario × (1 − descuento)) → el unitario va tal cual', () => {
+			expect(InvoiceSchedulerService.erpPriceUnit(100, 2, 10, 180)).toBe(100);
+		});
+
+		it('sin descuento, descuento 100 % o sin subtotal → tal cual', () => {
+			expect(InvoiceSchedulerService.erpPriceUnit(100, 2, 0, 200)).toBe(100);
+			expect(InvoiceSchedulerService.erpPriceUnit(100, 2, 100, 0)).toBe(100);
+			expect(InvoiceSchedulerService.erpPriceUnit(100, 2, 25, null)).toBe(100);
+		});
+	});
 });

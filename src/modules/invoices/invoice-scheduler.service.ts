@@ -1186,7 +1186,12 @@ export class InvoiceSchedulerService {
 
 			const discount = parseFloat(item.discount_pct?.toString() || '0');
 			const quantity = parseFloat(item.quantity?.toString() || '1');
-			const priceUnit = parseFloat(item.unit_price_invoice_currency?.toString() || '0');
+			const priceUnit = InvoiceSchedulerService.erpPriceUnit(
+				parseFloat(item.unit_price_invoice_currency?.toString() || '0'),
+				quantity,
+				discount,
+				item.subtotal_invoice_currency == null ? null : parseFloat(item.subtotal_invoice_currency.toString())
+			);
 
 			// Log detallado del item incluyendo descuento
 			const discountInfo = discount > 0 ? ` - Descuento: ${discount}%` : '';
@@ -1596,6 +1601,19 @@ export class InvoiceSchedulerService {
 	}
 
 	/** Valorización por par con al menos una línea que convierte (moneda de la línea ≠ moneda de factura). */
+	/**
+	 * Precio unitario que va al ERP junto con `discount`. Las líneas con modelo de precio (consumo, tramos) guardan el unitario YA descontado
+	 * (subtotal = cantidad × unitario) y además el descuento del ítem: mandar los dos hacía que el ERP descontara dos veces (TOPGROUP,
+	 * CTR-2026-85, 09-10). Si cantidad × unitario ya es el subtotal y hay descuento, se manda el unitario sin descontar; si no, tal cual.
+	 */
+	static erpPriceUnit(unit: number, quantity: number, discountPct: number, subtotal: number | null): number {
+		if (!(discountPct > 0 && discountPct < 100) || subtotal === null || !(subtotal > 0) || !(quantity > 0)) return unit;
+		const gross = quantity * unit;
+		const alreadyNet = Math.abs(gross - subtotal) <= Math.max(0.01, subtotal * 0.002);
+
+		return alreadyNet ? Math.round((unit / (1 - discountPct / 100)) * 1e6) / 1e6 : unit;
+	}
+
 	static convertsByPair(invoice: InvoiceWithRelations): boolean {
 		const header = upperCode(invoice.contract_currency);
 		const target = upperCode(invoice.invoice_currency);

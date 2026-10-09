@@ -477,3 +477,12 @@ Cuando la NC de anulación creada desde el Contrato 360 (`credit_type = cancella
 emite hacia Odoo y recibe folio, debe pasar a `Cancelada` igual que su factura original (par cerrado, como las NC de anulación
 históricas): así ninguna de las dos suma en lo facturado ni entra en vencimientos o cobranza. La NC de descuento (`credit_type =
 discount`) sigue su estado emitido normal. Decisión de Domi 01-10.
+
+## Precio unitario al ERP con descuento (09-10, caso TOPGROUP CTR-2026-85)
+
+`mapInvoiceToOdooFormat` manda `price_unit` y `discount` por línea. Las líneas con modelo de precio (consumo, tramos) guardan el unitario
+**ya descontado** (`subtotal = cantidad × unitario`) y además `discount_pct` del ítem, así que el ERP descontaba dos veces (neto COP
+272.318 en vez de 363.091). Ahora `InvoiceSchedulerService.erpPriceUnit`: si hay descuento y cantidad × unitario ya es el subtotal, manda
+el unitario sin descontar (`unitario / (1 − descuento)`) con el mismo `discount`; las líneas estándar (subtotal = cantidad × unitario ×
+(1 − descuento)) no cambian. Facturas afectadas en prod antes del fix: 2 Por Emitir con borrador en el ERP (CTR-2026-85 y CTR-2026-60):
+restablecer, eliminar el borrador en Odoo y reenviar después del deploy.
