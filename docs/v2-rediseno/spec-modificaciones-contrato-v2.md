@@ -723,8 +723,13 @@ Multimoneda (MM1–MM6) va antes de B2-2 o en paralelo: `item_add` en otra moned
 
 - **F4 · Corregir un dato mal cargado**: §9.2.1 (`item_update` extendido; evento `ITEM_CORRECTED`). Tests `contract-changes.spec.ts`
   "item_update · corregir un dato mal cargado" y `contract-changes.service.spec.ts` "corrección de cantidad…".
-- **NC**: `creditNoteStatusFor` devuelve siempre `Emitida` (la factura acreditada puede estar Emitida, Enviada, Pagada, Vencida o
-  parcialmente pagada; nunca se copia Pagada/Vencida). Sobre una Por Emitir no se crea NC (se reescribe la factura).
+- **NC**: `creditNoteStatusFor` devuelve `Emitida` (la factura acreditada puede estar Emitida, Enviada, Pagada, Vencida o
+  parcialmente pagada; nunca se copia Pagada/Vencida). Regla única desde el 12-10 (`insertMirrorCreditNote`): si la NC es
+  espejo completo de la emitida (todas sus líneas, enteras) es anulación, venga de Anular, del consumo, de una baja, un downsell o una pausa: NC y
+  emitida nacen/quedan `Cancelada` y el evento del cambio guarda `voided_invoices` (emitida, NC y estado anterior). Parcial (días, algunas
+  líneas) = descuento, `Emitida`, la emitida no cambia. **Reactivar** retira las NC de la baja aún sin folio (op `withdraw_credit_note`: inactiva y
+  Cancelada; antes `cancel_invoice`, que solo tocaba Por Emitir y no las retiraba) y, si eran espejo completo, devuelve la emitida a su estado
+  anterior (del evento; sin él, Enviada si está en el ERP o Emitida). Sobre una Por Emitir no se crea NC (se reescribe la factura).
 - **`item_change` en un ítem por tramos con consumo registrado**: el período con consumo se re-tarifa con la cantidad registrada por el motor
   (`pricedItemInvoicesByPeriod` con `consumption`, filas por tramo en `per_tier`), nunca por el camino de una fila; aviso
   `consumption_quantity_kept`.

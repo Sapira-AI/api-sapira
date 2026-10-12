@@ -134,6 +134,19 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 			expect(codes(planSendNow(pending, context()).blockers)).not.toContain('credit_note');
 			// Corrección 01-10: la NC nace siempre Emitida, aunque su factura esté Pagada, Vencida o parcialmente pagada.
 			expect(creditNoteStatusFor()).toBe('Emitida');
+			expect(creditNoteStatusFor('discount')).toBe('Emitida');
+		});
+
+		it('NC de anulación (12-10): nace Cancelada con su factura y sigue pendiente de emisión mientras no tenga folio', () => {
+			expect(creditNoteStatusFor('cancellation')).toBe('Cancelada');
+			const voiding = { document_type: 'NC', status: 'Cancelada', credit_type: 'cancellation', due_date: null };
+
+			expect(creditNotePendingEmission({ ...voiding, invoice_number: null, odoo_invoice_id: null, sent_to_odoo_at: null })).toBe(true);
+			expect(creditNotePendingEmission({ ...voiding, invoice_number: '001910', odoo_invoice_id: 200021 })).toBe(false);
+			// Las NC de anulación del front anterior (Canceladas, con vencimiento, muchas sin folio) no pasan a pendientes.
+			expect(creditNotePendingEmission({ ...voiding, due_date: '2026-06-30', invoice_number: null })).toBe(false);
+			// Sin credit_type (consultas que no lo traen) una NC Cancelada sigue sin contar, como antes.
+			expect(creditNotePendingEmission({ document_type: 'NC', status: 'Cancelada', invoice_number: null })).toBe(false);
 		});
 
 		it('los nombres de evento son los de la spec (§4) con el envío manual propio de la etapa 1', () => {

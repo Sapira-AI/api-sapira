@@ -23,7 +23,7 @@ import { type FxPeriodRate, normalizeCountry, normalizeTaxRate, round2 } from '.
 import { todayFor } from './business-date';
 import { catalogPriceIds, loadCatalogPrices } from './catalog-prices';
 import { headerAmounts } from './consumption';
-import { creditNoteStatusFor, PENDING_STATUS, voidedSql } from './contract-360';
+import { CANCELLED_STATUS, creditNoteStatusFor, PENDING_STATUS, voidedSql } from './contract-360';
 import { insertEngineInvoices, insertEngineLines, type InvoiceIssuer, type InvoiceLineUnits } from './contract-activation.service';
 import { reconcileContractAlerts } from './contract-alerts';
 import {
@@ -137,6 +137,8 @@ export interface ChangeCreated {
 	items: Record<string, string>;
 	invoices: string[];
 	credit_notes: string[];
+	/** NC espejo completas de una baja/downsell/pausa: emitida que pasó a Cancelada y su estado anterior (Reactivar la devuelve). */
+	voided_invoices?: Array<{ invoice_id: string; credit_note_id: string; previous_status: string | null }>;
 	entity_id?: string | null;
 	scheduled_changes?: string[];
 	/** `pause` (§9.3.3): filas nuevas de `contract_item_pauses` (se ligan al evento con `pause_event_id`). */
@@ -303,6 +305,7 @@ export class ContractChangesService {
 						items: (metadata.created_items as Record<string, string> | undefined) ?? {},
 						invoices: (metadata.created_invoices as string[] | undefined) ?? [],
 						credit_notes: (metadata.created_credit_notes as string[] | undefined) ?? [],
+						voided_invoices: (metadata.voided_invoices as ChangeCreated['voided_invoices']) ?? [],
 						entity_id: (metadata.created_entity_id as string | null | undefined) ?? null,
 						scheduled_changes: (metadata.scheduled_changes_applied as string[] | undefined) ?? [],
 						pauses: (metadata.created_pauses as string[] | undefined) ?? [],
@@ -505,6 +508,7 @@ export class ContractChangesService {
 		const itemIds = new Map<string, string>();
 		const invoices: string[] = [];
 		const creditNotes: string[] = [];
+		const voidedInvoices: NonNullable<ChangeCreated['voided_invoices']> = [];
 		const byInvoice = new Map(ctx.invoices.map((invoice) => [invoice.id, invoice]));
 		const issuer: InvoiceIssuer & { client_entity_id: string | null } = {
 			contract_id: contract.id,
@@ -989,6 +993,22 @@ export class ContractChangesService {
 					if (mergeTargets.has(op.invoice_id)) break;
 					await this.recomputeHeader(runner, op.invoice_id, holdingId, byInvoice.get(op.invoice_id) ?? null, op.note, conversion);
 					break;
+				case 'withdraw_credit_note':
+					touched.add(op.credit_note_id);
+					await runner.query(
+						`UPDATE invoices SET status = '${CANCELLED_STATUS}', is_active = false, notes = COALESCE(notes || E'\\n', '') || $3
+						WHERE id = $1 AND holding_id = $2 AND document_type = 'NC'`,
+						[op.credit_note_id, holdingId, op.note]
+					);
+					if (op.restore) {
+						touched.add(op.restore.invoice_id);
+						await runner.query(`UPDATE invoices SET status = $3 WHERE id = $1 AND holding_id = $2 AND status = '${CANCELLED_STATUS}'`, [
+							op.restore.invoice_id,
+							holdingId,
+							op.restore.status,
+						]);
+					}
+					break;
 				case 'cancel_invoice':
 					touched.add(op.invoice_id);
 					await runner.query(
@@ -1031,7 +1051,9 @@ export class ContractChangesService {
 				}
 				case 'credit_note':
 					creditNotes.push(
-						await this.insertCreditNote(runner, op.mirrors, op.lines, op.note, holdingId, plan.preview.effective_date, userId)
+						await this.insertCreditNote(runner, op.mirrors, op.lines, op.note, holdingId, plan.preview.effective_date, userId, (voided) =>
+							voidedInvoices.push(voided)
+						)
 					);
 					break;
 				case 'update_invoices_fields': {
@@ -1203,6 +1225,7 @@ export class ContractChangesService {
 			items: Object.fromEntries(itemIds),
 			invoices,
 			credit_notes: creditNotes,
+			voided_invoices: voidedInvoices,
 			entity_id: createdEntityId,
 			scheduled_changes: pactIds,
 			pauses: pauseIds,
@@ -1377,11 +1400,13 @@ export class ContractChangesService {
 		note: string,
 		holdingId: string,
 		effectiveDate: string,
-		userId: string | null = null
+		userId: string | null = null,
+		onVoidedOriginal?: MirrorCreditNoteOptions['onVoidedOriginal']
 	): Promise<string> {
 		const creditReason = note.includes('cancelación') ? 'churn' : 'downsell';
 
 		return await insertMirrorCreditNote(runner, mirrors, lines, note, holdingId, effectiveDate, {
+			onVoidedOriginal,
 			credit_reason: creditReason,
 			line_suffix: (periodStart) => ` (NC espejo por baja desde el ${periodStart})`,
 			reference: { kind: 'discount', reason: note, user_id: userId },
@@ -1427,6 +1452,7 @@ export class ContractChangesService {
 					created_items: created.items,
 					created_invoices: created.invoices,
 					created_credit_notes: created.credit_notes,
+					voided_invoices: created.voided_invoices ?? [],
 					created_entity_id: created.entity_id ?? null,
 					scheduled_changes_applied: created.scheduled_changes ?? [],
 					created_pauses: created.pauses ?? [],
@@ -1576,7 +1602,7 @@ export class ContractChangesService {
 				`SELECT i.id, i.invoice_number, i.status, i.is_active, COALESCE(i.is_legacy, false) AS is_legacy, i.invoice_type, i.document_type, i.export_type,
 					i.issue_date::text AS issue_date, i.due_date::text AS due_date, i.client_entity_id, i.contract_currency, i.invoice_currency,
 					i.fx_contract_to_invoice, i.tax_rate, i.amount_contract_currency, i.vat, i.amount_invoice_currency, i.total_invoice_currency,
-					i.odoo_invoice_id, i.sent_to_odoo_at, i.client_tax_id, i.credit_reason, i.related_invoice_id, ${voidedSql('i')} AS voided
+					i.odoo_invoice_id, i.sent_to_odoo_at, i.client_tax_id, i.credit_reason, i.credit_type, i.related_invoice_id, ${voidedSql('i')} AS voided
 				FROM invoices i
 				WHERE i.contract_id = $1 AND i.holding_id = $2 AND COALESCE(i.is_legacy, false) = false
 				ORDER BY i.issue_date, i.id`,
@@ -1822,6 +1848,7 @@ export class ContractChangesService {
 			voided: row.voided === true,
 			client_tax_id: toText(row.client_tax_id),
 			credit_reason: toText(row.credit_reason),
+			credit_type: toText(row.credit_type),
 			related_invoice_id: toText(row.related_invoice_id),
 		}));
 
@@ -1934,7 +1961,8 @@ export class ContractChangesService {
 				: Promise.resolve([] as Row[]),
 			change.type === 'reactivate'
 				? (db.query(
-						`SELECT id, event_type, items_affected, effective_date::text AS effective_date, (metadata ? 'reversed_by') AS reversed
+						`SELECT id, event_type, items_affected, effective_date::text AS effective_date, (metadata ? 'reversed_by') AS reversed,
+							metadata->'voided_invoices' AS voided_invoices
 						FROM contract_lifecycle_events WHERE contract_id = $1 AND holding_id = $2 AND event_type IN ('CHURN', 'DOWNSELL')
 						ORDER BY created_at DESC`,
 						[contractId, holdingId]
@@ -2043,6 +2071,13 @@ export class ContractChangesService {
 					items_affected: Array.isArray(affected) ? affected.map(String) : [],
 					effective_date: toText(row.effective_date),
 					reversed: row.reversed === true,
+					voided_invoices: Array.isArray(parseJson(row.voided_invoices))
+						? (parseJson(row.voided_invoices) as Array<Record<string, unknown>>).map((voided) => ({
+								invoice_id: String(voided.invoice_id),
+								credit_note_id: String(voided.credit_note_id),
+								previous_status: toText(voided.previous_status),
+							}))
+						: [],
 				};
 			}),
 			client_contracts: (clientRows ?? []).map((row) => ({
@@ -2098,8 +2133,13 @@ export async function insertCreditNoteReference(
 export interface MirrorCreditNoteOptions {
 	/** `downsell` (default), `churn`, `issue_error` (reemisión por consumo corregido), etc.; CHECK `invoices_credit_reason_check`. */
 	credit_reason?: string;
-	/** `discount` (default, NC parcial) o `cancellation` (anula la emitida completa); CHECK `invoices_credit_type_check`. */
+	/**
+	 * `discount` (default, NC parcial) o `cancellation` (anula la emitida completa); CHECK `invoices_credit_type_check`. Un espejo que cubre
+	 * todas las líneas de la emitida completas es anulación aunque se pida `discount` (regla única, Domi 12-10).
+	 */
 	credit_type?: 'discount' | 'cancellation';
+	/** Anulación: la emitida pasó a Cancelada; recibe su estado anterior (Reactivar la devuelve a ese estado). */
+	onVoidedOriginal?: (voided: { invoice_id: string; credit_note_id: string; previous_status: string | null }) => void;
 	line_suffix?: (periodStart: string) => string;
 	/** Devengo de una NC de descuento (`impact_month` | `defer_forward` | `service_period`); NULL en anulación y en modificaciones. */
 	nc_revenue_treatment?: string | null;
@@ -2170,7 +2210,21 @@ export async function insertMirrorCreditNote(
 	)) as Row[];
 
 	if (!original) throw new NotFoundException(`La factura ${mirrors.id} ya no existe`);
-	const creditNoteStatus = creditNoteStatusFor();
+	const originalLineCount = Number(
+		(
+			(await runner.query(`SELECT COUNT(*) AS count FROM invoice_items WHERE invoice_id = $1 AND holding_id = $2`, [
+				mirrors.id,
+				holdingId,
+			])) as Row[]
+		)[0]?.count ?? 0
+	);
+	// Regla única (Domi 12-10): espejo completo (todas las líneas de la emitida, enteras) = anulación, venga de Anular, del consumo, de una
+	// baja, un downsell o una pausa. La NC y la emitida quedan Canceladas (pareja cerrada); una NC parcial nace Emitida y la emitida no cambia.
+	const fullMirror =
+		options.credit_type === 'cancellation' ||
+		(originalLineCount > 0 && new Set(lines.map(({ line }) => line.id)).size === originalLineCount && lines.every(({ ratio }) => ratio === 1));
+	const creditType = fullMirror ? 'cancellation' : (options.credit_type ?? 'discount');
+	const creditNoteStatus = creditNoteStatusFor(creditType);
 	const computed = mirrorCreditNoteAmounts(lines, mirrors.tax_rate, options.exact === true);
 	const amounts = computed.lines;
 	// Multimoneda (spec-multimoneda §4 "Notas de crédito"): cada línea de la NC reusa la moneda y la tasa de SU línea original (par, origen y
@@ -2255,7 +2309,7 @@ export async function insertMirrorCreditNote(
 			mirrors.tax_rate,
 			original.invoice_series,
 			note,
-			options.credit_type ?? 'discount',
+			creditType,
 			options.nc_revenue_treatment ?? null,
 			options.invoice_type ?? 'Automatica',
 		]
@@ -2354,6 +2408,11 @@ export async function insertMirrorCreditNote(
 			options.reference.reason,
 			options.reference.user_id ?? null
 		);
+	if (fullMirror) {
+		// La emitida queda Cancelada junto con su NC (un solo lugar para todos los caminos).
+		await runner.query(`UPDATE invoices SET status = '${CANCELLED_STATUS}' WHERE id = $1 AND holding_id = $2`, [mirrors.id, holdingId]);
+		options.onVoidedOriginal?.({ invoice_id: mirrors.id, credit_note_id: creditNoteId, previous_status: toText(original.status) });
+	}
 
 	return creditNoteId;
 }

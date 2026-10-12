@@ -165,23 +165,32 @@ export const isCreditNote = (documentType: string | null | undefined) => /^(NC|N
  * de la NC (una NC no se paga ni vence). Nunca Por Emitir: sobre una factura Por Emitir no se crea NC (se reescribe la factura). La emisión
  * electrónica queda pendiente (`odoo_invoice_id`/`sent_to_odoo_at` NULL) hasta que exista la emisión de NC en Odoo (Leon): el 360 la
  * muestra "pendiente de emisión electrónica" (`creditNotePendingEmission`) y el scheduler no la envía.
+ *
+ * **Excepción, NC de anulación (`credit_type = 'cancellation'`, Domi 12-10):** nace `Cancelada`, igual que la factura que anula. La pareja
+ * queda cerrada y fuera de todo cálculo (facturado, cobrado, cobranza, por cobrar, devengo), como "conciliadas" en Odoo; antes, con la NC
+ * Emitida, los cálculos que dejan fuera la original Cancelada restaban el período dos veces (Ninja CTR-2026-191).
  */
-export const creditNoteStatusFor = (): string => 'Emitida';
+export const creditNoteStatusFor = (creditType?: string | null): string => (creditType === 'cancellation' ? CANCELLED_STATUS : 'Emitida');
 
 /**
- * NC/ND pendiente de emisión electrónica (decisión de Domi 01-10): las NC que crea la API nacen siempre `Emitida` (no Por Emitir),
+ * NC/ND pendiente de emisión electrónica (decisión de Domi 01-10): las NC que crea la API nacen `Emitida` (no Por Emitir),
  * sin folio ni vínculo con el ERP hasta que exista la emisión de NC en Odoo (Leon). También cuentan las NC v2 previas que nacieron Por Emitir.
- * El 360 las muestra "pendiente de emisión electrónica", no como facturas por enviar.
+ * El 360 las muestra "pendiente de emisión electrónica", no como facturas por enviar. La NC de anulación de la API nace `Cancelada` (12-10)
+ * y sigue pendiente mientras no tenga folio; se reconoce por no tener vencimiento (las de la API nunca lo tienen, decisión 30-09), así las
+ * NC de anulación del front anterior (Canceladas, con vencimiento, muchas sin folio) no aparecen de golpe como pendientes.
  */
 export const creditNotePendingEmission = (row: {
 	document_type: string | null | undefined;
 	status: string | null | undefined;
+	/** Sin `credit_type` (filas que no lo cargan) una NC Cancelada no cuenta como pendiente, como antes. */
+	credit_type?: string | null;
+	due_date?: string | Date | null;
 	invoice_number?: string | null;
 	odoo_invoice_id?: number | string | null;
 	sent_to_odoo_at?: string | Date | null;
 }): boolean =>
 	(isCreditNote(row.document_type) || (row.document_type ?? '').trim().toUpperCase() === 'ND') &&
-	row.status !== CANCELLED_STATUS &&
+	(row.status !== CANCELLED_STATUS || (row.credit_type === 'cancellation' && row.due_date === null)) &&
 	(row.status === PENDING_STATUS ||
 		((row.odoo_invoice_id === null || row.odoo_invoice_id === undefined) &&
 			(row.sent_to_odoo_at === null || row.sent_to_odoo_at === undefined) &&

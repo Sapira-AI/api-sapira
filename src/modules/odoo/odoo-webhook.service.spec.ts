@@ -297,3 +297,42 @@ describe('OdooWebhookService.saveWebhookLog', () => {
 		expect(guardar).toHaveBeenCalled();
 	});
 });
+
+describe('OdooWebhookService.processInvoiceStatusUpdate · Canceladas (12-10)', () => {
+	const crear = (invoice: Record<string, unknown>) => {
+		const update = jest.fn().mockResolvedValue({ affected: 1 });
+		const logModel = function (this: any, datos: any) {
+			this.save = jest.fn().mockResolvedValue(datos);
+		};
+		const connection = { model: jest.fn(() => logModel) };
+		const dataSource = { getRepository: jest.fn(() => ({ findOne: jest.fn().mockResolvedValue(invoice), update })) };
+
+		return { service: new OdooWebhookService(connection as any, dataSource as any), update };
+	};
+	const payload = { model: 'account.move', x_sapira_invoice_id: 'nc-1', id: 200021, state: 'posted', payment_state: 'paid', name: '001910' };
+
+	it('una Cancelada (NC de anulación conciliada en Odoo) no pasa a Pagada; el folio sí se guarda', async () => {
+		const { service, update } = crear({ id: 'nc-1', status: 'Cancelada', invoice_number: null, odoo_invoice_id: null, holding_id: 'h-1' });
+
+		await service.processInvoiceStatusUpdate(payload);
+
+		expect(update).toHaveBeenCalledWith('nc-1', expect.not.objectContaining({ status: expect.anything() }));
+		expect(update).toHaveBeenCalledWith('nc-1', expect.objectContaining({ invoice_number: '001910', odoo_invoice_id: 200021 }));
+	});
+
+	it('una Cancelada sin otros cambios no se actualiza', async () => {
+		const { service, update } = crear({ id: 'nc-1', status: 'Cancelada', invoice_number: '001910', odoo_invoice_id: 200021, holding_id: 'h-1' });
+
+		await service.processInvoiceStatusUpdate(payload);
+
+		expect(update).not.toHaveBeenCalled();
+	});
+
+	it('una Enviada sí pasa a Pagada', async () => {
+		const { service, update } = crear({ id: 'nc-1', status: 'Enviada', invoice_number: '001910', odoo_invoice_id: 200021, holding_id: 'h-1' });
+
+		await service.processInvoiceStatusUpdate(payload);
+
+		expect(update).toHaveBeenCalledWith('nc-1', expect.objectContaining({ status: 'Pagada' }));
+	});
+});
