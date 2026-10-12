@@ -7,7 +7,7 @@ import { type FieldError, validationException } from '@/core/utils/validation-er
 import { setApiWriter } from './api-writer';
 import { refreshInvoiceSystemAmounts } from './api-written-fields';
 import { round2 } from './billing-engine';
-import { PENDING_STATUS, voidedSql } from './contract-360';
+import { creditNotePendingEmission, isCreditNote, PENDING_STATUS, voidedSql } from './contract-360';
 import { insertCreditNoteReference, insertMirrorCreditNote } from './contract-changes.service';
 import { resolveUserId } from './contract-drafts.service';
 import { ContractInvoiceEditService } from './contract-invoice-edit.service';
@@ -16,6 +16,7 @@ import { ContractInvoicesService } from './contract-invoices.service';
 import { ContractsService } from './contracts.service';
 import { deviationReasonBlocker, deviationReasonMissing, type EditLineRow, type EditPlan, type LineState } from './invoice-edit';
 import {
+	creditNoteDocumentBlockers,
 	type DiscountPlan,
 	type IssuedInvoiceRow,
 	planDiscountCreditNote,
@@ -29,7 +30,7 @@ import {
 } from './invoice-void';
 import { revalueMulticurrencyInvoices } from './multicurrency-invoices';
 
-import type { DiscountCreditNoteDto, VoidInvoiceDto } from './dtos/contract-invoice-credit-notes.dto';
+import type { DiscountCreditNoteDto, RegisterCreditNoteFolioDto, VoidInvoiceDto } from './dtos/contract-invoice-credit-notes.dto';
 
 // Se re-exportan desde aquí (antes vivían en este archivo; ahora en `contract-changes.service.ts` para modificaciones y consumo).
 export { insertCreditNoteReference, NC_REFERENCE_CODES } from './contract-changes.service';
@@ -141,6 +142,8 @@ export interface VoidPreview {
 		revenue_effect: EditPlan['revenue_effect'];
 	} | null;
 	consumption_entries: Array<{ id: string; contract_item_id: string; period_start: string }>;
+	/** Folio y fecha de la NC ingresados a mano (null = queda pendiente de emisión electrónica). */
+	credit_note_document: { invoice_number: string | null; issue_date: string | null };
 	warnings: VoidPlan['warnings'];
 	blockers: InvoiceBlocker[];
 	can_apply: boolean;
@@ -200,7 +203,7 @@ export class ContractInvoiceVoidService {
 				plan.mirror,
 				`NC de anulación de ${folio} (${label})${dto.notes?.trim() ? ` — ${dto.notes.trim()}` : ''}`,
 				holdingId,
-				todayIso,
+				preview.credit_note_document.issue_date ?? todayIso,
 				{
 					credit_type: 'cancellation',
 					credit_reason: plan.credit_note.credit_reason,
@@ -211,6 +214,7 @@ export class ContractInvoiceVoidService {
 					line_suffix: () => ` (NC anulación de ${folio})`,
 				}
 			);
+			await this.writeCreditNoteNumber(runner, creditNoteId, holdingId, preview.credit_note_document.invoice_number);
 			await insertCreditNoteReference(
 				runner,
 				creditNoteId,
@@ -356,7 +360,8 @@ export class ContractInvoiceVoidService {
 			WHERE e.invoice_id = $1 AND e.holding_id = $2 AND e.contract_id = $3 ORDER BY e.period_start, e.id`,
 			[invoice.id, holdingId, contractId]
 		)) as Row[];
-		const blockers = [...plan.blockers];
+		const document = await this.creditNoteDocument(db, holdingId, dto, invoice.issue_date, today);
+		const blockers = [...plan.blockers, ...document.blockers];
 
 		// La reemisión hereda los bloqueos del editor que no vienen de la emitida (fecha en período cerrado, ítem fuera de vigencia…).
 		for (const blocker of reissue?.blockers ?? [])
@@ -387,6 +392,7 @@ export class ContractInvoiceVoidService {
 				contract_item_id: String(row.contract_item_id),
 				period_start: String(row.period_start).slice(0, 10),
 			})),
+			credit_note_document: { invoice_number: document.invoice_number, issue_date: document.issue_date },
 			warnings: [...plan.warnings, ...(reissue?.warnings ?? [])],
 			blockers,
 			can_apply: blockers.length === 0,
@@ -530,7 +536,7 @@ export class ContractInvoiceVoidService {
 				plan.mirror,
 				`NC de descuento sobre ${folio} (${dto.reason})${dto.notes?.trim() ? ` — ${dto.notes.trim()}` : ''}`,
 				holdingId,
-				todayIso,
+				plan.credit_note_document?.issue_date ?? todayIso,
 				{
 					credit_type: 'discount',
 					credit_reason: dto.reason,
@@ -540,6 +546,7 @@ export class ContractInvoiceVoidService {
 					line_suffix: () => ` (NC descuento de ${folio})`,
 				}
 			);
+			await this.writeCreditNoteNumber(runner, creditNoteId, holdingId, plan.credit_note_document?.invoice_number ?? null);
 			await insertCreditNoteReference(
 				runner,
 				creditNoteId,
@@ -590,6 +597,7 @@ export class ContractInvoiceVoidService {
 
 	private creditNotePreview(plan: DiscountPlan): CreditNotePreview {
 		return {
+			credit_note_document: plan.credit_note_document ?? { invoice_number: null, issue_date: null },
 			blockers: plan.blockers,
 			warnings: plan.warnings,
 			credit_note: plan.credit_note,
@@ -624,6 +632,13 @@ export class ContractInvoiceVoidService {
 		});
 
 		if (plan.errors.length) throw validationException(plan.errors);
+		const document = await this.creditNoteDocument(db, holdingId, dto, invoice.issue_date, today);
+
+		plan.credit_note_document = { invoice_number: document.invoice_number, issue_date: document.issue_date };
+		if (document.blockers.length) {
+			plan.blockers.push(...document.blockers);
+			plan.can_apply = false;
+		}
 
 		return { plan, invoice };
 	}
@@ -646,6 +661,145 @@ export class ContractInvoiceVoidService {
 					? null
 					: toNumber(row.subtotal_invoice_currency),
 		}));
+	}
+
+	// ---------------------------------------------------------------- folio de la NC (emitida a mano en el ERP o sin ERP; Domi 12-10)
+
+	/**
+	 * Registra el folio (y la fecha) de una NC que quedó pendiente de emisión electrónica y se emitió después a mano. No cambia su estado (la
+	 * de anulación sigue Cancelada con su factura; la de descuento, Emitida): solo sale de "pendiente de emisión". 409 `credit_note_not_pending`
+	 * si ya tiene folio o vínculo con el ERP; 409 `blocked` con folio repetido o fecha fuera de rango.
+	 */
+	async registerCreditNoteFolio(
+		idOrNumber: string,
+		creditNoteId: string,
+		dto: RegisterCreditNoteFolioDto,
+		holdingId: string,
+		authId: string,
+		today = new Date()
+	) {
+		const contract = await this.contracts.resolveContract(idOrNumber, holdingId);
+		const userId = await resolveUserId(this.dataSource, authId);
+		const todayIso = isoDate(today);
+
+		const result = await this.transaction(contract.id, holdingId, async (runner) => {
+			const [row] = rowsOf<Row>(
+				await runner.query(
+					`SELECT n.id, n.invoice_number, n.status, n.document_type, n.credit_type, n.due_date::text AS due_date, n.odoo_invoice_id,
+						n.sent_to_odoo_at, n.issue_date::text AS issue_date, n.related_invoice_id, o.invoice_number AS related_number,
+						o.issue_date::text AS related_issue_date
+					FROM invoices n LEFT JOIN invoices o ON o.id = n.related_invoice_id AND o.holding_id = n.holding_id
+					WHERE n.id = $1 AND n.contract_id = $2 AND n.holding_id = $3 AND n.is_active = true FOR UPDATE OF n`,
+					[creditNoteId, contract.id, holdingId]
+				)
+			);
+			const documentType = toText(row?.document_type);
+
+			if (!row || !(isCreditNote(documentType) || documentType?.toUpperCase() === 'ND'))
+				throw new ConflictException({
+					message: 'Solo se registra el folio de una nota de crédito o débito del contrato',
+					code: 'not_a_credit_note',
+				});
+			const pending = creditNotePendingEmission({
+				document_type: documentType,
+				status: toText(row.status),
+				credit_type: toText(row.credit_type),
+				due_date: toText(row.due_date),
+				invoice_number: toText(row.invoice_number),
+				odoo_invoice_id: (row.odoo_invoice_id as number | null) ?? null,
+				sent_to_odoo_at: (row.sent_to_odoo_at as string | null) ?? null,
+			});
+
+			if (!pending)
+				throw new ConflictException({
+					message: `La nota de crédito ya tiene folio (${toText(row.invoice_number) ?? 'vinculada al ERP'})`,
+					code: 'credit_note_not_pending',
+				});
+			const document = await this.creditNoteDocument(
+				runner,
+				holdingId,
+				{ credit_note_number: dto.invoice_number, credit_note_issue_date: dto.issue_date ?? null },
+				toText(row.related_issue_date),
+				todayIso,
+				creditNoteId
+			);
+
+			if (document.blockers.length) throw this.blocked(document.blockers, { credit_note_document: document });
+			await this.writeCreditNoteNumber(runner, creditNoteId, holdingId, document.invoice_number);
+			if (document.issue_date) {
+				await runner.query(`UPDATE invoices SET issue_date = $3::date WHERE id = $1 AND holding_id = $2`, [
+					creditNoteId,
+					holdingId,
+					document.issue_date,
+				]);
+				await runner.query(`UPDATE invoice_items SET issue_date = $3::date WHERE invoice_id = $1 AND holding_id = $2`, [
+					creditNoteId,
+					holdingId,
+					document.issue_date,
+				]);
+			}
+			const eventId = await this.insertEvent(runner, contract.id, holdingId, userId, {
+				type: INVOICE_EVENT_TYPES.credit_note_folio,
+				title: `Folio ${document.invoice_number} registrado en la NC de ${toText(row.related_number) ?? 'la factura'}`,
+				description: `Nota de crédito emitida fuera de Sapira${document.issue_date ? ` el ${document.issue_date}` : ''}`,
+				effective_date: document.issue_date ?? toText(row.issue_date)?.slice(0, 10) ?? todayIso,
+				invoice_id: toText(row.related_invoice_id) ?? creditNoteId,
+				metadata: {
+					credit_note_id: creditNoteId,
+					before: { invoice_number: toText(row.invoice_number), issue_date: toText(row.issue_date)?.slice(0, 10) ?? null },
+					after: {
+						invoice_number: document.invoice_number,
+						issue_date: document.issue_date ?? toText(row.issue_date)?.slice(0, 10) ?? null,
+					},
+				},
+			});
+
+			return { eventId, document };
+		});
+
+		return {
+			applied: true,
+			credit_note_id: creditNoteId,
+			credit_note_document: { invoice_number: result.document.invoice_number, issue_date: result.document.issue_date },
+			event_id: result.eventId,
+			invoice: await this.contracts.invoiceDetail(contract.id, creditNoteId, holdingId),
+		};
+	}
+
+	/** Folio y fecha ingresados a mano, normalizados, con sus bloqueos (`creditNoteDocumentBlockers`; el folio no se repite entre las NC vigentes). */
+	private async creditNoteDocument(
+		db: Queryable,
+		holdingId: string,
+		input: { credit_note_number?: string | null; credit_note_issue_date?: string | null },
+		originalIssueDate: string | null,
+		today: string,
+		excludeId: string | null = null
+	) {
+		const invoiceNumber = input.credit_note_number?.trim() || null;
+		const issueDate = input.credit_note_issue_date?.slice(0, 10) || null;
+		const taken = invoiceNumber
+			? rowsOf<Row>(
+					await db.query(
+						`SELECT 1 FROM invoices WHERE holding_id = $1 AND document_type = 'NC' AND is_active = true
+							AND upper(trim(invoice_number)) = upper($2) AND ($3::uuid IS NULL OR id <> $3::uuid) LIMIT 1`,
+						[holdingId, invoiceNumber, excludeId]
+					)
+				).length > 0
+			: false;
+
+		return {
+			invoice_number: invoiceNumber,
+			issue_date: issueDate,
+			blockers: creditNoteDocumentBlockers(
+				{ invoice_number: invoiceNumber, issue_date: issueDate },
+				{ original_issue_date: originalIssueDate, today, taken }
+			),
+		};
+	}
+
+	private async writeCreditNoteNumber(runner: QueryRunner, creditNoteId: string, holdingId: string, invoiceNumber: string | null) {
+		if (!invoiceNumber) return;
+		await runner.query(`UPDATE invoices SET invoice_number = $3 WHERE id = $1 AND holding_id = $2`, [creditNoteId, holdingId, invoiceNumber]);
 	}
 
 	private async loadIssued(db: Queryable, contractId: string, invoiceId: string, holdingId: string, today: string, lock: boolean) {

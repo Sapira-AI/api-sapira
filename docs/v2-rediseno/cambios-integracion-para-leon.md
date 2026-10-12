@@ -501,3 +501,12 @@ restablecer, eliminar el borrador en Odoo y reenviar después del deploy.
   `Cancelada` no cambia de estado desde Odoo (al conciliar la NC con la factura en Odoo llegan como `paid` y volverían a sumar); folio, id y
   montos sí se guardan, así la NC toma su folio cuando se emite. Tests en `odoo-webhook.service.spec.ts` y
   `odoo-invoice-backfill.service.spec.ts`.
+
+## Consumos: solo cantidad, sin monto final (12-10, Domi)
+
+- El consumo se informa solo con la **cantidad**; el monto sale del modelo de precio del ítem. `amount_override` ya no se acepta en el
+  registro manual ni en el CSV (400 `amount_override`). La casilla de la pantalla queda solo como "No aplicar el descuento del ítem"
+  (`apply_item_discount = false`).
+- **DWH** (`recordFromDwh`): el unitario que traiga el almacén ya no se convierte en monto fijado; se guarda solo la cantidad.
+- Hacia adelante: los consumos antiguos con monto lo conservan hasta que se corrijan (la corrección ya no lo lleva). No se cambiaron datos.
+

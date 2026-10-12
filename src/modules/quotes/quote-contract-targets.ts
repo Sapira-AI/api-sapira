@@ -93,9 +93,17 @@ export function contractTargetsOf(
 		const own = items.filter((item) => item.contract_id === contract.id);
 		const warnings: ContractTarget['warnings'] = [];
 		const suggestions: ContractTarget['suggestions'] = quoteItems.map((quoteItem) => {
+			// Con varios ítems del mismo producto (a distinto precio, separados por cuenta), el del mismo unitario que la línea cotizada:
+			// un downsell "baja 7 a 153.148,8" va al ítem de 153.148,8 (Domi 12-10). Después, mismo producto y cuenta; al final, mismo producto.
+			const sameUnit = (item: TargetContractItem) =>
+				quoteItem.unit_price !== null && item.unit_price !== null && Math.abs(Number(item.unit_price) - Number(quoteItem.unit_price)) < 0.005;
+			const sameAccount = (item: TargetContractItem) => (item.account ?? '') === (quoteItem.account ?? '');
+			const sameProduct = own.filter((item) => item.product_id === quoteItem.product_id);
 			const match =
-				own.find((item) => item.product_id === quoteItem.product_id && (item.account ?? '') === (quoteItem.account ?? '')) ??
-				own.find((item) => item.product_id === quoteItem.product_id) ??
+				sameProduct.find((item) => sameAccount(item) && sameUnit(item)) ??
+				sameProduct.find((item) => sameAccount(item)) ??
+				sameProduct.find((item) => sameUnit(item)) ??
+				sameProduct[0] ??
 				null;
 
 			return {
