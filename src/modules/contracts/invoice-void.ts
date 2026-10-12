@@ -413,6 +413,8 @@ export interface PreviousDiscountLine {
 }
 
 export interface DiscountPlan {
+	/** Folio y fecha de la NC ingresados a mano (los completa el servicio; null = pendiente de emisión). */
+	credit_note_document?: { invoice_number: string | null; issue_date: string | null };
 	errors: FieldError[];
 	blockers: InvoiceBlocker[];
 	warnings: InvoiceWarning[];
@@ -686,4 +688,46 @@ export function planDiscountCreditNote(
 		]),
 		can_apply: blockers.length === 0 && errors.length === 0 && requests.length > 0,
 	};
+}
+
+// ------------------------------------------------------------------ folio de la NC (emitida a mano en el ERP o sin ERP)
+
+/** Folio y fecha de emisión de una NC ingresados a mano (al anular, al descontar o después con "Registrar folio"; Domi 12-10). */
+export interface CreditNoteDocumentInput {
+	invoice_number?: string | null;
+	issue_date?: string | null;
+}
+
+/**
+ * Bloqueos del folio de una NC: el folio no se repite entre las NC vigentes del holding (`taken`), y la fecha no es anterior a la de la
+ * factura que acredita ni posterior a hoy. Sin folio ni fecha no hay nada que validar (la NC queda pendiente de emisión).
+ */
+export function creditNoteDocumentBlockers(
+	input: CreditNoteDocumentInput,
+	context: { original_issue_date: string | null; today: string; taken: boolean }
+): InvoiceBlocker[] {
+	const blockers: InvoiceBlocker[] = [];
+	const folio = (input.invoice_number ?? '').trim();
+	const date = input.issue_date?.slice(0, 10) ?? null;
+
+	if (folio && context.taken)
+		blockers.push({
+			code: 'credit_note_number_taken',
+			message: `El folio ${folio} ya lo tiene otra nota de crédito`,
+			next_step: 'Revisa el número de la nota de crédito en el ERP',
+		});
+	if (date && context.original_issue_date && date < context.original_issue_date.slice(0, 10))
+		blockers.push({
+			code: 'credit_note_date_before_invoice',
+			message: `La nota de crédito no puede ser anterior a la factura que acredita (${context.original_issue_date.slice(0, 10)})`,
+			next_step: 'Usa la fecha de emisión que tiene la nota de crédito en el ERP',
+		});
+	if (date && date > context.today)
+		blockers.push({
+			code: 'credit_note_date_in_future',
+			message: 'La fecha de emisión de la nota de crédito no puede ser futura',
+			next_step: 'Usa la fecha de emisión que tiene la nota de crédito en el ERP',
+		});
+
+	return blockers;
 }

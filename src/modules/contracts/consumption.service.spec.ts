@@ -14,7 +14,7 @@ import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 import { lineDescription } from './billing-engine';
 import { todayFor } from './business-date';
 import { ConsumptionController } from './consumption.controller';
-import { ConsumptionService, dwhAmountOverride, fitConsumptionGlosa } from './consumption.service';
+import { ConsumptionService, fitConsumptionGlosa } from './consumption.service';
 import { Contract360Service } from './contract-360.service';
 import { ContractActivationService } from './contract-activation.service';
 import { ContractBulkService } from './contract-bulk.service';
@@ -463,14 +463,20 @@ describe('ConsumptionService.upsert (PUT /contracts/:id/items/:itemId/consumptio
 		expect(runner.rollbackTransaction).toHaveBeenCalled();
 	});
 
-	it('monto informado por el cliente: la línea usa ese monto (menos descuento si aplica) y la cantidad queda informativa', async () => {
+	it('monto final retirado (12-10): un monto → 400 sin escribir; "no aplicar el descuento del ítem" sigue disponible con la cantidad', async () => {
 		const { service, runner } = build();
+		const error = (await service
+			.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 1250, amount_override: 100, apply_item_discount: false }, HOLDING, 'auth-1')
+			.catch((caught: unknown) => caught)) as BadRequestException;
 
-		await service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 1250, amount_override: 100, apply_item_discount: false }, HOLDING, 'auth-1');
-		const [lineUpdate] = calls(runner.query, 'UPDATE invoice_items SET quantity');
+		expect(error).toBeInstanceOf(BadRequestException);
+		expect(error.getResponse()).toMatchObject({ errors: [expect.objectContaining({ field: 'amount_override' })] });
+		expect(calls(runner.query, 'INSERT INTO consumption_entries')).toHaveLength(0);
 
-		expect(lineUpdate[1].slice(2, 6)).toEqual([1250, 0.08, 0.08, 100]);
-		expect(calls(runner.query, 'INSERT INTO consumption_entries')[0][1].slice(5, 8)).toEqual([1250, 100, false]);
+		const ok = build();
+
+		await ok.service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 1250, apply_item_discount: false }, HOLDING, 'auth-1');
+		expect(calls(ok.runner.query, 'INSERT INTO consumption_entries')[0][1].slice(5, 8)).toEqual([1250, null, false]);
 	});
 
 	it('con tipo de cambio fijo los montos en moneda de factura salen de la tasa de la factura; con spot quedan NULL', async () => {
@@ -1766,7 +1772,7 @@ describe('Consumo sobre un período consolidado y desde el almacén de datos (Do
 		expect(consolidation.resyncFromOrigins).not.toHaveBeenCalled();
 	});
 
-	it('recordFromDwh: usa el período de la línea del mes, source dwh, sin usuaria (actor del sistema en el evento) y monto fijado si el unitario difiere', async () => {
+	it('recordFromDwh: usa el período de la línea del mes, source dwh, sin usuaria (actor del sistema en el evento) y solo la cantidad (el unitario del almacén no fija monto, 12-10)', async () => {
 		const { service, runner } = build((sql) =>
 			sql.includes("date_trunc('month', ii.billing_period_start) = date_trunc('month', $4::date)")
 				? [{ period_start: '2026-10-01', unit_price: '0.05' }]
@@ -1782,7 +1788,7 @@ describe('Consumo sobre un período consolidado y desde el almacén de datos (Do
 
 		const [entryInsert] = calls(runner.query, 'INSERT INTO consumption_entries');
 
-		expect(entryInsert[1].slice(3, 12)).toEqual(['2026-10-01', '2026-10-31', 1000, 70, true, null, false, 'dwh', null]);
+		expect(entryInsert[1].slice(3, 12)).toEqual(['2026-10-01', '2026-10-31', 1000, null, true, null, false, 'dwh', null]);
 		expect(entryInsert[1][13]).toBeNull(); // created_by
 		const [event] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');
 
@@ -1798,13 +1804,6 @@ describe('Consumo sobre un período consolidado y desde el almacén de datos (Do
 		);
 
 		expect(error.getResponse()).toMatchObject({ code: 'period_out_of_item' });
-	});
-
-	it('dwhAmountOverride: unitario × cantidad solo si difiere del del ítem', () => {
-		expect(dwhAmountOverride(1000, 0.07, 0.05)).toBe(70);
-		expect(dwhAmountOverride(1000, 0.05, 0.05)).toBeNull();
-		expect(dwhAmountOverride(1000, null, 0.05)).toBeNull();
-		expect(dwhAmountOverride(3, 0.333, null)).toBe(1);
 	});
 
 	it('entryById acepta el id de la entry o el de la fila de quantities copiada (idempotency_key quantities:<id>)', async () => {

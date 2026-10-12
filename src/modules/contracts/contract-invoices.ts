@@ -58,6 +58,8 @@ export const INVOICE_EVENT_TYPES = {
 	voided: 'INVOICE_VOIDED',
 	reissued: 'INVOICE_REISSUED',
 	credit_note: 'INVOICE_CREDIT_NOTE_CREATED',
+	// Folio de una NC emitida a mano (sin ERP o emitida en el ERP sin vínculo; Domi 12-10).
+	credit_note_folio: 'INVOICE_CREDIT_NOTE_FOLIO_REGISTERED',
 	partial_billing: 'INVOICE_PARTIAL_BILLING',
 	// Multimoneda §7: consolidación opcional entre contratos (uno por contrato) y deshacerla.
 	consolidated: CONSOLIDATION_EVENT_TYPES.consolidated,
