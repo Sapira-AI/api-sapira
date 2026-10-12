@@ -134,15 +134,6 @@ const dwhEntryView = (row: Row): DwhEntryView => {
 	};
 };
 
-/**
- * Monto fijado de un consumo informado con unitario (DWH, override del front anterior): unitario × cantidad cuando el unitario difiere del
- * del ítem; null (cantidad × precio del ítem) si es el mismo o no viene. Misma regla que la migración `1791600000000`.
- */
-export const dwhAmountOverride = (quantity: number, unitPrice: number | null, itemUnitPrice: number | null): number | null =>
-	unitPrice === null || unitPrice === undefined || (itemUnitPrice !== null && Math.abs(Number(unitPrice) - Number(itemUnitPrice)) < 1e-9)
-		? null
-		: round2(Number(unitPrice) * Number(quantity));
-
 /** Fila de respuesta sin los montos internos (`amounts`) que solo usa la escritura. */
 const stripAmounts = (part: ConsumptionLineRow & { amounts: LineAmounts }): ConsumptionLineRow => {
 	const copy: Partial<ConsumptionLineRow & { amounts: LineAmounts }> = { ...part };
@@ -612,16 +603,13 @@ export class ConsumptionService {
 		)) as Row[];
 
 		if (!line) throw outOfItemConflict(month, []);
-		const itemUnit = toNullableNumber(line.unit_price);
-		const amountOverride = dwhAmountOverride(values.quantity, values.unit_price, itemUnit);
-
 		return await this.write(
 			contractId,
 			itemId,
 			String(line.period_start).slice(0, 10),
 			{
+				// El DWH informa solo la cantidad (Domi 12-10): el unitario sale del modelo de precio del ítem, no del almacén.
 				quantity: values.quantity,
-				amount_override: amountOverride,
 				account: values.account ?? undefined,
 				notes: values.notes ?? undefined,
 				correction_reason: values.correction_reason ?? undefined,
@@ -932,7 +920,9 @@ export class ConsumptionService {
 			period_start: periodStart,
 			period_end: periodEnd,
 			quantity: Number(dto.quantity),
-			amount_override: dto.amount_override ?? null,
+			// Monto final retirado (Domi 12-10): el consumo es solo cantidad; el precio sale del modelo. Los montos antiguos siguen en sus
+			// consumos hasta corregirlos (una corrección nueva ya no lo lleva).
+			amount_override: null,
 			apply_item_discount: dto.apply_item_discount !== false,
 			account: dto.account?.trim() || existing?.account || null,
 			is_estimated: dto.is_estimated === true,
@@ -978,6 +968,12 @@ export class ConsumptionService {
 
 		if (existing && !dto.correction_reason?.trim())
 			errors.push({ field: 'correction_reason', message: 'Escribe el motivo de la corrección: el período ya tiene consumo registrado' });
+		if (dto.amount_override !== null && dto.amount_override !== undefined)
+			errors.push({
+				field: 'amount_override',
+				message:
+					'El consumo se informa solo con la cantidad: el monto sale del modelo de precio. Para no aplicar el descuento del ítem, márcalo en el consumo',
+			});
 		if (errors.length) throw validationException(errors);
 		if (classification.state === 'void_only' || !priced) return empty;
 		warnings.push(...priced.warnings);
