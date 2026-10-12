@@ -788,12 +788,25 @@ describe('reactivate (§9.3.2, S2-8 / S3-9 / S5-7)', () => {
 	it('(b4) NC espejo completa ya emitida (con folio) queda y avisa, aunque esté Cancelada', () => {
 		const ctx = cancelled('2026-09-15');
 		const plan = planChange(
-			{ ...ctx, invoices: [...ctx.invoices, fullMirror({ invoice_number: '001999', odoo_invoice_id: 9 })] },
+			{
+				...ctx,
+				// La emitida de septiembre quedó Cancelada con su NC (pareja cerrada).
+				invoices: [
+					...ctx.invoices.map((row) => (row.id === 'inv-09' ? { ...row, status: 'Cancelada' } : row)),
+					fullMirror({ invoice_number: '001999', odoo_invoice_id: 9, related_invoice_id: 'inv-09' }),
+				],
+			},
 			request({ type: 'reactivate' }, { effective_date: '2026-09-28', reason: 'ok' })
 		);
 
 		expect(ops(plan, 'withdraw_credit_note')).toEqual([]);
 		expect(codes(plan)).toContain('credit_notes_issued_kept');
+		// La NC ya existe en el facturador electrónico: no se retira; el período anulado se vuelve a facturar en una Por Emitir nueva (Domi 12-10).
+		const septLines = plan.preview.invoices.created
+			.flatMap((invoice) => invoice.lines)
+			.filter((line) => line.billing_period_start >= '2026-09-15' && line.billing_period_start <= '2026-09-30');
+
+		expect(septLines.length).toBeGreaterThan(0);
 	});
 
 	it('(c) mes cerrado → REACTIVATION nuevo desde la fecha efectiva al valor anterior; con otro contrato vigente del cliente es UPSELL', () => {
