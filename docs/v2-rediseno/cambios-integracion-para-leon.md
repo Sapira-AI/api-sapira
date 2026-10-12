@@ -489,7 +489,8 @@ restablecer, eliminar el borrador en Odoo y reenviar después del deploy.
 
 ## NC de anulación nace Cancelada y Odoo no cambia el estado de una Cancelada (12-10, Domi)
 
-- La NC de anulación (`credit_type = 'cancellation'`: "Anular con nota de crédito" del 360 y la reemisión por consumo) nace `Cancelada`,
+- Regla única: toda NC espejo **completa** de una emitida (Anular del 360, reemisión por consumo, baja, downsell o pausa que cubre la
+  factura entera) es de anulación (`credit_type = 'cancellation'`) y nace `Cancelada`,
   igual que la factura que anula: la pareja queda cerrada y fuera de todo cálculo (facturado, cobrado, cobranza, por cobrar, devengo), como
   "conciliadas" en Odoo. Antes la NC nacía `Emitida` y los cálculos que dejan fuera la original Cancelada restaban el período dos veces
   (Ninja CTR-2026-191). La reemisión por consumo ahora también deja la original `Cancelada` (antes no la tocaba). Las NC de descuento, baja

@@ -1742,9 +1742,6 @@ export class ConsumptionService {
 						},
 					}
 				);
-				// Como "Anular" del 360: la original queda Cancelada junto con su NC de anulación (que nace Cancelada, 12-10); la pareja
-				// sale de todo cálculo y lo cobrado es la reemitida.
-				await runner.query(`UPDATE invoices SET status = '${CANCELLED_STATUS}' WHERE id = $1 AND holding_id = $2`, [header.id, holdingId]);
 				const invoiceId = await this.insertInvoiceHeader(runner, header, draft, holdingId);
 				const ids = await this.insertLines(
 					runner,

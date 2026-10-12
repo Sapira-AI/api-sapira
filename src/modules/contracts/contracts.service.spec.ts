@@ -1185,13 +1185,6 @@ describe('ContractsService', () => {
 			expect(sql.split('UNION ALL')[0]).not.toContain('i.contract_id = c.id AND');
 		});
 
-		it('la NC de anulación de una factura Cancelada/Anulada no resta: la pareja suma cero (Ninja CTR-2026-191, 12-10)', () => {
-			for (const part of sql.split('UNION ALL')) {
-				expect(part).toContain(`NOT (i.document_type = 'NC' AND i.credit_type = 'cancellation' AND EXISTS (`);
-				expect(part).toContain(`o.id = i.related_invoice_id AND o.holding_id = i.holding_id AND o.status IN ('Cancelada', 'Anulada')`);
-			}
-		});
-
 		it('orígenes de una unificación no cuentan (inactivos o consolidados en otra); la copia activa sí; NC restan; Canceladas fuera', () => {
 			for (const part of sql.split('UNION ALL')) {
 				expect(part).toContain('i.is_active = true');

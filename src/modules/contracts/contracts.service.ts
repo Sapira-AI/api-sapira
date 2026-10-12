@@ -236,13 +236,6 @@ export function withInternalLines<T extends { id: string; visible_line_id: strin
  * moneda de factura, al contrato principal). Los orígenes de una unificación (inactivos o con `consolidated_into_invoice_id`) no cuentan;
  * la copia activa sí. Una factura sin líneas (registro antiguo) cuenta por su encabezado. Facturas suman, notas de crédito restan.
  */
-/**
- * NC de anulación cuya original quedó Cancelada/Anulada: la original ya no suma, así que la NC tampoco resta (la pareja es cero). Sin esto,
- * "las facturas suman" restaba el período anulado dos veces (Ninja CTR-2026-191, 12-10). Fragmento SQL sobre el alias `i`.
- */
-export const NOT_VOIDING_CREDIT_NOTE_SQL = `NOT (i.document_type = 'NC' AND i.credit_type = 'cancellation' AND EXISTS (
-		SELECT 1 FROM invoices o WHERE o.id = i.related_invoice_id AND o.holding_id = i.holding_id AND o.status IN ('Cancelada', 'Anulada')))`;
-
 export const INVOICED_BY_CONTRACT_SQL = `
 	SELECT COUNT(DISTINCT x.invoice_id) AS invoices_count, COALESCE(SUM(x.amount), 0) AS invoiced_total
 	FROM (
@@ -254,7 +247,6 @@ export const INVOICED_BY_CONTRACT_SQL = `
 		WHERE i.holding_id = $2 AND i.is_active = true AND i.status IS DISTINCT FROM 'Cancelada' AND i.status IS DISTINCT FROM 'Consolidada'
 			AND i.consolidated_into_invoice_id IS NULL
 			AND (i.document_type IS NULL OR i.document_type ILIKE 'FACTURA%' OR i.document_type IN ('Invoice', 'NC'))
-			AND ${NOT_VOIDING_CREDIT_NOTE_SQL}
 			AND COALESCE(ii.contract_id, ci.contract_id, i.contract_id) = c.id
 		UNION ALL
 		SELECT i.id,
@@ -263,7 +255,6 @@ export const INVOICED_BY_CONTRACT_SQL = `
 		WHERE i.contract_id = c.id AND i.holding_id = $2 AND i.is_active = true AND i.status IS DISTINCT FROM 'Cancelada' AND i.status IS DISTINCT FROM 'Consolidada'
 			AND i.consolidated_into_invoice_id IS NULL
 			AND (i.document_type IS NULL OR i.document_type ILIKE 'FACTURA%' OR i.document_type IN ('Invoice', 'NC'))
-			AND ${NOT_VOIDING_CREDIT_NOTE_SQL}
 			AND NOT EXISTS (SELECT 1 FROM invoice_items ii WHERE ii.invoice_id = i.id)
 	) x`;
 

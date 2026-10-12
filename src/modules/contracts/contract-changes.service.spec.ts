@@ -16,8 +16,8 @@ import { ConsumptionService } from './consumption.service';
 import { Contract360Service } from './contract-360.service';
 import { ContractActivationService } from './contract-activation.service';
 import { ContractBulkService } from './contract-bulk.service';
-import { ContractChangesService, requestHash } from './contract-changes.service';
-import { CONTRACT_ID, HOLDING, LICENCIA, PRODUCT_LICENCIA, PRODUCT_SOPORTE, SOPORTE } from './contract-changes.test-fixtures';
+import { ContractChangesService, insertMirrorCreditNote, requestHash } from './contract-changes.service';
+import { CONTRACT_ID, HOLDING, invoiceRow, LICENCIA, PRODUCT_LICENCIA, PRODUCT_SOPORTE, SOPORTE } from './contract-changes.test-fixtures';
 import { ContractDraftsService } from './contract-drafts.service';
 import { ContractInvoiceDescriptionsService } from './contract-invoice-descriptions.service';
 import { ContractInvoiceEditService } from './contract-invoice-edit.service';
@@ -1600,5 +1600,80 @@ describe('ContractChangesService.extendHorizonForHolding (job contracts-extend-h
 		expect(await service.extendHorizonForHolding(HOLDING, 'system', today)).toBe(0);
 		expect(calls(runner.query, 'INSERT INTO')).toHaveLength(0);
 		expect(runner.rollbackTransaction).toHaveBeenCalled();
+	});
+});
+
+describe('insertMirrorCreditNote · regla única de anulación (Domi 12-10)', () => {
+	const run = async (originalLines: number, coverage: Array<{ id: string; ratio: number }>, creditType?: 'discount' | 'cancellation') => {
+		const calls: Array<[string, unknown[]]> = [];
+		const runner = {
+			query: jest.fn(async (sql: string, params: unknown[] = []) => {
+				calls.push([sql, params]);
+				if (sql.includes('SELECT COUNT(*) AS count FROM invoice_items')) return [{ count: String(originalLines) }];
+				if (sql.includes('FROM invoices WHERE id = $1 AND holding_id = $2'))
+					return [{ contract_id: CONTRACT_ID, contract_currency: 'USD', invoice_currency: 'USD', tax_rate: 19, status: 'Pagada' }];
+				if (sql.includes('INSERT INTO invoices')) return [{ id: 'nc-1' }];
+				if (sql.includes('INSERT INTO invoice_items')) return [{ id: `ncl-${calls.length}` }];
+
+				return [];
+			}),
+		};
+		const base = invoiceRow('10').lines[0];
+		const voided: unknown[] = [];
+
+		await insertMirrorCreditNote(
+			runner as never,
+			{ id: 'inv-10', tax_rate: 19 },
+			coverage.map(({ id, ratio }) => ({ line: { ...base, id }, ratio, period_start: '2026-10-01' })),
+			'NC',
+			HOLDING,
+			'2026-10-15',
+			{ credit_type: creditType, onVoidedOriginal: (row) => voided.push(row) }
+		);
+		const header = calls.find(([sql]) => sql.includes('INSERT INTO invoices'))!;
+		const cancelOriginal = calls.filter(([sql]) => sql.startsWith("UPDATE invoices SET status = 'Cancelada' WHERE id = $1"));
+
+		return { status: header[1][6], creditType: header[1].at(-3), cancelOriginal: cancelOriginal.map(([, params]) => params[0]), voided };
+	};
+
+	it('espejo completo de una baja, downsell o pausa (todas las líneas, enteras) = anulación: NC y emitida Canceladas, guarda el estado anterior', async () => {
+		const result = await run(2, [
+			{ id: 'l-1', ratio: 1 },
+			{ id: 'l-2', ratio: 1 },
+		]);
+
+		expect(result).toEqual({
+			status: 'Cancelada',
+			creditType: 'cancellation',
+			cancelOriginal: ['inv-10'],
+			voided: [{ invoice_id: 'inv-10', credit_note_id: 'nc-1', previous_status: 'Pagada' }],
+		});
+	});
+
+	it('parcial (por días o no todas las líneas) = descuento: NC Emitida y la emitida no cambia', async () => {
+		expect(await run(2, [{ id: 'l-1', ratio: 1 }])).toMatchObject({ status: 'Emitida', creditType: 'discount', cancelOriginal: [], voided: [] });
+		expect(
+			await run(2, [
+				{ id: 'l-1', ratio: 1 },
+				{ id: 'l-2', ratio: 0.5 },
+			])
+		).toMatchObject({ status: 'Emitida', creditType: 'discount', cancelOriginal: [] });
+	});
+
+	it('Anular y la reemisión por consumo piden anulación: Cancelada aunque acrediten lo que queda de líneas ya descontadas', async () => {
+		expect(
+			await run(
+				2,
+				[
+					{ id: 'l-1', ratio: 0.8 },
+					{ id: 'l-2', ratio: 1 },
+				],
+				'cancellation'
+			)
+		).toMatchObject({
+			status: 'Cancelada',
+			creditType: 'cancellation',
+			cancelOriginal: ['inv-10'],
+		});
 	});
 });
