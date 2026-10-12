@@ -200,7 +200,7 @@ const build = (fixture: Fixture = {}) => {
 		if (sql.includes('FROM consumption_entries e')) return [itemRow];
 		if (sql.includes('cancelled_by_credit_note'))
 			return Object.entries(lines).flatMap(([invoiceId, rows]) =>
-				rows.map((row) => ({ ...row, invoice_id: invoiceId, status: invoices[invoiceId]?.status ?? 'Por Emitir', document_type: 'FACTURA' }))
+				rows.map((row) => ({ status: invoices[invoiceId]?.status ?? 'Por Emitir', document_type: 'FACTURA', ...row, invoice_id: invoiceId }))
 			);
 		if (sql.includes('ii.description_locked') && sql.includes('ANY($1::uuid[])')) return (params[0] as string[]).flatMap((id) => lines[id] ?? []);
 		if (sql.includes('FROM invoice_references r')) return [];
@@ -516,6 +516,40 @@ describe('ContractInvoiceEditService (spec facturas §3.4)', () => {
 			]);
 			// Caso S02762: la diferencia de "las facturas suman" (−200) es la misma de los desvíos → el front muestra un solo aviso.
 			expect(result.invoices_vs_total).toEqual({ difference: -200, deviations_total: -200, explained_by_deviations: true });
+		});
+
+		// Ninja CTR-2026-191 (12-10): el período se anuló con NC (original Cancelada, que la consulta ya deja fuera) y se volvió a facturar.
+		const voidedPeriod = (relatedStatus: string) => ({
+			invoices: {
+				[INV_A]: invoiceRow(INV_A),
+				[INV_B]: invoiceRow(INV_B, { status: 'Emitida', document_type: 'NC', invoice_number: '001910' }),
+			},
+			lines: {
+				[INV_A]: [lineRow(INV_A)],
+				[INV_B]: [
+					lineRow(INV_B, {
+						id: 'l-nc',
+						subtotal_contract_currency: '-1000',
+						document_type: 'NC',
+						credit_type: 'cancellation',
+						related_status: relatedStatus,
+					}),
+				],
+			},
+		});
+
+		it('la NC de anulación de una factura Cancelada no cuenta como facturado: la reemisión calza con el plan', async () => {
+			const { service } = build(voidedPeriod('Cancelada'));
+			const result = await service.deviations(CONTRACT_ID, HOLDING);
+
+			expect(result.total).toBe(0);
+		});
+
+		it('si la original sigue vigente, la NC sí cuenta (la pareja se netea con la original)', async () => {
+			const { service } = build(voidedPeriod('Emitida'));
+			const result = await service.deviations(CONTRACT_ID, HOLDING);
+
+			expect(result.data).toEqual([expect.objectContaining({ invoice_id: INV_A, deviation: expect.objectContaining({ total_diff: -1000 }) })]);
 		});
 	});
 

@@ -122,12 +122,22 @@ const LINES_SQL = `SELECT ii.id, ii.invoice_id, ii.contract_item_id, ii.product_
 /** Líneas de todas las facturas vigentes del contrato (para el conciliador y los períodos ya emitidos). */
 const CONTRACT_LINES_SQL = `SELECT ii.invoice_id, ii.contract_item_id, ii.billing_period_start::text AS billing_period_start,
 		ii.billing_period_end::text AS billing_period_end, ii.subtotal_contract_currency, i.status, i.invoice_number, i.document_type,
+		i.credit_type, (SELECT o.status FROM invoices o WHERE o.id = i.related_invoice_id AND o.holding_id = i.holding_id) AS related_status,
 		EXISTS (SELECT 1 FROM invoices n WHERE n.related_invoice_id = i.id AND n.holding_id = i.holding_id AND n.credit_type = 'cancellation'
 			AND n.is_active = true AND n.status IS DISTINCT FROM 'Cancelada') AS cancelled_by_credit_note
 	FROM invoice_items ii
 	JOIN invoices i ON i.id = ii.invoice_id
 	WHERE i.contract_id = $1 AND i.holding_id = $2 AND i.is_active = true AND COALESCE(i.is_legacy, false) = false
 		AND i.status NOT IN ('Cancelada', 'Anulada') AND ii.contract_item_id IS NOT NULL`;
+
+/**
+ * NC de anulación cuya factura original quedó Cancelada/Anulada: la pareja suma cero. `CONTRACT_LINES_SQL` ya deja fuera la original, así
+ * que la NC tampoco cuenta como facturado del período (si no, el conciliador resta el período dos veces; Ninja CTR-2026-191, 12-10).
+ */
+export const isVoidingCreditNote = (row: Row): boolean =>
+	isCreditNote(toText(row.document_type)) &&
+	toText(row.credit_type) === 'cancellation' &&
+	['Cancelada', 'Anulada'].includes(toText(row.related_status) ?? '');
 
 const HEADER_EXTRA_SQL = `SELECT i.id, i.client_tax_id, i.export_type, i.invoice_terms_and_conditions, i.notes, i.nc_revenue_treatment
 	FROM invoices i WHERE i.id = ANY($1::uuid[]) AND i.holding_id = $2`;
@@ -1218,7 +1228,7 @@ export class ContractInvoiceEditService {
 			}
 		}
 		for (const row of data.contract_lines) {
-			if (String(row.invoice_id) === invoiceId) continue;
+			if (String(row.invoice_id) === invoiceId || isVoidingCreditNote(row)) continue;
 			const start = toText(row.billing_period_start);
 
 			if (!start || !row.contract_item_id) continue;
