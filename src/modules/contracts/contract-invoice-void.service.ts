@@ -220,8 +220,8 @@ export class ContractInvoiceVoidService {
 				`Anula ${folio}: ${label}`,
 				userId
 			);
-			// La original queda cerrada (Cancelada): neteada en KPIs y fuera de vencimientos y cobranza. Antes/después en el evento.
-			await runner.query(`UPDATE invoices SET status = 'Cancelada' WHERE id = $1 AND holding_id = $2`, [invoice.id, holdingId]);
+			// La original ya quedó Cancelada en `insertMirrorCreditNote` (anulación = espejo completo, un solo lugar): neteada en KPIs y fuera
+			// de vencimientos y cobranza. Antes/después en el evento.
 			const reissueId = reissue ? await this.writeReissue(runner, holdingId, invoice, rows, reissue) : null;
 			const adjustmentId =
 				reissue && dto.reissue_changes?.deviation && reissue.deviation.has_deviation && reissueId

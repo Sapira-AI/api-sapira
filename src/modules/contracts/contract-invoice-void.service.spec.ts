@@ -257,7 +257,8 @@ describe('ContractInvoiceVoidService (spec facturas §3.8 y §8)', () => {
 
 		expect(nc[0]).toContain('$6, $6, $6, NULL');
 		// Decisión 01-10: la NC nace siempre Emitida, nunca Por Emitir.
-		expect(ncParams[6]).toBe('Emitida');
+		// La NC de anulación nace Cancelada, igual que la original (pareja cerrada, fuera de todo cálculo; Domi 12-10).
+		expect(ncParams[6]).toBe('Cancelada');
 		expect(ncParams.slice(10, 14)).toEqual([-1500, -1425000, -270750, -1695750]);
 		expect(ncParams[16]).toBe(INV);
 		expect(ncParams[17]).toBe('other');

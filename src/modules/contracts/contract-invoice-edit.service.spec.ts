@@ -200,7 +200,7 @@ const build = (fixture: Fixture = {}) => {
 		if (sql.includes('FROM consumption_entries e')) return [itemRow];
 		if (sql.includes('cancelled_by_credit_note'))
 			return Object.entries(lines).flatMap(([invoiceId, rows]) =>
-				rows.map((row) => ({ ...row, invoice_id: invoiceId, status: invoices[invoiceId]?.status ?? 'Por Emitir', document_type: 'FACTURA' }))
+				rows.map((row) => ({ status: invoices[invoiceId]?.status ?? 'Por Emitir', document_type: 'FACTURA', ...row, invoice_id: invoiceId }))
 			);
 		if (sql.includes('ii.description_locked') && sql.includes('ANY($1::uuid[])')) return (params[0] as string[]).flatMap((id) => lines[id] ?? []);
 		if (sql.includes('FROM invoice_references r')) return [];

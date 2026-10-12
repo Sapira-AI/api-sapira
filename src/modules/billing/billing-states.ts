@@ -66,6 +66,8 @@ export function documentKindOf(documentType: string | null | undefined): Documen
 export interface DerivedInput {
 	status: string | null;
 	document_type: string | null;
+	/** NC: `cancellation` o `discount`. */
+	credit_type?: string | null;
 	is_active: boolean;
 	invoice_number?: string | null;
 	issue_date: string | null;
@@ -100,6 +102,14 @@ export function erpStateOf(row: DerivedInput): ErpState {
 /** Emisión legal (§3): sin estados SII/SUNAT/CFDI propios hasta el vínculo invoice ↔ DTE (Leon). */
 export function electronicStateOf(row: DerivedInput, today: string): ElectronicState {
 	if (row.voided) return 'voided';
+	// NC de anulación de la API: nace Cancelada con su factura (12-10); su emisión sigue el folio, no el estado (misma regla que billing-sql).
+	if (
+		documentKindOf(row.document_type) !== 'invoice' &&
+		row.status === CANCELLED_STATUS &&
+		row.credit_type === 'cancellation' &&
+		row.due_date === null
+	)
+		return creditNotePendingEmission(row) ? 'pending_emission' : erpLinked(row) ? 'issued_erp' : 'issued_external';
 	if (row.status === CANCELLED_STATUS) return row.no_charge ? 'not_issued' : 'voided';
 	if (documentKindOf(row.document_type) !== 'invoice') {
 		if (creditNotePendingEmission({ ...row, odoo_invoice_id: row.odoo_invoice_id ?? null })) return 'pending_emission';

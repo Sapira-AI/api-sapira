@@ -170,6 +170,18 @@ describe('OdooInvoiceBackfillService.backfillFolios', () => {
 		expect(update).toHaveBeenCalledWith(FACTURA, expect.objectContaining({ status: 'Enviada' }));
 	});
 
+	it('una Cancelada no cambia de estado aunque Odoo diga pagada (NC de anulación conciliada); el folio sí se guarda (12-10)', async () => {
+		const { service, update } = crearServicio({
+			candidatas: [candidata({ status: 'Cancelada', invoice_number: null })],
+			odoo: [enOdoo({ payment_state: 'paid' })],
+		});
+
+		await service.backfillFolios(HOLDING, { aplicar: true });
+
+		expect(update).toHaveBeenCalledWith(FACTURA, expect.not.objectContaining({ status: expect.anything() }));
+		expect(update).toHaveBeenCalledWith(FACTURA, expect.objectContaining({ invoice_number: 'F101-00004388' }));
+	});
+
 	it('`paid` sí pasa a Pagada', async () => {
 		const { service, update } = crearServicio({ candidatas: [candidata()], odoo: [enOdoo({ payment_state: 'paid' })] });
 
