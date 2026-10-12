@@ -951,7 +951,11 @@ describe('ConsumptionService · factura emitida (§4.4: on_issued) y per_tier (�
 
 		// NC: −(64,80 + 100) = −164,80 neto, IVA −31,31, total −196,11; espejo de inv-paid; reason issue_error, type cancellation.
 		// Decisión 01-10: la NC nace siempre Emitida (aunque la factura que anula esté Pagada) y referencia su folio (código 1 = anula).
-		expect(nc[1][6]).toBe('Emitida');
+		// NC de anulación nace Cancelada y la emitida original también queda Cancelada (como "Anular" del 360; Domi 12-10).
+		expect(nc[1][6]).toBe('Cancelada');
+		expect(
+			runner.query.mock.calls.filter(([sql]) => sql === "UPDATE invoices SET status = 'Cancelada' WHERE id = $1 AND holding_id = $2")
+		).toEqual([[expect.any(String), ['inv-paid', 'h-1']]]);
 		expect(nc[0]).toContain('$6, $6, $6, NULL');
 		expect(calls(runner.query, 'INSERT INTO invoice_references')[0][1]).toEqual(expect.arrayContaining(['1']));
 		expect(nc[1].slice(10, 14)).toEqual([-164.8, -164.8, -31.31, -196.11]);
@@ -986,10 +990,11 @@ describe('ConsumptionService · factura emitida (§4.4: on_issued) y per_tier (�
 		// En la nueva, cada línea nace con su ítem (sin patrón B); la emitida nunca se actualiza.
 		expect(newLines.map(([, params]) => (params as unknown[]).at(-1))).toEqual([OTHER_ITEM, ITEM]);
 		expect(calls(runner.query, 'SET contract_item_id = x.contract_item_id')).toHaveLength(0);
-		// La emitida no se toca: el único UPDATE es el de la NC, en moneda del sistema con la tasa de la original (ROADMAP #10).
+		// La emitida solo cambia de estado (Cancelada, como "Anular" del 360; Domi 12-10): montos y líneas intactos. Los UPDATE son el de la NC,
+		// en moneda del sistema con la tasa de la original (ROADMAP #10), y el estado de la original.
 		const invoiceUpdates = calls(runner.query, 'UPDATE invoices');
 
-		expect(invoiceUpdates).toHaveLength(1);
+		expect(invoiceUpdates).toHaveLength(2);
 		expect(invoiceUpdates[0][0]).toContain('UPDATE invoices n SET fx_contract_to_system = o.fx_contract_to_system');
 		expect(invoiceUpdates[0][1]).toEqual(['nc-1', 'inv-paid', 'h-1']);
 		const [event] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');

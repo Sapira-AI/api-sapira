@@ -124,7 +124,7 @@ const CONTRACT_LINES_SQL = `SELECT ii.invoice_id, ii.contract_item_id, ii.billin
 		ii.billing_period_end::text AS billing_period_end, ii.subtotal_contract_currency, i.status, i.invoice_number, i.document_type,
 		i.credit_type, (SELECT o.status FROM invoices o WHERE o.id = i.related_invoice_id AND o.holding_id = i.holding_id) AS related_status,
 		EXISTS (SELECT 1 FROM invoices n WHERE n.related_invoice_id = i.id AND n.holding_id = i.holding_id AND n.credit_type = 'cancellation'
-			AND n.is_active = true AND n.status IS DISTINCT FROM 'Cancelada') AS cancelled_by_credit_note
+			AND n.is_active = true) AS cancelled_by_credit_note
 	FROM invoice_items ii
 	JOIN invoices i ON i.id = ii.invoice_id
 	WHERE i.contract_id = $1 AND i.holding_id = $2 AND i.is_active = true AND COALESCE(i.is_legacy, false) = false

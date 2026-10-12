@@ -90,6 +90,8 @@ export interface ContractInvoiceRow {
 	invoice_number: string | null;
 	status: string | null;
 	document_type: string | null;
+	/** NC: `cancellation` (anula la factura completa) o `discount`. */
+	credit_type?: string | null;
 	invoice_type: string | null;
 	is_active: boolean;
 	is_legacy: boolean;

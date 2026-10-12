@@ -723,8 +723,9 @@ Multimoneda (MM1–MM6) va antes de B2-2 o en paralelo: `item_add` en otra moned
 
 - **F4 · Corregir un dato mal cargado**: §9.2.1 (`item_update` extendido; evento `ITEM_CORRECTED`). Tests `contract-changes.spec.ts`
   "item_update · corregir un dato mal cargado" y `contract-changes.service.spec.ts` "corrección de cantidad…".
-- **NC**: `creditNoteStatusFor` devuelve siempre `Emitida` (la factura acreditada puede estar Emitida, Enviada, Pagada, Vencida o
-  parcialmente pagada; nunca se copia Pagada/Vencida). Sobre una Por Emitir no se crea NC (se reescribe la factura).
+- **NC**: `creditNoteStatusFor` devuelve `Emitida` (la factura acreditada puede estar Emitida, Enviada, Pagada, Vencida o
+  parcialmente pagada; nunca se copia Pagada/Vencida). Excepción desde el 12-10: la NC de anulación (`credit_type = 'cancellation'`) nace
+  `Cancelada`, igual que la factura que anula (la pareja sale de todo cálculo). Las NC de baja, downsell y pausa son de descuento: `Emitida`. Sobre una Por Emitir no se crea NC (se reescribe la factura).
 - **`item_change` en un ítem por tramos con consumo registrado**: el período con consumo se re-tarifa con la cantidad registrada por el motor
   (`pricedItemInvoicesByPeriod` con `consumption`, filas por tramo en `per_tier`), nunca por el camino de una fila; aviso
   `consumption_quantity_kept`.

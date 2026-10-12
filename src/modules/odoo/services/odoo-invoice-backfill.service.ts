@@ -115,6 +115,9 @@ export class OdooInvoiceBackfillService {
 			}
 
 			const nuevos = this.camposDesdeOdoo(facturaOdoo, campos);
+
+			// Una Cancelada no cambia de estado desde Odoo (misma regla que el webhook, Domi 12-10); folio y montos sí.
+			if (fila.status === 'Cancelada') delete nuevos.status;
 			const cambios = this.detectarCambios(fila, nuevos);
 
 			if (cambios.length === 0) {

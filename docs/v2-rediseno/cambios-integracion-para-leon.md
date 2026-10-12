@@ -486,3 +486,17 @@ discount`) sigue su estado emitido normal. Decisión de Domi 01-10.
 el unitario sin descontar (`unitario / (1 − descuento)`) con el mismo `discount`; las líneas estándar (subtotal = cantidad × unitario ×
 (1 − descuento)) no cambian. Facturas afectadas en prod antes del fix: 2 Por Emitir con borrador en el ERP (CTR-2026-85 y CTR-2026-60):
 restablecer, eliminar el borrador en Odoo y reenviar después del deploy.
+
+## NC de anulación nace Cancelada y Odoo no cambia el estado de una Cancelada (12-10, Domi)
+
+- La NC de anulación (`credit_type = 'cancellation'`: "Anular con nota de crédito" del 360 y la reemisión por consumo) nace `Cancelada`,
+  igual que la factura que anula: la pareja queda cerrada y fuera de todo cálculo (facturado, cobrado, cobranza, por cobrar, devengo), como
+  "conciliadas" en Odoo. Antes la NC nacía `Emitida` y los cálculos que dejan fuera la original Cancelada restaban el período dos veces
+  (Ninja CTR-2026-191). La reemisión por consumo ahora también deja la original `Cancelada` (antes no la tocaba). Las NC de descuento, baja
+  y pausa siguen naciendo `Emitida`.
+- Sigue **pendiente de emisión electrónica** mientras no tenga folio ni vínculo con el ERP (`creditNotePendingEmission`: NC de anulación sin
+  `due_date`; las del front anterior tienen vencimiento y no cuentan).
+- **Webhook** (`odoo-webhook.service.ts` `processInvoiceStatusUpdate`) y **backfill** (`odoo-invoice-backfill.service.ts`): una factura
+  `Cancelada` no cambia de estado desde Odoo (al conciliar la NC con la factura en Odoo llegan como `paid` y volverían a sumar); folio, id y
+  montos sí se guardan, así la NC toma su folio cuando se emite. Tests en `odoo-webhook.service.spec.ts` y
+  `odoo-invoice-backfill.service.spec.ts`.

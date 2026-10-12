@@ -609,6 +609,9 @@ export class OdooWebhookService {
 			this.logger.debug(`Datos a actualizar: ${JSON.stringify(updateData, null, 2)}`);
 
 			// Detectar cambios
+			// Una Cancelada no cambia de estado desde Odoo (Domi 12-10): la factura anulada y su NC de anulación quedan Canceladas, y al
+			// conciliarlas en Odoo llegan como pagadas; volverían a sumar. Sí se guardan folio, id y montos (así la NC toma su folio).
+			if (invoice.status === 'Cancelada') delete updateData.status;
 			const changeDetection = this.detectChanges(invoice, updateData);
 			this.logger.debug(`Detección de cambios: hasChanges=${changeDetection.hasChanges}, campos=${changeDetection.changedFields.join(', ')}`);
 
@@ -618,7 +621,10 @@ export class OdooWebhookService {
 
 			this.logger.debug(`Evaluando si actualizar: Estado actual='${invoice.status}', Nuevo estado='${newStatus}'`);
 
-			if (newStatus === 'Pagada') {
+			if (invoice.status === 'Cancelada') {
+				shouldUpdate = changeDetection.hasChanges;
+				if (!shouldUpdate) skipReason = 'Factura Cancelada: Odoo no cambia su estado y no hay otros cambios';
+			} else if (newStatus === 'Pagada') {
 				// Siempre actualizar si cambia a Pagada
 				shouldUpdate = true;
 				this.logger.debug('Decisión: ACTUALIZAR (cambio a Pagada)');

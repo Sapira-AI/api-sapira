@@ -730,5 +730,8 @@ PE completa (#11, ya lo cubre `item_remove` v2), Bosch `end_date` (#2), cuadre P
   factura como la NC electrónica: tipo y folio del documento original, código SII del motivo (1 = anula documento, 3 = corrige montos) y
   la razón; viaja a Odoo con las referencias de siempre. **Doble descuento en devengo resuelto un paso antes**: la original anulada queda
   `Cancelada`, y la función `nc_discount_revenue_adjustment` ya excluye `Cancelada`, así que su descuento puntual deja de contar sin tocar
-  la función; la reemisión trae el suyo. Las NC nacen siempre `Emitida` (nunca Por Emitir, Pagada ni Vencida, 01-10) y pendientes de emisión electrónica. Pendiente (Leon, emisión de NC hacia Odoo): cuando la NC de anulación se emite, pasa también a
-  `Cancelada` (par cerrado, como las 74 NC de anulación de producción); la NC de descuento sigue su estado emitido normal.
+  la función; la reemisión trae el suyo. Las NC nacen siempre `Emitida` (nunca Por Emitir, Pagada ni Vencida, 01-10) y pendientes de emisión electrónica. **Desde el 12-10 (Domi)** la NC de anulación nace
+  directamente `Cancelada` (par cerrado con su original, como las NC de anulación del front anterior), en "Anular" y en la reemisión por consumo
+  (que ahora también deja la original Cancelada); sigue "pendiente de emisión electrónica" mientras no tenga folio (`creditNotePendingEmission`:
+  NC de anulación sin `due_date`). La NC de descuento y la de baja/pausa siguen naciendo `Emitida`. El webhook y el backfill de Odoo no
+  cambian el estado de una `Cancelada` (sí folio, id y montos).

@@ -2170,7 +2170,7 @@ export async function insertMirrorCreditNote(
 	)) as Row[];
 
 	if (!original) throw new NotFoundException(`La factura ${mirrors.id} ya no existe`);
-	const creditNoteStatus = creditNoteStatusFor();
+	const creditNoteStatus = creditNoteStatusFor(options.credit_type);
 	const computed = mirrorCreditNoteAmounts(lines, mirrors.tax_rate, options.exact === true);
 	const amounts = computed.lines;
 	// Multimoneda (spec-multimoneda §4 "Notas de crédito"): cada línea de la NC reusa la moneda y la tasa de SU línea original (par, origen y
