@@ -57,6 +57,20 @@ describe('contractTargetsOf (cotización → contrato)', () => {
 		]);
 	});
 
+	it('varios ítems del mismo producto a distinto precio (S04654): va al del mismo unitario de la línea cotizada', () => {
+		const items = [130000, 153148.8, 187872].map((unit, index) => ({ ...item, id: `item-${index}`, account: `Cuenta ${index}`, quantity: 9, unit_price: unit }));
+		const [target] = contractTargetsOf(
+			{ ...signed, quote_type: 'Downselling', currency: 'COP' },
+			[quoteItem({ quantity: 7, unit_price: 153148.8, currency: 'COP' })],
+			[contract({ contract_currency: 'COP' })],
+			items
+		);
+
+		expect(target.suggestions[0]).toMatchObject({ change_type: 'item_change', item_id: 'item-1', current: { quantity: 9, unit_price: 153148.8 } });
+		// Sin precio igual, el de la misma cuenta y si no el primero del producto (como antes).
+		expect(contractTargetsOf(signed, [quoteItem({ unit_price: 1 })], [contract()], items)[0].suggestions[0].item_id).toBe('item-0');
+	});
+
 	it('bloqueos: no firmada, ya aplicada, nuevo negocio (S3-3)', () => {
 		expect(contractTargetsOf({ ...signed, status: 'sent' }, [quoteItem()], [contract()], [item])[0].blockers.map((entry) => entry.code)).toEqual([
 			'quote_not_signed',
