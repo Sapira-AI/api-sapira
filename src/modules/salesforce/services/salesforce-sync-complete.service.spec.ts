@@ -970,7 +970,7 @@ describe('SalesforceSyncCompleteService', () => {
 		expect(result.transformation.derived_end_date).toBe(false);
 	});
 
-	it('deriva doce meses de vigencia cuando un item recurrente no tiene fecha final', async () => {
+	it('deriva doce meses de vigencia (inicio + 12 − 1 día) cuando un item recurrente no tiene fecha final', async () => {
 		const { service, fieldMappingEngine } = buildService();
 		fieldMappingEngine.buildMappedRecord.mockResolvedValue({ is_recurring: true });
 
@@ -989,11 +989,11 @@ describe('SalesforceSyncCompleteService', () => {
 			} as any
 		);
 
-		expect(result.end_date?.toISOString().split('T')[0]).toBe('2027-07-27');
+		expect(result.end_date?.toISOString().split('T')[0]).toBe('2027-07-26');
 		expect(result.transformation.derived_end_date).toBe(true);
 	});
 
-	it('deriva un mes de vigencia cuando un item one-shot no tiene fecha final', async () => {
+	it('deriva un mes de vigencia (inicio + 1 − 1 día) cuando un item one-shot no tiene fecha final', async () => {
 		const { service, fieldMappingEngine } = buildService();
 		fieldMappingEngine.buildMappedRecord.mockResolvedValue({ is_recurring: false });
 
@@ -1012,7 +1012,7 @@ describe('SalesforceSyncCompleteService', () => {
 			} as any
 		);
 
-		expect(result.end_date?.toISOString().split('T')[0]).toBe('2026-08-27');
+		expect(result.end_date?.toISOString().split('T')[0]).toBe('2026-08-26');
 		expect(result.transformation.derived_end_date).toBe(true);
 	});
 

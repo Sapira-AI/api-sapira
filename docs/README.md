@@ -80,3 +80,9 @@ El proyecto ya cuenta con `jest`, `ts-jest`, `@types/jest` y `@nestjs/testing` e
 No se cierra una tarea funcional sin verificar los tres puntos: documentacion funcional,
 documentacion tecnica y tests unitarios. Si alguno no aplica, la justificacion va explicita en la
 entrega. La regla operativa para agentes vive en `AGENTS.md` y en `.cursor/rules/documentacion-y-tests.mdc`.
+
+Desde el 13-10-2026 rige además el **análisis de impacto antes de corregir** (ley de Domi): ninguna
+corrección sobre código en producción se commitea sin su párrafo de impacto (quién más lo usa, cuántos
+registros reales toca, qué lo verifica, qué doc cambia). Texto en `AGENTS.md` y
+`.cursor/rules/analisis-de-impacto.mdc`; versión ampliada en
+`front-sapira/docs/reglas-desarrollo/analisis-de-impacto.md`.

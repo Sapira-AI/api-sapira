@@ -897,12 +897,8 @@ describe('QuotesService.detail', () => {
 			can_apply_to_contract: true,
 		});
 		expect(detail.items[0]).toMatchObject({ id: ITEM_A, expected_end_date: '2027-09-30', end_date: '2027-10-01', pricing: null });
-		expect(detail.alerts.map((alert) => alert.code)).toEqual([
-			'items_end_date_off',
-			'payment_terms_unparsed',
-			'client_without_entities',
-			'signed_without_contract',
-		]);
+		// Domi 13-10: sin "fin distinto", "total ≠ suma" ni "Firmada sin contrato" (no piden nada a la usuaria).
+		expect(detail.alerts.map((alert) => alert.code)).toEqual(['payment_terms_unparsed', 'client_without_entities']);
 		expect(detail.events[0]).toMatchObject({ type: 'SIGNED', actor: { id: 'u-1', name: 'Domi' } });
 	});
 
