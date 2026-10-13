@@ -179,3 +179,20 @@ con el switch y lo heredado se elimina después. El backlog del producto vivo ma
 - Datos: cuadrar con consultas de solo lectura en producción y reportar hallazgos sin corregirlos.
 - Fallas de tests conocidas y ajenas: `lib/api/factura-proxy.test.ts` en el front (`database.module.spec` de la API pasa desde que
   `domi` trae la entity de `holding_integration_settings`, 03-10).
+
+## 7. Soporte post-switch 09–13-10-2026 (cierre de sesión)
+
+Desplegado el 13-10 (API hasta v0.0.140 + front de `domi`):
+- Envío al ERP sin doble descuento en líneas con modelo de precio (`erpPriceUnit`, v0.0.132).
+- **Regla única de NC** (v0.0.134–137): espejo completo = NC de anulación y factura `Cancelada` en cualquier camino (`insertMirrorCreditNote`); parcial = `Emitida`. Emisión pendiente por folio (NC de anulación sin `due_date`). Webhook y backfill de Odoo no cambian el estado de una `Cancelada`. Reactivar: NC sin folio se retira (inactiva) y la factura vuelve a su estado (`voided_invoices` en el evento); con folio se mantiene y el período se refactura.
+- **Folio manual de NC** (v0.0.136): campos opcionales al anular/descontar y `POST …/credit-note-folio` ("Registrar folio"). Front muestra "NC 001910".
+- **Ítem madre** (v0.0.139): `buildItemGroups` agrupa por raíz (`related_item_id`/`renews_item_id`); varias madres del mismo producto+cuenta → un grupo por madre (`split`, `root_item_id`). Cotización → contrato elige el ítem del mismo unitario (v0.0.138).
+- **Modificar contrato**: etiquetas CRM (Upsell/Downsell/Cross-sell/Churn…), "Total nuevo / Solo el cambio (+ o −)", frase del ajuste en vivo; cotizaciones upsell/downsell entran como diferencia.
+- **Consumos solo cantidad** (v0.0.140): sin monto final (400 en manual y CSV); casilla "No aplicar el descuento del ítem"; DWH guarda solo cantidad.
+
+Datos corregidos en prod con OK de Domi: Ninja CTR-2026-191 (revertido a fijo anticipado 60×25 + 7×28), 47 parejas NC+factura a `Cancelada` con devengo recalculado, folios 001915/001916/J414, 5 ajustes huérfanos vinculados, 7 upsells sin madre → CROSS-SELL.
+
+Pendiente (feedback 13-10, cotización S04654 006RO00000fPu7RYAS): avisos "Firmada sin contrato", "total guardado ≠ suma de ítems" (total del CRM sin descuento) y "fin distinto de inicio + plazo" (parche de 12 meses); "Ver detalle" del ítem da error (quitar o mostrar el unitario; la columna dice "Según modelo" en un ítem fijo y el pie usa el total del CRM). Datos para más adelante: S07273, uPlanner 243, upsells sin madre (CTR-2026-43/73, Salvador), TiMining COD-04, uPlanner 194, 17 consumos con monto antiguo que no calzan.
+
+Prioridades de la semana: feedback de usuarias + MRR legacy/onboarding, Automatizaciones, API KEY, reglas de reconocimiento, export/import, panel de vendedores; luego agentes y MCP; modelos de precio SimpliRoute con los datos de David.
+
