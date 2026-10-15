@@ -1040,6 +1040,11 @@
     "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
    },
    {
+    "name": "holding_settings_metrics_history_start_check",
+    "type": "c",
+    "expr": "(metrics_history_start IS NULL) OR ((date_trunc('month'::text, (metrics_history_start)::timestamp without time zone))::date = metrics_history_start)"
+   },
+   {
     "name": "holding_settings_pkey",
     "type": "p",
     "cols": [

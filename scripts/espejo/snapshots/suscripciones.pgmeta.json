@@ -2,7 +2,7 @@
  "subscriptions": {
   "name": "public.subscriptions",
   "rls_enabled": true,
-  "rows": 435,
+  "rows": 436,
   "columns": [
    {
     "name": "id",
@@ -420,7 +420,7 @@
  "subscription_items": {
   "name": "public.subscription_items",
   "rls_enabled": true,
-  "rows": 458,
+  "rows": 461,
   "columns": [
    {
     "name": "id",

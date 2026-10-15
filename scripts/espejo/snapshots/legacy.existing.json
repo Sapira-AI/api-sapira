@@ -298,6 +298,17 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "import_batch_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {
@@ -338,6 +349,13 @@
     ],
     "unique": false,
     "where": null
+   },
+   "idx_invoices_legacy_import_batch_id": {
+    "columns": [
+     "import_batch_id"
+    ],
+    "unique": false,
+    "where": "import_batch_id IS NOT NULL"
    },
    "idx_invoices_legacy_holding": {
     "columns": [
@@ -1503,6 +1521,17 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "skip_reason_code": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {
@@ -1610,6 +1639,10 @@
   },
   "checks": [
    {
+    "name": "mrr_legacy_skip_reason_code_check",
+    "expression": "(skip_reason_code IS NULL) OR (skip_reason_code = ANY (ARRAY['churn'::text, 'duplicate'::text, 'error'::text]))"
+   },
+   {
     "name": "mrr_legacy_term_check",
     "expression": "term > 0"
    },
@@ -1678,6 +1711,154 @@
      "migrated_to_contract_id"
     ],
     "table": "contracts",
+    "onDelete": "SET NULL"
+   }
+  }
+ },
+ "onboarding_events": {
+  "class": "OnboardingEvent",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "type": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "line_key": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "entity_type": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "entity_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "payload": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "'{}'::jsonb",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "actor_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "idx_onboarding_events_holding_entity": {
+    "columns": [
+     "holding_id",
+     "entity_id"
+    ],
+    "unique": false,
+    "where": "entity_id IS NOT NULL"
+   },
+   "idx_onboarding_events_holding_line": {
+    "columns": [
+     "holding_id",
+     "line_key"
+    ],
+    "unique": false,
+    "where": "line_key IS NOT NULL"
+   },
+   "idx_onboarding_events_holding_created": {
+    "columns": [
+     "holding_id",
+     "created_at"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [],
+  "foreignKeys": {
+   "onboarding_events_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "onboarding_events_actor_id_fkey": {
+    "columns": [
+     "actor_id"
+    ],
+    "table": "users",
     "onDelete": "SET NULL"
    }
   }

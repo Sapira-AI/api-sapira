@@ -1019,7 +1019,7 @@
  "contract_items": {
   "name": "public.contract_items",
   "rls_enabled": true,
-  "rows": 1223,
+  "rows": 1235,
   "columns": [
    {
     "name": "id",
@@ -2021,7 +2021,7 @@
  "contract_lifecycle_events": {
   "name": "public.contract_lifecycle_events",
   "rls_enabled": true,
-  "rows": 350,
+  "rows": 757,
   "columns": [
    {
     "name": "id",
@@ -5399,7 +5399,7 @@
  "invoice_consolidation_rules": {
   "name": "public.invoice_consolidation_rules",
   "rls_enabled": true,
-  "rows": 0,
+  "rows": 3,
   "columns": [
    {
     "name": "id",

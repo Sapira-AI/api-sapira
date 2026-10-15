@@ -972,7 +972,7 @@
  "client_activity_notes": {
   "name": "public.client_activity_notes",
   "rls_enabled": true,
-  "rows": 0,
+  "rows": 1,
   "columns": [
    {
     "name": "id",

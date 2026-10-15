@@ -1,20 +1,24 @@
-# Módulo 8 · Legacy / onboarding — 4 tablas de prod (2026-10-06)
+# Módulo 8 · Legacy / onboarding — 5 tablas de prod (2026-10-15)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-06 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/legacy.{pgmeta,catalog}.json`); metadata real de las entities existentes en `legacy.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-15 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/legacy.{pgmeta,catalog}.json`); metadata real de las entities existentes en `legacy.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
-## A · Tablas que YA tenían entity en el repo (0) — no se tocaron ni se duplicaron
+## A · Tablas que YA tenían entity en el repo (1) — no se tocaron ni se duplicaron
 
-Ninguna: todas las tablas de este módulo carecían de entity.
+Estas entities están **prendidas en producción** exactamente como estaban (`database.module.ts` las carga por el glob `src/**/*.entity.ts` y sus módulos las registran en `forFeature`). "Estado vs prod" = diff entre lo que la entity declara hoy (metadata TypeORM real) y la DB en vivo; es el insumo para completarlas en el paso 3 con Leon.
+
+| Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
+|---|---|---|---|---|---|---|
+| `onboarding_events` (0) | `src/databases/postgresql/entities/legacy/onboarding-event.entity.ts` · `OnboardingEvent` | ⚠️ difiere de prod | — | — | — | nombre de PK `onboarding_events_pkey` |
 
 ## B · Tablas SIN entity previa → espejos generados (4): 4 promovidas, 0 apagadas
 
 | Tabla (filas, RLS) | Archivo · clase | Cols | PK | UNIQUE | CHECK | FKs (→ tabla, ON DELETE) | Índices | Triggers | Policies |
 |---|---|---|---|---|---|---|---|---|---|
-| `invoices_legacy` (9294, RLS on) | `invoices-legacy.entity.ts` · `InvoicesLegacy` | 27 | `invoices_legacy_pkey` (id) | `invoices_legacy_holding_invoice_number_unique`, `invoices_legacy_holding_odoo_integration_key` | `invoices_legacy_reconciliation_status_check`, `invoices_legacy_source_type_check`, `invoices_legacy_status_check` | `fk_invoices_client_entity` → client_entities<br>`invoices_legacy_client_id_fkey` → clients (SET NULL)<br>`invoices_legacy_company_id_fkey` → companies (CASCADE)<br>`invoices_legacy_contract_id_fkey` → contracts (SET NULL)<br>`invoices_legacy_created_by_fkey` → users (SET NULL)<br>`invoices_legacy_holding_id_fkey` → company_holdings (CASCADE)<br>`invoices_legacy_reconciled_invoice_id_fkey` → invoices (SET NULL) | `idx_invoices_legacy_client_entity_id`, `idx_invoices_legacy_client_id` (parcial), `idx_invoices_legacy_client_tax_id`, `idx_invoices_legacy_contract_id`, `idx_invoices_legacy_holding`, `idx_invoices_legacy_issue_date`, `idx_invoices_legacy_odoo_integration_id`, `idx_invoices_legacy_reconciliation_status`, `idx_invoices_legacy_status` | trigger_auto_populate_client_tax_id · BEFORE INSERT OR UPDATE FOR EACH ROW → auto_populate_client_tax_id_from_entity() | 4 |
+| `invoices_legacy` (9348, RLS on) | `invoices-legacy.entity.ts` · `InvoicesLegacy` | 28 | `invoices_legacy_pkey` (id) | `invoices_legacy_holding_invoice_number_unique`, `invoices_legacy_holding_odoo_integration_key` | `invoices_legacy_reconciliation_status_check`, `invoices_legacy_source_type_check`, `invoices_legacy_status_check` | `fk_invoices_client_entity` → client_entities<br>`invoices_legacy_client_id_fkey` → clients (SET NULL)<br>`invoices_legacy_company_id_fkey` → companies (CASCADE)<br>`invoices_legacy_contract_id_fkey` → contracts (SET NULL)<br>`invoices_legacy_created_by_fkey` → users (SET NULL)<br>`invoices_legacy_holding_id_fkey` → company_holdings (CASCADE)<br>`invoices_legacy_reconciled_invoice_id_fkey` → invoices (SET NULL) | `idx_invoices_legacy_client_entity_id`, `idx_invoices_legacy_client_id` (parcial), `idx_invoices_legacy_client_tax_id`, `idx_invoices_legacy_contract_id`, `idx_invoices_legacy_holding`, `idx_invoices_legacy_import_batch_id` (parcial), `idx_invoices_legacy_issue_date`, `idx_invoices_legacy_odoo_integration_id`, `idx_invoices_legacy_reconciliation_status`, `idx_invoices_legacy_status` | trigger_auto_populate_client_tax_id · BEFORE INSERT OR UPDATE FOR EACH ROW → auto_populate_client_tax_id_from_entity() | 4 |
 | `invoice_items_legacy` (11698, RLS on) | `invoice-items-legacy.entity.ts` · `InvoiceItemsLegacy` | 18 | `invoice_items_legacy_pkey` (id) | `invoice_items_legacy_holding_odoo_line_id_key` | — | `invoice_items_legacy_holding_id_fkey` → company_holdings (CASCADE)<br>`invoice_items_legacy_invoices_legacy_id_fkey` → invoices_legacy (CASCADE) | `idx_invoice_items_legacy_currency` (parcial), `idx_invoice_items_legacy_holding`, `idx_invoice_items_legacy_holding_odoo_line`, `idx_invoice_items_legacy_invoice`, `idx_invoice_items_legacy_item_type` (parcial), `idx_invoice_items_legacy_odoo_line_id`, `idx_invoice_items_legacy_product_code` (parcial), `idx_invoice_items_legacy_unit_of_measure` (parcial) | — | 4 |
 | `invoice_items_legacy_match` (51, RLS on) | `invoice-items-legacy-match.entity.ts` · `InvoiceItemsLegacyMatch` | 16 | `invoice_items_legacy_match_pkey` (id) | — | `invoice_items_legacy_match_status_check`, `match_amount_positive` | `invoice_items_legacy_match_confirmed_by_fkey` → users (SET NULL)<br>`invoice_items_legacy_match_contract_id_fkey` → contracts (CASCADE)<br>`invoice_items_legacy_match_contract_item_id_fkey` → contract_items (CASCADE)<br>`invoice_items_legacy_match_created_by_fkey` → users (CASCADE)<br>`invoice_items_legacy_match_holding_id_fkey` → company_holdings (CASCADE)<br>`invoice_items_legacy_match_invoice_item_legacy_id_fkey` → invoice_items_legacy (CASCADE)<br>`invoice_items_legacy_match_product_id_fkey` → products (SET NULL) | `idx_legacy_match_contract`, `idx_legacy_match_contract_item`, `idx_legacy_match_holding`, `idx_legacy_match_item`, `idx_legacy_match_status` | trigger_prevent_confirmed_match_edit · BEFORE UPDATE FOR EACH ROW → prevent_confirmed_match_edit()<br>trigger_set_match_confirmed_metadata · BEFORE UPDATE FOR EACH ROW → set_match_confirmed_metadata()<br>trigger_update_invoice_legacy_status · AFTER INSERT OR DELETE OR UPDATE FOR EACH ROW → update_invoice_legacy_status()<br>trigger_validate_match_total · BEFORE INSERT OR UPDATE FOR EACH ROW → validate_match_total() | 4 |
-| `mrr_legacy` (11836, RLS on) | `mrr-legacy.entity.ts` · `MrrLegacy` | 45 | `mrr_legacy_pkey` (id) | `mrr_legacy_invoice_item_legacy_id_split_index_period_month_key` | `mrr_legacy_fx_valid`, `mrr_legacy_momentum_check`, `mrr_legacy_period_month_check`, `mrr_legacy_split_index_check`, `mrr_legacy_term_check` | `mrr_legacy_client_id_fkey` → clients<br>`mrr_legacy_company_id_fkey` → companies<br>`mrr_legacy_holding_id_fkey` → company_holdings (CASCADE)<br>`mrr_legacy_invoice_item_legacy_id_fkey` → invoice_items_legacy (CASCADE)<br>`mrr_legacy_invoice_legacy_id_fkey` → invoices_legacy (CASCADE)<br>`mrr_legacy_migrated_by_fkey` → users<br>`mrr_legacy_migrated_to_contract_id_fkey` → contracts (SET NULL) | `idx_mrr_legacy_batch_id`, `idx_mrr_legacy_client`, `idx_mrr_legacy_company`, `idx_mrr_legacy_holding`, `idx_mrr_legacy_invoice`, `idx_mrr_legacy_invoice_created`, `idx_mrr_legacy_invoice_item`, `idx_mrr_legacy_migrated` (parcial), `idx_mrr_legacy_not_migrated` (parcial), `idx_mrr_legacy_period`, `idx_mrr_legacy_product`, `idx_mrr_legacy_recurring` (parcial), `idx_mrr_legacy_skip_activation` (parcial) | trg_calculate_mrr_legacy_fields · BEFORE INSERT OR UPDATE OF subtotal_contract_currency, term, is_recurring FOR EACH ROW → calculate_mrr_legacy_fields()<br>trg_calculate_mrr_legacy_system_currency · BEFORE INSERT OR UPDATE OF contract_currency, mrr_legacy, period_month FOR EACH ROW → calculate_mrr_legacy_system_currency()<br>trg_mrr_legacy_updated_at · BEFORE UPDATE FOR EACH ROW → set_updated_at()<br>trigger_update_invoice_legacy_status_on_mrr · AFTER INSERT FOR EACH ROW → update_invoice_legacy_status_on_mrr_creation() | 4 |
+| `mrr_legacy` (11836, RLS on) | `mrr-legacy.entity.ts` · `MrrLegacy` | 46 | `mrr_legacy_pkey` (id) | `mrr_legacy_invoice_item_legacy_id_split_index_period_month_key` | `mrr_legacy_fx_valid`, `mrr_legacy_momentum_check`, `mrr_legacy_period_month_check`, `mrr_legacy_skip_reason_code_check`, `mrr_legacy_split_index_check`, `mrr_legacy_term_check` | `mrr_legacy_client_id_fkey` → clients<br>`mrr_legacy_company_id_fkey` → companies<br>`mrr_legacy_holding_id_fkey` → company_holdings (CASCADE)<br>`mrr_legacy_invoice_item_legacy_id_fkey` → invoice_items_legacy (CASCADE)<br>`mrr_legacy_invoice_legacy_id_fkey` → invoices_legacy (CASCADE)<br>`mrr_legacy_migrated_by_fkey` → users<br>`mrr_legacy_migrated_to_contract_id_fkey` → contracts (SET NULL) | `idx_mrr_legacy_batch_id`, `idx_mrr_legacy_client`, `idx_mrr_legacy_company`, `idx_mrr_legacy_holding`, `idx_mrr_legacy_invoice`, `idx_mrr_legacy_invoice_created`, `idx_mrr_legacy_invoice_item`, `idx_mrr_legacy_migrated` (parcial), `idx_mrr_legacy_not_migrated` (parcial), `idx_mrr_legacy_period`, `idx_mrr_legacy_product`, `idx_mrr_legacy_recurring` (parcial), `idx_mrr_legacy_skip_activation` (parcial) | trg_calculate_mrr_legacy_fields · BEFORE INSERT OR UPDATE OF subtotal_contract_currency, term, is_recurring FOR EACH ROW → calculate_mrr_legacy_fields()<br>trg_calculate_mrr_legacy_system_currency · BEFORE INSERT OR UPDATE OF contract_currency, mrr_legacy, period_month FOR EACH ROW → calculate_mrr_legacy_system_currency()<br>trg_mrr_legacy_updated_at · BEFORE UPDATE FOR EACH ROW → set_updated_at()<br>trigger_update_invoice_legacy_status_on_mrr · AFTER INSERT FOR EACH ROW → update_invoice_legacy_status_on_mrr_creation() | 4 |
 
 Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/without time zone`, `varchar` + `length`, `numeric` + `precision/scale`, enums de Postgres con sus valores, `text[]`, `jsonb`, `uuid`…), nullable, default y comentario; PK con nombre (`primaryKeyConstraintName`); `@Unique`/`@Check`/`@Index` con nombre real (índices parciales con `where`; los índices con expresión, orden u otro método se documentan en el JSDoc pero no se declaran porque `@Index` no los representa); una relación `@ManyToOne` por FK con `onDelete` real y `foreignKeyConstraintName` — hacia la entity existente (`@/modules/...`) si la tabla destino ya la tiene, o hacia el espejo de su módulo; cabecera JSDoc con filas, RLS, comentario de tabla, tablas que la referencian, triggers y policies (nombre, comando, roles). Las expresiones `USING`/`WITH CHECK` de las policies quedan en `scripts/espejo/snapshots/legacy.catalog.json` (`policies_detail`) para el paso 4.
 
@@ -22,7 +26,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 
 ## C · Columnas exactas de cada espejo (4 tablas)
 
-<details><summary><code>invoices_legacy</code> → <code>invoices-legacy.entity.ts</code> · 27 columnas</summary>
+<details><summary><code>invoices_legacy</code> → <code>invoices-legacy.entity.ts</code> · 28 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -53,6 +57,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `reconciled_at` | timestamp with time zone | sí | — |  |
 | `client_entity_id` | uuid | sí | — | Referencia a la entidad legal del cliente (client_entities). El client_id se completa desde el contrato. |
 | `odoo_integration_id` | integer | sí | — | ID de la factura en Odoo. Usado para mapear líneas de factura desde Odoo hacia Sapira |
+| `import_batch_id` | uuid | sí | — | Lote de importación de facturas previas (módulo onboarding): permite revertir lo importado en una pasada |
 
 </details>
 <details><summary><code>invoice_items_legacy</code> → <code>invoice-items-legacy.entity.ts</code> · 18 columnas</summary>
@@ -101,7 +106,7 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `holding_id` | uuid | no | — | Holding ID para seguridad multi-tenant |
 
 </details>
-<details><summary><code>mrr_legacy</code> → <code>mrr-legacy.entity.ts</code> · 45 columnas</summary>
+<details><summary><code>mrr_legacy</code> → <code>mrr-legacy.entity.ts</code> · 46 columnas</summary>
 
 | Columna | Tipo Postgres | Nulo | Default | Comentario |
 |---|---|---|---|---|
@@ -150,23 +155,9 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 | `skip_activation_reason` | text | sí | — | Reason why activation was skipped (e.g., Churn, Duplicado, Error de importación) |
 | `skip_activation_at` | timestamp with time zone | sí | — | Timestamp when skip_activation was set to true |
 | `skip_activation_by` | uuid | sí | — | User who marked this record as skip_activation |
+| `skip_reason_code` | text | sí | — | Motivo normalizado del skip_activation: churn (fue baja) \| duplicate \| error (quitada, no cuenta). El texto libre queda en skip_activation_reason |
 
 </details>
-
-## D · Onboarding de datos históricos (13-10, migración `1791900000000-OnboardingDatosHistoricos`, NO aplicada)
-
-Spec: `docs/v2-rediseno/spec-onboarding-y-mrr-historico-v2.md` §3.5; módulo `src/modules/onboarding` (mapa en `docs/v2-rediseno/mapa-v2-onboarding.md`).
-
-| Cambio | Detalle |
-|---|---|
-| `mrr_legacy.skip_reason_code text NULL` | `churn` \| `duplicate` \| `error` (CHECK `mrr_legacy_skip_reason_code_check`). Las filas viejas quedan NULL y se leen con `src/modules/metrics/mrr-historico.ts` ("duplic"/"error" en `skip_activation_reason` → quitada; otro → churn) |
-| `invoices_legacy.import_batch_id uuid NULL` | lote de importación de facturas previas; índice parcial `idx_invoices_legacy_import_batch_id` |
-| `holding_settings.metrics_history_start date NULL` | (entity en `base-tenancy/`) primer mes de Métricas; CHECK día 1 |
-| tabla `onboarding_events` | `onboarding-event.entity.ts` (no es espejo): registro de cambios del módulo; RLS activada en la migración + policy `rls/holding_access_onboarding_events.sql`; sin CHECK de `type` (los tipos los define la API) |
-
-Hasta aplicarla, `legacy.entities.spec.ts` y `base-tenancy.entities.spec.ts` quedan en rojo en esas tres tablas (deriva esperada: GUIA →
-paso ⑤, refrescar el snapshot solo después de aplicar en prod). Métricas, Cliente 360 y Preferencias leen las columnas nuevas con
-`to_jsonb(...)`, así que la API no se cae si se despliega antes; el módulo `onboarding` sí necesita la migración para escribir.
 
 ## Verificación (sin conexión a la DB)
 
