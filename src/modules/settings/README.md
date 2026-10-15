@@ -68,7 +68,7 @@ M13 `1790840000000-ClientsCountryCode` y el seed `006-tax-document-types-tax-rat
 
 ## Ronda 4 (03-10)
 
-Contrato §9 y spec §15. Preferencias del holding que ya funcionan (`GET/PATCH /settings/holding/preferences`): zona horaria, escalera de recordatorios de vencimiento y numeración de cotizaciones (con vista previa del próximo número).
+Contrato §9 y spec §15. Preferencias del holding que ya funcionan (`GET/PATCH /settings/holding/preferences`): zona horaria, escalera de recordatorios de vencimiento y numeración de cotizaciones (con vista previa del próximo número); desde el 13-10 también `metrics_history_start` (inicio de la historia en Métricas, onboarding §3.4; contrato §9.2b, lectura tolerante con `loadMetricsHistoryStart`).
 Lectura única para todos los módulos en `src/core/utils/holding-preferences.ts` (`loadHoldingPreferences`, `holdingTimezone`,
 `quoteNumberFormat`, `nextQuoteNumber`): lee la fila con `to_jsonb`, así que sin la migración M14 `1790850000000-HoldingSettingsPreferencesV4`
 (sin aplicar) todo cae a los defaults de antes; solo el PATCH de preferencias necesita M14. La entity `holding-settings.entity.ts` se

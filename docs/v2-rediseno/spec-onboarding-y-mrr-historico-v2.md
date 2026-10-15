@@ -44,8 +44,10 @@ sí tienen sus contratos controlados en planillas. El módulo soporta las tres e
    pendientes y vencidas sirven para cobrar; las pagadas, para el historial del cliente.
 5. **Motor único de import** (S8-5): archivo → mapeo de columnas → validación con errores por fila → **vista previa
    obligatoria** → aplicar en una transacción → lote reversible. Durante la importación no salen correos, tareas ni
-   sincronizaciones. **Nunca se crean clientes ni razones sociales solos**: la vista previa los propone y la usuaria los
-   confirma en bloque, con país y moneda explícitos.
+   sincronizaciones. **Las razones sociales nunca se crean solas**: la vista previa las propone y la usuaria las confirma en
+   bloque, con país explícito. **Los clientes comerciales no se crean desde una importación**: vienen del CRM; la factura
+   previa se relaciona con el cliente comercial por RUT de la razón social o por id del CRM, y si no hay coincidencia queda
+   `needs_client` hasta que la usuaria lo elija (o se pide al cliente la lista con RUT e id del CRM).
 6. **Sin conciliación línea a línea** ni catálogo de motivos: una línea sin contrato que terminó fue **baja**; un duplicado o
    un error de carga se **quita** (deja de contar en todo), no se marca. Nada se borra físicamente.
 7. **Sin SQL en producción**: todo lo que hoy se hace a mano (registrar, empalmar, cerrar, corregir, cargar un mes nuevo)
@@ -75,14 +77,25 @@ sí tienen sus contratos controlados en planillas. El módulo soporta las tres e
   `mrr_legacy` | `linked`), el bloqueo `has_legacy_invoices` de la activación y las 15 RPC `*_legacy*` (DROP tras la migración
   de lo pendiente, con la ventana de observación de `saneamiento-contratos.md`).
 
+### 3.2b Registrar histórico desde facturas previas (paso de la usuaria)
+
+Una factura previa trae solo lo que trae el documento: razón social, compañía emisora, moneda y montos de factura, fechas y,
+a veces, líneas. **Para que sirva en Métricas la usuaria completa, por factura (o por cliente, con "autocompletar desde la
+primera")**: el período o períodos que cubre (desde → hasta; un plazo de N meses reparte el monto), el monto en moneda de
+contrato (igual al de factura si la moneda coincide; si no, la usuaria lo indica y el tipo de cambio queda registrado) y el
+o los productos del catálogo con su parte del monto. Eso crea las filas de MRR histórico (una por producto × mes) con origen
+`facturas_previas`. Una importación sin este paso **no deja nada listo para Métricas**; solo deja las facturas como evidencia.
+Validaciones: la suma por producto cuadra con el monto (±1 %); un mes ya cubierto por la misma línea se avisa; monto en moneda
+de sistema con tipo de cambio raro se marca.
+
 ### 3.3 Arranque rápido (contrato desde la última factura)
 
 Por cliente (razón social) con facturas previas, a una fecha `as_of` (mes):
 
 1. Se toma la última factura del cliente hasta `as_of`; sus líneas definen los ítems (producto del catálogo elegido en la
    vista previa, cantidad, unitario, moneda); frecuencia por defecto mensual anticipada (editable).
-2. Se crean las filas de MRR histórico del mes de esa factura (y, si la usuaria lo pide, de los N meses anteriores que estén
-   en la planilla), con origen `facturas_previas`.
+2. La usuaria completa lo de §3.2b para esa última factura (período que cubre, monto en moneda de contrato, productos); con
+   eso se crean las filas de MRR histórico de ese período (y, si lo pide, registra también las facturas anteriores).
 3. Se crea el contrato **En revisión** con el generador común de Contratos (`ContractDraftsService.create`), inicio = **mes
    siguiente** al de la última factura, y la línea queda empalmada (`migrated_to_contract_id`); las facturas quedan vinculadas
    (`invoices_legacy.contract_id`). Se activa después desde Contratos (en lote).
@@ -131,8 +144,11 @@ búsqueda. Vista rápida con la grilla de meses editable. Acciones en la barra d
 
 Lista con estado de cobro, cliente, contrato vinculado y lote; vista rápida con líneas. **Importar** (plantilla de dos hojas,
 mapeo de columnas recordado por holding, vista previa con `new | duplicate | error | needs_entity`, confirmación en bloque de
-razones sociales y clientes comerciales faltantes con país y moneda, aplicar, revertir lote). **Arranque rápido** (§3.3) desde
-la lista: elegir mes de corte y clientes, revisar la propuesta (producto, cantidad, unitario, frecuencia), aplicar.
+razones sociales y clientes comerciales faltantes con país y moneda, aplicar, revertir lote). **Registrar histórico** (§3.2b) sobre las
+facturas seleccionadas: por factura, período que cubre, monto en moneda de contrato y productos con su parte, con
+"autocompletar desde la primera" por cliente; vista previa con avisos y aplicar. **Arranque rápido** (§3.3): elegir mes de
+corte y razones sociales, completar por cliente lo mismo que en Registrar histórico sobre su última factura más frecuencia y
+método, revisar la propuesta, aplicar.
 
 ### 4.4 Lo que cambia en otros módulos
 
@@ -145,6 +161,19 @@ la lista: elegir mes de corte y clientes, revisar la propuesta (producto, cantid
 ## 5. Contrato de la API (módulo `onboarding`, `HoldingScopeGuard`; lectura `VIEW_CONFIGURACION`, escritura `EDIT_CONFIGURACION`)
 
 Paginación `{ data, total, currentPage, pages, limit }`; errores `{ message, errors?[{ field, message }] }`; 409 `{ code, blockers? }`.
+
+> **Construido 13-10 (API, sin commit; migración `1791900000000-OnboardingDatosHistoricos` sin aplicar)**: todas las filas de esta tabla.
+> Formas exactas en [`mapa-v2-onboarding.md`](./mapa-v2-onboarding.md). Desvíos, con motivo:
+> - Import: campos opcionales extra por fila `erp_invoice_id` (dedup por id del ERP, que la planilla no traía) además de `client_crm_id` y
+>   `client_number`. 409 extra `already_reverted` en revertir y `invoice_without_entity` en `:id/client`.
+> - Registrar histórico: `sum_mismatch` bloquea al aplicar (el resto de los avisos no); se salta la factura que ya tiene MRR histórico
+>   (`already_registered`) o no tiene líneas (`invoice_without_items`: la fila de `mrr_legacy` exige un ítem). `mrr_legacy` no tiene
+>   `product_id`: se guarda el nombre del catálogo. La respuesta agrega `batch_id`; la vista previa agrega `errors[]` y `products[]`.
+> - Arranque rápido: inicio del contrato = mes siguiente al último mes cubierto (`period_to`, o el de emisión si es posterior). El body ya
+>   no lleva `history_months` (las facturas anteriores se registran con Registrar histórico). `skipped[]` agrega `message`.
+> - `link`/`contract` reconstruyen el devengo solo si el contrato está Activo (un borrador no tiene devengo hasta activarse).
+> - El `origin` del alta desde una línea no se guarda en el contrato (no hay columna): queda en el empalme y en el evento.
+> - Líneas: los 409 extra `line_not_linked` (desvincular), `line_not_removable` (quitar) y `line_not_closed` (reabrir).
 
 | Método y ruta | Entrada | Salida |
 |---|---|---|
@@ -162,12 +191,15 @@ Paginación `{ data, total, currentPage, pages, limit }`; errores `{ message, er
 | `POST /onboarding/history/lines/:key/contract` | `CreateContractDto` | `{ contract{id, contract_number}, line }` (crea En revisión con `ContractDraftsService.create` y empalma) |
 | `GET /onboarding/previous-invoices` | `status`, `linked`(`true/false`), `clientId`, `entityId`, `batchId`, `search`, `from`, `to`, `page`, `limit`, `sortBy` | paginado de `{ id, invoice_number, issue_date, due_date, entity{id,legal_name,tax_id}\|null, legal_client_name, client_tax_id, client{id,name}\|null, company{id,legal_name}, currency, amount, vat, total, status, source_type, source_system, contract{id,contract_number}\|null, batch_id, has_history }` |
 | `GET /onboarding/previous-invoices/:id` | — | factura + `items[]` + `history_months[]` + `events[]` |
-| `POST /onboarding/previous-invoices/import/preview` | `{ invoices:[{ row, invoice_number, issue_date, due_date?, legal_client_name, client_tax_id?, company_name, source_type?, source_system?, currency, amount, vat?, total, status?, notes?, items:[{ description?, product_external_code?, quantity?, unit_price?, discount_pct?, subtotal, tax_amount?, total? }] }], batch_label? }` (máx. 2.000) | `{ rows:[{ row, status: 'new' \| 'duplicate' \| 'error' \| 'needs_entity', errors[], entity{id,legal_name}\|null, entity_suggestion{ legal_name, tax_id, country?, client{id,name}\|null }, company{id}\|null }], summary{ new, duplicate, error, needs_entity, by_currency[] }, missing_entities[{ legal_name, tax_id, rows }], missing_companies[] }` |
-| `POST /onboarding/previous-invoices/import` | `{ invoices, batch_label?, create_entities?: [{ legal_name, tax_id?, country, client: { id } \| { name } }] }` | `{ batch_id, inserted, skipped_duplicates, errors, entities_created, clients_created }`; 409 `nothing_to_import` |
+| `POST /onboarding/previous-invoices/import/preview` | `{ invoices:[{ row, invoice_number, issue_date, due_date?, legal_client_name, client_tax_id?, company_name, source_type?, source_system?, currency, amount, vat?, total, status?, notes?, items:[{ description?, product_external_code?, quantity?, unit_price?, discount_pct?, subtotal, tax_amount?, total? }] }], batch_label? }` (máx. 2.000) | `{ rows:[{ row, status: 'new' \| 'duplicate' \| 'error' \| 'needs_entity' \| 'needs_client', errors[], entity{id,legal_name}\|null, client{id,name}\|null (por RUT o id del CRM), entity_suggestion{ legal_name, tax_id, country?, client_candidates[{id,name,score}] }, company{id}\|null }], summary{ new, duplicate, error, needs_entity, needs_client, by_currency[] }, missing_entities[{ legal_name, tax_id, rows, client_candidates[] }], missing_companies[] }` |
+| `POST /onboarding/previous-invoices/import` | `{ invoices, batch_label?, create_entities?: [{ legal_name, tax_id?, country, client_id? }] }` (nunca crea clientes comerciales; `client_id` es uno existente del CRM) | `{ batch_id, inserted, skipped_duplicates, errors, entities_created, needs_client }`; 409 `nothing_to_import` |
+| `POST /onboarding/previous-invoices/:id/client` | `{ client_id }` | relaciona la razón social de la factura con un cliente comercial existente (`client_entity_clients`) |
+| `POST /onboarding/previous-invoices/register-history/preview` | `{ invoices:[{ invoice_id, period_from: 'YYYY-MM', period_to: 'YYYY-MM', contract_currency, amount_contract_currency, is_recurring?, products:[{ product_id, amount_contract_currency }] }] }` | `{ rows:[{ invoice_id, months[], mrr_per_month, fx_contract_to_invoice, warnings[] (`sum_mismatch`, `month_already_covered`, `fx_outlier`, `no_client`) }], summary }` |
+| `POST /onboarding/previous-invoices/register-history` | mismo body | `{ created_rows, lines_touched[], skipped[{ invoice_id, reason }] }`; marca `reconciliation_status = mrr_legacy` |
 | `POST /onboarding/previous-invoices/import/:batchId/revert` | — | `{ batch_id, removed }`; 409 `batch_has_history` \| `batch_linked` |
 | `GET /onboarding/previous-invoices/batches` | — | `[{ id, label, created_at, created_by, count, reverted }]` |
 | `POST /onboarding/quick-start/preview` | `{ as_of: 'YYYY-MM', entity_ids?: [], history_months?: 0..24 }` | `{ proposals:[{ entity{id,legal_name}, client{id,name}\|null, last_invoice{id,number,issue_date,total,currency}, items:[{ description, quantity, unit_price, product_id\|null, product_suggestion }], contract{ start_date, currency, billing_frequency, billing_method }, history_months_found, flags[] (`no_client`, `no_product`, `already_has_contract`, `multi_currency`) }], summary }` |
-| `POST /onboarding/quick-start` | `{ as_of, proposals:[{ entity_id, product_id (por ítem), billing_frequency?, billing_method?, term_months?, history_months? }] }` | `{ created:[{ entity_id, contract{id,contract_number}, history_rows }], skipped:[{ entity_id, reason }] }` |
+| `POST /onboarding/quick-start` | `{ as_of, proposals:[{ entity_id, period_from, period_to, contract_currency, amount_contract_currency, products:[{ product_id, amount_contract_currency, quantity?, unit_price? }], billing_frequency?, billing_method?, term_months? }] }` (lo de §3.2b por cliente; sin producto o sin cliente comercial no se aplica) | `{ created:[{ entity_id, contract{id,contract_number}, history_rows }], skipped:[{ entity_id, reason }] }` |
 | `GET /onboarding/events` | `lineKey?`, `entityId?`, `page` | paginado de eventos |
 | `PATCH /settings/holding/preferences` | `+ metrics_history_start` | (existente, un campo más) |
 
@@ -210,6 +242,8 @@ baja, quitar = duplicado/error · D4 arranque rápido desde la última factura c
 conciliación línea a línea · D5 nace en el lab y se publica en Administración › Datos históricos · D6 piloto Brasil con la
 planilla existente · D7 migración §3.5 con OK de Domi antes de aplicar.
 
-Pendientes: producto del catálogo para las líneas de Brasil (las facturas no traen descripción: se elige en la vista previa, uno
-por cliente o uno para todo el lote) · pedir a SimpliRoute la última factura por cliente activo en 2026 para Argentina (o la
-planilla completa) · si Brasil se carga completo (1.921 facturas) o solo desde jul-2026.
+Pendientes: la planilla de Brasil no trae RUT ni id del CRM, así que las facturas no se pueden relacionar con los clientes
+comerciales (en prod, las 35 razones sociales de Brasil y las 60 de Argentina sí están relacionadas a su cliente del CRM): pedir
+a SimpliRoute la lista de facturas con RUT y el id del cliente comercial del CRM (Brasil y Argentina), al menos la última factura
+por cliente activo en 2026 · el producto, el período y el monto en moneda de contrato los completa la usuaria al registrar (§3.2b)
+· si Brasil se carga completo (1.921 facturas) o solo desde jul-2026.

@@ -31,6 +31,8 @@ import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.ent
 @Index('idx_invoices_legacy_client_tax_id', ['client_tax_id'])
 @Index('idx_invoices_legacy_contract_id', ['contract_id'])
 @Index('idx_invoices_legacy_holding', ['holding_id'])
+// Onboarding (migración 1791900000000-OnboardingDatosHistoricos): lote reversible de facturas previas importadas.
+@Index('idx_invoices_legacy_import_batch_id', ['import_batch_id'], { where: 'import_batch_id IS NOT NULL' })
 @Index('idx_invoices_legacy_issue_date', ['issue_date'])
 @Index('idx_invoices_legacy_odoo_integration_id', ['odoo_integration_id'])
 @Index('idx_invoices_legacy_reconciliation_status', ['reconciliation_status'])
@@ -136,6 +138,14 @@ export class InvoicesLegacy {
 	/** ID de la factura en Odoo. Usado para mapear líneas de factura desde Odoo hacia Sapira */
 	@Column({ type: 'integer', comment: 'ID de la factura en Odoo. Usado para mapear líneas de factura desde Odoo hacia Sapira', nullable: true })
 	odoo_integration_id?: number;
+
+	/** Lote de importación de facturas previas (onboarding §3.5): agrupa lo importado en una pasada para poder revertirlo. NULL = cargada por otro camino. */
+	@Column({
+		type: 'uuid',
+		comment: 'Lote de importación de facturas previas (módulo onboarding): permite revertir lo importado en una pasada',
+		nullable: true,
+	})
+	import_batch_id?: string | null;
 
 	@ManyToOne(() => ClientEntity)
 	@JoinColumn({ name: 'client_entity_id', referencedColumnName: 'id', foreignKeyConstraintName: 'fk_invoices_client_entity' })

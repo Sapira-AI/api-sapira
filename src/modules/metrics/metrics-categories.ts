@@ -64,10 +64,10 @@ export const KEY_LABELS: Record<string, string> = {
 	PAUSE: 'Pausa',
 	RENEWAL: 'Renovación',
 	FX: 'Tipo de cambio',
-	LEGACY_NEW: 'Legacy nuevo',
-	LEGACY_END: 'Legacy terminado',
-	LEGACY_CHANGE: 'Variación legacy',
-	LEGACY_MIGRATION: 'Migración legacy → contrato',
+	LEGACY_NEW: 'MRR histórico nuevo',
+	LEGACY_END: 'MRR histórico terminado',
+	LEGACY_CHANGE: 'Variación MRR histórico',
+	LEGACY_MIGRATION: 'MRR histórico → contrato',
 	SUBSCRIPTION_CHANGE: 'Variación suscripción',
 	OTHER: 'Otros',
 };
@@ -82,7 +82,7 @@ export function categoryOf(key: string, amount: number): MovementCategory {
 
 /** Fórmulas que la UI muestra en "¿cómo se calcula?" (spec §1.5). */
 export const FORMULAS: Record<string, string> = {
-	mrr: 'Σ MRR del mes de contratos, suscripciones y legacy (sin pendientes de renovar), en la moneda elegida',
+	mrr: 'Σ MRR del mes de contratos, suscripciones y MRR histórico (sin pendientes de renovar), en la moneda elegida',
 	arr: 'MRR × 12',
 	cmrr: 'Σ CMRR del mes: incluye firmados que aún no inician (desde su fecha de booking), sin pendientes de renovar',
 	carr: 'CMRR × 12',

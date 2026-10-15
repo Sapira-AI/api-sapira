@@ -180,6 +180,15 @@ export class UpdatePreferencesDto {
 	@Type(() => QuoteNumberingDto)
 	@IsOptional()
 	quote_numbering?: QuoteNumberingDto;
+
+	@ApiPropertyOptional({
+		example: '2025-01',
+		nullable: true,
+		description: 'Inicio de la historia en Métricas (YYYY-MM): primer mes que se muestra. null = desde el primer dato',
+	})
+	@Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'El inicio de la historia debe ser un mes (AAAA-MM)' })
+	@IsOptional()
+	metrics_history_start?: string | null;
 }
 
 export class FxRatesQueryDto {

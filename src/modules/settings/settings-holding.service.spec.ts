@@ -117,7 +117,23 @@ describe('SettingsHoldingService', () => {
 				renewal_overdue_every_days: 7,
 				renewal_reminder_ladder: [30, 15, 7, 0],
 				quote_numbering: { mode: 'prefixed', prefix: 'COT', include_year: true, width: 4, next_number_preview: `COT-${year}-0001` },
+				// Onboarding §3.4: sin inicio fijado, Métricas arranca en el primer dato.
+				metrics_history_start: null,
 			});
+		});
+
+		it('inicio de la historia en Métricas: se lee tolerante (columna ausente → null) y se guarda aparte como día 1 del mes', async () => {
+			const stored: Handler = ["to_jsonb(hs) ->> 'metrics_history_start'", () => [{ start: '2025-01-01' }]];
+			const { db, service } = build([stored]);
+
+			await expect(service.getPreferences(HOLDING)).resolves.toMatchObject({ metrics_history_start: '2025-01' });
+			await service.updatePreferences(HOLDING, { metrics_history_start: '2025-03' });
+			expect(db.statements('SET metrics_history_start')[0].params).toEqual([HOLDING, '2025-03-01']);
+			await service.updatePreferences(HOLDING, { metrics_history_start: null });
+			expect(db.statements('SET metrics_history_start')[1].params).toEqual([HOLDING, null]);
+			// Sin el campo en el body no se toca (la preferencia sigue guardándose aunque la migración no esté aplicada).
+			await service.updatePreferences(HOLDING, { auto_renewal_notice_days: 40 });
+			expect(db.statements('SET metrics_history_start')).toHaveLength(2);
 		});
 
 		it('upsert con la moneda validada en mayúsculas; moneda desconocida → 400', async () => {

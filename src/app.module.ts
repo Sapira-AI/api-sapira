@@ -43,6 +43,7 @@ import { MeModule } from './modules/me/me.module';
 import { NotificationJobsModule } from './modules/notification-jobs/notification-jobs.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OdooModule } from './modules/odoo/odoo.module';
+import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { ProductsModule } from './modules/products/products.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
 import { SalesforceModule } from './modules/salesforce/salesforce.module';
@@ -113,6 +114,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		BillingModule,
 		BudgetsModule,
 		SettingsModule,
+		OnboardingModule,
 		MeModule,
 		ProductsModule,
 		QuotesModule,

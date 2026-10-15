@@ -153,6 +153,21 @@ Cada espejo contiene, leído en vivo: columnas con tipo real (`timestamp with/wi
 
 </details>
 
+## D · Onboarding de datos históricos (13-10, migración `1791900000000-OnboardingDatosHistoricos`, NO aplicada)
+
+Spec: `docs/v2-rediseno/spec-onboarding-y-mrr-historico-v2.md` §3.5; módulo `src/modules/onboarding` (mapa en `docs/v2-rediseno/mapa-v2-onboarding.md`).
+
+| Cambio | Detalle |
+|---|---|
+| `mrr_legacy.skip_reason_code text NULL` | `churn` \| `duplicate` \| `error` (CHECK `mrr_legacy_skip_reason_code_check`). Las filas viejas quedan NULL y se leen con `src/modules/metrics/mrr-historico.ts` ("duplic"/"error" en `skip_activation_reason` → quitada; otro → churn) |
+| `invoices_legacy.import_batch_id uuid NULL` | lote de importación de facturas previas; índice parcial `idx_invoices_legacy_import_batch_id` |
+| `holding_settings.metrics_history_start date NULL` | (entity en `base-tenancy/`) primer mes de Métricas; CHECK día 1 |
+| tabla `onboarding_events` | `onboarding-event.entity.ts` (no es espejo): registro de cambios del módulo; RLS activada en la migración + policy `rls/holding_access_onboarding_events.sql`; sin CHECK de `type` (los tipos los define la API) |
+
+Hasta aplicarla, `legacy.entities.spec.ts` y `base-tenancy.entities.spec.ts` quedan en rojo en esas tres tablas (deriva esperada: GUIA →
+paso ⑤, refrescar el snapshot solo después de aplicar en prod). Métricas, Cliente 360 y Preferencias leen las columnas nuevas con
+`to_jsonb(...)`, así que la API no se cae si se despliega antes; el módulo `onboarding` sí necesita la migración para escribir.
+
 ## Verificación (sin conexión a la DB)
 
 - `legacy.entities.spec.ts`: metadata TypeORM en memoria vs `legacy.prod-snapshot.ts` — columnas + nullabilidad, PK, FKs (tabla y ON DELETE), UNIQUE, CHECK e índices declarables — y que ningún espejo duplica una tabla de `scripts/espejo/existing-entities.json`.

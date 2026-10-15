@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 
+import { loadMetricsHistoryStart } from '@/core/utils/holding-preferences';
+
 import { CATEGORY_INFO, FORMULAS, KEY_LABELS, MOVEMENT_CATEGORIES } from './metrics-categories';
 import { type CurrencyContext, MetricsDataService, SqlParams } from './metrics-data.service';
 import { addMonths, currentMonth, type Month, MONTH_RE, monthRange, monthStart, resolveRange } from './metrics-period';
@@ -90,18 +92,25 @@ export class MrrMetricsService {
 		};
 	}
 
-	/** Primer mes con datos del holding (devengo o legacy), para leer la historia completa de clientes y cohortes. */
+	/**
+	 * Primer mes con datos del holding (devengo o MRR histórico), para leer la historia completa de clientes y cohortes. Si el holding fijó
+	 * el inicio de la historia (`holding_settings.metrics_history_start`, onboarding §3.4), manda el mayor de los dos: lo anterior no se lee.
+	 */
 	private async firstMonth(holdingId: string): Promise<Month> {
-		const [row] = await this.data.query(
-			`SELECT to_char(LEAST(
+		const [[row], historyStart] = await Promise.all([
+			this.data.query(
+				`SELECT to_char(LEAST(
 				(SELECT MIN(period_month) FROM revenue_schedule_monthly WHERE holding_id = $1),
 				(SELECT MIN(period_month) FROM mrr_legacy WHERE holding_id = $1)
 			), 'YYYY-MM') AS first`,
-			[holdingId]
-		);
+				[holdingId]
+			),
+			loadMetricsHistoryStart(this.data, holdingId),
+		]);
 		const first = row?.first ? String(row.first) : null;
+		const fromData = first && MONTH_RE.test(first) && first > HISTORY_START ? first : HISTORY_START;
 
-		return first && MONTH_RE.test(first) && first > HISTORY_START ? first : HISTORY_START;
+		return historyStart && historyStart > fromData ? historyStart : fromData;
 	}
 
 	/** KPIs del mes de corte con su valor anterior y sparkline de 12 meses (§3 `mrr/overview`). */
@@ -403,7 +412,7 @@ export class MrrMetricsService {
 			};
 		});
 		const reasonOf = (m: Movement) =>
-			m.line.source === 'legacy' ? 'Legacy sin contrato' : (reasons.get(m.line.contractId ?? '') ?? 'Sin motivo');
+			m.line.source === 'legacy' ? 'MRR histórico sin contrato' : (reasons.get(m.line.contractId ?? '') ?? 'Sin motivo');
 		const churnMovements = movements.filter((m) => m.category === 'churn');
 		const byReason = new Map<string, { clients: Set<string>; mrr: number }>();
 
@@ -630,4 +639,5 @@ export class MrrMetricsService {
 	}
 }
 
-const sourceLabel = (source: MrrLine['source']) => (source === 'contract' ? 'Contratos' : source === 'subscription' ? 'Suscripciones' : 'Legacy');
+const sourceLabel = (source: MrrLine['source']) =>
+	source === 'contract' ? 'Contratos' : source === 'subscription' ? 'Suscripciones' : 'MRR histórico';
