@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
 import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
+import { LEGACY_FIRST_RSM_JOIN, legacyCountedConditions, legacyFirstRsmCte } from '@/modules/metrics/mrr-historico';
 
 import type { ClientContractSortField, ClientContractStatusFilter } from './dtos/query-client-contracts.dto';
 import type { ClientInvoiceSortField, ClientInvoiceStatusFilter } from './dtos/query-client-invoices.dto';
@@ -96,10 +97,15 @@ export class ClientMetricsService {
 		if (rows.length === 0) throw new NotFoundException('Cliente no encontrado');
 	}
 
-	/** MRR del cliente en el mes de `asOf` y el anterior (mismas fuentes que el dashboard). */
+	/**
+	 * MRR del cliente en el mes de `asOf` y el anterior (mismas fuentes que el dashboard). El MRR histórico entra con la regla común de
+	 * `mrr-historico.ts` (onboarding §4.4): solo recurrente, con el corte U14 (sin doble conteo con el contrato empalmado) y sin las filas
+	 * quitadas.
+	 */
 	private async getMrr(clientId: string, holdingId: string, asOf: string) {
 		const [row] = await this.dataSource.query<Row[]>(
 			`WITH months AS (SELECT date_trunc('month', $3::date) AS cur, date_trunc('month', $3::date) - interval '1 month' AS prev),
+			${legacyFirstRsmCte('$2')},
 			mrr AS (
 				SELECT r.period_month, r.mrr_period_system_ccy AS value
 				FROM revenue_schedule_monthly r
@@ -111,9 +117,10 @@ export class ClientMetricsService {
 				JOIN subscriptions s ON s.id = r.subscription_id
 				WHERE r.holding_id = $2 AND s.client_id = $1
 				UNION ALL
-				SELECT period_month, mrr_legacy_system_currency
-				FROM mrr_legacy
-				WHERE holding_id = $2 AND client_id = $1
+				SELECT m.period_month, m.mrr_legacy_system_currency
+				FROM mrr_legacy m
+				${LEGACY_FIRST_RSM_JOIN}
+				WHERE m.holding_id = $2 AND m.client_id = $1 AND ${legacyCountedConditions().join(' AND ')}
 			)
 			SELECT
 				COALESCE(SUM(value) FILTER (WHERE period_month = (SELECT cur FROM months)), 0) AS current,

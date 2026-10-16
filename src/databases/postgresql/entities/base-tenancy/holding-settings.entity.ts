@@ -23,6 +23,11 @@ import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/com
 @Check('holding_settings_quote_numbering_mode_check', "\"quote_numbering_mode\" = ANY (ARRAY['prefixed'::text, 'sequential'::text, 'manual'::text])")
 @Check('holding_settings_quote_number_prefix_check', `"quote_number_prefix" ~ '^[A-Za-z0-9]{1,10}$'`)
 @Check('holding_settings_quote_number_width_check', '"quote_number_width" >= 1 AND "quote_number_width" <= 8')
+// Onboarding de datos históricos (migración 1791900000000-OnboardingDatosHistoricos, §3.4): primer día de un mes.
+@Check(
+	'holding_settings_metrics_history_start_check',
+	`"metrics_history_start" IS NULL OR date_trunc('month', "metrics_history_start"::timestamp)::date = "metrics_history_start"`
+)
 export class HoldingSettings {
 	@PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'holding_settings_pkey' })
 	holding_id: string;
@@ -82,6 +87,14 @@ export class HoldingSettings {
 
 	@Column({ type: 'smallint', nullable: false, default: 4 })
 	quote_number_width: number;
+
+	/** Inicio de la historia en Métricas (onboarding §3.4): primer mes que se muestra (día 1). NULL = desde el primer dato. */
+	@Column({
+		type: 'date',
+		comment: 'Inicio de la historia en Métricas: primer mes que se muestra (día 1). NULL = desde el primer dato',
+		nullable: true,
+	})
+	metrics_history_start?: string | null;
 
 	@ManyToOne(() => CompanyHolding, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'holding_id', referencedColumnName: 'id', foreignKeyConstraintName: 'holding_settings_holding_id_fkey' })

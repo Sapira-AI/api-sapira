@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 
 import { type FxProjected, loadFxProjected } from './fx-projected';
 import { type Month, monthStart } from './metrics-period';
+import { LEGACY_FIRST_RSM_JOIN, legacyCountedConditions, legacyFirstRsmCte } from './mrr-historico';
 import { NOT_PENDING_RENEWAL, PENDING } from './rsm-momentum';
 
 import type { MetricCurrency, MetricsFiltersDto } from './dtos/query-metrics.dto';
@@ -439,26 +440,23 @@ export class MetricsDataService {
 		);
 	}
 
-	/** Grupos legacy por mes con el corte U14 (§1.8). */
+	/**
+	 * Grupos de MRR histórico por mes con la regla común de `mrr-historico.ts` (§1.8): recurrentes, corte U14 y sin las filas quitadas
+	 * (duplicado o error).
+	 */
 	private loadLegacyRows(holdingId: string, filters: MetricsFiltersDto, currency: CurrencyContext, from: Month, to: Month) {
 		const params = new SqlParams();
 		const holding = params.add(holdingId);
 		const value = currency.mode === 'contract' ? 'm.mrr_legacy' : 'm.mrr_legacy_system_currency';
 		const where = [
 			`m.holding_id = ${holding}`,
-			`COALESCE(m.is_recurring, false) = true`,
 			`m.period_month BETWEEN ${params.add(monthStart(from))}::date AND ${params.add(monthStart(to))}::date`,
-			`NOT (f.first_month IS NOT NULL AND m.period_month >= f.first_month)`,
+			...legacyCountedConditions(),
 			...this.legacyFilters(filters, params),
 		];
 
 		return this.query(
-			`WITH first_rsm AS (
-				SELECT r.contract_id, MIN(r.period_month) AS first_month
-				FROM revenue_schedule_monthly r
-				WHERE r.holding_id = ${holding} AND r.contract_id IS NOT NULL AND r.mrr_period_contracted_contract_ccy > 0
-				GROUP BY r.contract_id
-			)
+			`WITH ${legacyFirstRsmCte(holding)}
 			SELECT 'l:' || COALESCE(m.client_id::text, '') || '|' || COALESCE(m.product_name, '') || '|' || COALESCE(m.contract_currency, '') || '|' ||
 					COALESCE(m.migrated_to_contract_id::text, '') AS key,
 				'legacy' AS source, m.migrated_to_contract_id AS contract_id, c.contract_number, NULL AS item_id,
@@ -469,7 +467,7 @@ export class MetricsDataService {
 				CASE WHEN BOOL_OR(${value} IS NULL) THEN NULL ELSE SUM(${value}) END AS value,
 				SUM(m.mrr_legacy) AS value_contract
 			FROM mrr_legacy m
-			LEFT JOIN first_rsm f ON f.contract_id = m.migrated_to_contract_id
+			${LEGACY_FIRST_RSM_JOIN}
 			LEFT JOIN contracts c ON c.id = m.migrated_to_contract_id
 			LEFT JOIN clients cl ON cl.id = m.client_id
 			LEFT JOIN companies co ON co.id = m.company_id

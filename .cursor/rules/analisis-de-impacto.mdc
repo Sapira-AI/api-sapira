@@ -1,0 +1,15 @@
+---
+description: Exige un análisis de impacto antes de corregir código que ya corre en producción
+alwaysApply: true
+---
+
+# Análisis de impacto antes de corregir
+
+Ley desde el 13-10-2026: arreglar algo no puede romper lo que no se analizó. Ninguna corrección se commitea sin su párrafo de impacto en la entrega. La fuente de verdad es la sección "Análisis de impacto antes de corregir" de `AGENTS.md`; la versión ampliada está en `front-sapira/docs/reglas-desarrollo/analisis-de-impacto.md`.
+
+1. **Quién más lo usa**: grep por el símbolo y por el campo en `src/`, `src/databases/postgresql/` (funciones, triggers) y en `front-sapira`; listar todos los caminos que crean o modifican la entidad (alta, edición, importación, integración, crons); actualizar el contrato documentado.
+2. **Cuántos registros reales toca**: conteo en producción en solo lectura antes del cambio; decidir qué pasa con los guardados (migrar solo con OK explícito, dejar o normalizar al leer). Nunca parchar un dato malo en código.
+3. **Qué lo verifica**: specs que cubren el caso y las que se agregan; escenario del banco con base real cuando exista.
+4. **Qué doc cambia**: documentación funcional, técnica y centro de ayuda.
+
+Si un punto no aplica, se dice por qué.

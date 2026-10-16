@@ -1,5 +1,5 @@
 /**
- * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-10-06 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
+ * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-10-15 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
  * Solo las tablas espejadas (sin entity previa). Generado por scripts/espejo/generate-espejo.py — el spec compara la metadata TypeORM contra él sin conectarse.
  */
 export interface ProdTableSnapshot {
@@ -41,6 +41,7 @@ export const LEGACY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			reconciled_at: true,
 			client_entity_id: true,
 			odoo_integration_id: true,
+			import_batch_id: true,
 		},
 		primary: ['id'],
 		foreignKeys: {
@@ -103,6 +104,11 @@ export const LEGACY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 				columns: ['holding_id'],
 				unique: false,
 				where: null,
+			},
+			idx_invoices_legacy_import_batch_id: {
+				columns: ['import_batch_id'],
+				unique: false,
+				where: 'import_batch_id IS NOT NULL',
 			},
 			idx_invoices_legacy_issue_date: {
 				columns: ['issue_date'],
@@ -332,6 +338,7 @@ export const LEGACY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			skip_activation_reason: true,
 			skip_activation_at: true,
 			skip_activation_by: true,
+			skip_reason_code: true,
 		},
 		primary: ['id'],
 		foreignKeys: {
@@ -371,6 +378,7 @@ export const LEGACY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			'mrr_legacy_fx_valid',
 			'mrr_legacy_momentum_check',
 			'mrr_legacy_period_month_check',
+			'mrr_legacy_skip_reason_code_check',
 			'mrr_legacy_split_index_check',
 			'mrr_legacy_term_check',
 		],

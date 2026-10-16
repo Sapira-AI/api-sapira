@@ -30,6 +30,8 @@ Esta carpeta reúne TODO el material del rediseño (antes repartido en 3 repos; 
 | [`flexibilidad-con-trazabilidad.md`](./flexibilidad-con-trazabilidad.md) | Principio de producto: facturar distinto a lo planificado, con todo registrado |
 | [`budgets-forecast-real.md`](./budgets-forecast-real.md) | Feature: presupuesto vs proyección vs real |
 | [`spec-preonboarding-prueba-guiada.md`](./spec-preonboarding-prueba-guiada.md) | Flujo comercial pre-onboarding: sandbox guiado, clickwrap, sizing declarado, calculadora web (propuesta en discusión) |
+| [`spec-onboarding-y-mrr-historico-v2.md`](./spec-onboarding-y-mrr-historico-v2.md) | Onboarding de datos históricos y MRR histórico v2 (aprobada 13-10): arranque rápido desde la última factura, bandeja de empalme, facturas previas, motor de import, contrato de la API del módulo `onboarding` |
+| [`mapa-v2-onboarding.md`](./mapa-v2-onboarding.md) | Lo construido del módulo `onboarding` (entrega 1): formas exactas de respuesta de cada endpoint, códigos 409, decisiones y regla común del MRR histórico (`mrr-historico.ts`) |
 | [`spec-configuracion-v2.md`](./spec-configuracion-v2.md) | Configuración v2: holding, compañías, usuarios y roles, catálogos, preferencias; §14 B reglas de reconocimiento de ingresos (pendiente) |
 | [`contrato-api-configuracion.md`](./contrato-api-configuracion.md) | Contrato de endpoints de Configuración entre la BFF y api-sapira |
 | [`contrato-api-mi-perfil.md`](./contrato-api-mi-perfil.md) | Contrato de Mi perfil (`/me/*`): perfil, avatar (presets y foto por URL firmada), cerrar sesiones y cambiar contraseña |

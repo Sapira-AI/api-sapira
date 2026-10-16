@@ -195,6 +195,11 @@
   "file": "src/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity.ts",
   "import": "@/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity"
  },
+ "onboarding_events": {
+  "class": "OnboardingEvent",
+  "file": "src/databases/postgresql/entities/legacy/onboarding-event.entity.ts",
+  "import": "@/databases/postgresql/entities/legacy/onboarding-event.entity"
+ },
  "prices": {
   "class": "Price",
   "file": "src/databases/postgresql/entities/contratos/price.entity.ts",

@@ -11,6 +11,7 @@ import { SalesforceAccountsStg } from '@/databases/postgresql/entities/integraci
 import { SalesforceConnection } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-connection.entity';
 import { SalesforceLineItemsStg } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-line-items-stg.entity';
 import { SalesforceOpportunitiesStg } from '@/databases/postgresql/entities/integraciones/salesforce/salesforce-opportunities-stg.entity';
+import { itemEndDate } from '@/modules/contracts/billing-engine';
 import {
 	NotificationsService,
 	SALESFORCE_STAGING_BLOCKED_NOTIFICATION_TYPE,
@@ -2494,15 +2495,9 @@ export class SalesforceSyncCompleteService {
 		const startDate = lineItem.Fecha_de_inicio__c || lineItem.ServiceDate || null;
 		const termMonths = transformers.calculateTermMonths(startDate || undefined, lineItem.Fecha_de_Fin__c || undefined, isRecurring);
 		const hasExplicitEndDate = !!lineItem.Fecha_de_Fin__c;
-		const endDate =
-			lineItem.Fecha_de_Fin__c ||
-			(startDate
-				? (() => {
-						const start = new Date(startDate);
-						start.setMonth(start.getMonth() + termMonths);
-						return start.toISOString().split('T')[0];
-					})()
-				: null);
+		// Fin explícito del CRM se respeta; derivado = inicio + plazo − 1 día, igual que el contrato que nace de la cotización
+		// (Domi 13-10: antes se guardaba sin el −1 y la cotización mostraba un fin distinto del contrato).
+		const endDate = lineItem.Fecha_de_Fin__c || (startDate ? itemEndDate(String(startDate).split('T')[0], termMonths) : null);
 		const discountPercentage = transformers.calculateDiscountPercentage(lineItem.ListPrice, lineItem.UnitPrice);
 		const discountType = transformers.getDiscountType(lineItem.ListPrice, lineItem.UnitPrice);
 		const baseCustomFields = linePayload.custom_fields ? { ...linePayload.custom_fields } : {};

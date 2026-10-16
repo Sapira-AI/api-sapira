@@ -2,7 +2,7 @@
  "users": {
   "name": "public.users",
   "rls_enabled": true,
-  "rows": 28,
+  "rows": 30,
   "columns": [
    {
     "name": "id",
@@ -640,6 +640,17 @@
     ]
    },
    {
+    "name": "onboarding_events_actor_id_fkey",
+    "source_table": "public.onboarding_events",
+    "source_columns": [
+     "actor_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "period_guard_warnings_triggered_by_fkey",
     "source_table": "public.period_guard_warnings",
     "source_columns": [
@@ -1030,7 +1041,7 @@
  "user_holdings": {
   "name": "public.user_holdings",
   "rls_enabled": true,
-  "rows": 38,
+  "rows": 40,
   "columns": [
    {
     "name": "user_id",
@@ -1999,6 +2010,17 @@
    {
     "name": "odoo_product_mappings_holding_id_fkey",
     "source_table": "public.odoo_product_mappings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "onboarding_events_holding_id_fkey",
+    "source_table": "public.onboarding_events",
     "source_columns": [
      "holding_id"
     ],
@@ -3208,6 +3230,17 @@
      "updatable"
     ],
     "default_value": "4"
+   },
+   {
+    "name": "metrics_history_start",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Inicio de la historia en Métricas: primer mes que se muestra (día 1). NULL = desde el primer dato"
    }
   ],
   "primary_keys": [
