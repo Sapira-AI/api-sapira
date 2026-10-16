@@ -148,3 +148,4 @@ export { RevenueScheduleMonthly } from '@/databases/postgresql/entities/revenue/
 export { SiiCaf, SiiCertificate, SiiConfiguration } from '@/databases/postgresql/entities/sii/sii.entity';
 export { SubscriptionItem } from '@/databases/postgresql/entities/suscripciones/subscription-item.entity';
 export { Subscription } from '@/databases/postgresql/entities/suscripciones/subscription.entity';
+export { HoldingInboundEmailDomain } from '@/databases/postgresql/entities/automatizaciones-ia/holding-inbound-email-domain.entity';

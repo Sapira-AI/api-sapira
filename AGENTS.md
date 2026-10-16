@@ -19,6 +19,7 @@
 - Crea controladores y providers siguiendo los modulos ya existentes.
 - Evita refactors o simplificaciones no pedidas.
 - No hagas commits ni cambios destructivos de git sin instruccion explicita.
+- **La versión la sube GitHub Actions** al mezclar un PR a `qa` (`.github/workflows/version.yml` → `scripts/ci/version-bump.js`): patch por defecto, `minor`/`major` con las etiquetas `version:minor`/`version:major` del PR. En las ramas de trabajo se commitea con `git commit` normal y **nunca se toca `version`** de `package.json` (`yarn vcp` ya no existe acá): si dos ramas la cambian, el merge choca. Detalle: `docs/reglas-desarrollo/versionado.md`.
 - Toda funcionalidad nueva o modificada —la haga Claude, Cursor o una persona— cierra la tarea con tres verificaciones: documentación funcional, documentación técnica y tests unitarios. Detalle abajo, en **Documentación y tests obligatorios**.
 - `ROADMAP-V2.md` (raíz) es el único índice del plan v2: un documento de planificación nuevo se linkea desde ahí o no existe. El backlog operativo de fixes vive en copia espejo doble: `docs/ROADMAP-OPERATIVO.md` y `sapira-ai/docs/ROADMAP-OPERATIVO.md` — todo cambio se replica en ambos (convención en el propio archivo).
 - Prioriza documentar en la ubicación más cercana del módulo afectado: `src/modules/<modulo>/docs/` si ya existe, o `docs/` para documentación transversal.

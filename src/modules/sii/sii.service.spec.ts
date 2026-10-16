@@ -80,6 +80,81 @@ describe('SiiService factura integration', () => {
 		);
 	});
 
+	it('con la compañía ya activa provisiona el emisor en api-factura y solo guarda el vínculo (conserva el ambiente)', async () => {
+		const { service, facturaClient, configurations } = createService();
+		const existing = { id: 'config-1', holding_id: company.holding_id, company_id: company.id, environment: 'produccion' };
+		configurations.findOne.mockResolvedValue(existing);
+
+		await service.integrateWithFactura(company.holding_id, company.id, {
+			business_activity: 'Software',
+			commune: 'Viña del Mar',
+			city: 'Viña del Mar',
+		});
+
+		expect(facturaClient.provisionEmpresa).toHaveBeenCalledWith(
+			expect.objectContaining({
+				giro: 'Software',
+				comuna: 'Viña del Mar',
+				ciudad: 'Viña del Mar',
+				direccion: company.legal_address,
+				ambienteSII: 'produccion',
+			})
+		);
+		// api-factura es la fuente de verdad del emisor: Postgres no guarda giro, comuna, ciudad ni actividades.
+		expect(configurations.merge).toHaveBeenCalledWith(existing, { environment: 'produccion', is_enabled: true });
+		expect(configurations.create).not.toHaveBeenCalled();
+	});
+
+	it('envía las actividades económicas a api-factura solo si vienen', async () => {
+		const { service, facturaClient } = createService();
+		const datos = { business_activity: 'Software', commune: 'Santiago', city: 'Santiago' };
+
+		await service.integrateWithFactura(company.holding_id, company.id, { ...datos, activity_codes: ['620100', '631100'] });
+		expect(facturaClient.provisionEmpresa).toHaveBeenLastCalledWith(expect.objectContaining({ actividadesEconomicas: ['620100', '631100'] }));
+
+		await service.integrateWithFactura(company.holding_id, company.id, datos);
+		expect(facturaClient.provisionEmpresa.mock.calls.at(-1)[0]).not.toHaveProperty('actividadesEconomicas');
+	});
+
+	it('al activar crea el vínculo sin datos del emisor', async () => {
+		const { service, configurations } = createService();
+
+		await service.integrateWithFactura(company.holding_id, company.id, { business_activity: 'Software', commune: 'Santiago', city: 'Santiago' });
+
+		expect(configurations.create).toHaveBeenCalledWith({
+			holding_id: company.holding_id,
+			company_id: company.id,
+			environment: 'certificacion',
+			enabled_document_types: [33, 34, 61],
+			is_enabled: true,
+		});
+	});
+
+	it('la dirección del emisor reemplaza a la legal y no puede pasar los 70 caracteres del SII', async () => {
+		const datos = { business_activity: 'Software', commune: 'Viña del Mar', city: 'Viña del Mar' };
+		const larga = 'RENACA NORTE 25 OF 707 RENACA DEPTO. #707 COMUNA VINA DEL MAR REGION DE VALPARAISO';
+
+		const conDireccion = createService({ company: { ...company, legal_address: larga } });
+		await conDireccion.service.integrateWithFactura(company.holding_id, company.id, { ...datos, address: 'Reñaca Norte 25, of. 707' });
+		expect(conDireccion.facturaClient.provisionEmpresa).toHaveBeenCalledWith(expect.objectContaining({ direccion: 'Reñaca Norte 25, of. 707' }));
+
+		const sinDireccion = createService({ company: { ...company, legal_address: larga } });
+		await expect(sinDireccion.service.integrateWithFactura(company.holding_id, company.id, datos)).rejects.toThrow(
+			'La dirección para el SII tiene 82 caracteres y el SII acepta hasta 70'
+		);
+		expect(sinDireccion.facturaClient.provisionEmpresa).not.toHaveBeenCalled();
+	});
+
+	it('exige giro, comuna y ciudad en cada llamada (ya no se toman de Postgres)', async () => {
+		const { service, facturaClient, configurations } = createService();
+		configurations.findOne.mockResolvedValue({ id: 'config-1', business_activity: 'Viejo', commune: 'Santiago', city: 'Santiago' });
+
+		await expect(service.integrateWithFactura(company.holding_id, company.id, { commune: 'Santiago', city: 'Santiago' })).rejects.toBeInstanceOf(
+			BadRequestException
+		);
+		expect(facturaClient.provisionEmpresa).not.toHaveBeenCalled();
+	});
+
 	it('rejects a company outside the selected holding', async () => {
 		const { service } = createService({ company: null });
 		await expect(service.integrateWithFactura(company.holding_id, 'other-company', {})).rejects.toBeInstanceOf(NotFoundException);

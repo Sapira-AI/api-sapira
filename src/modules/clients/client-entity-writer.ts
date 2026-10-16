@@ -18,13 +18,14 @@ export interface NewClientEntity {
 	payment_terms: PaymentTerms | null;
 	phone?: string | null;
 	economic_activity?: string | null;
+	commune?: string | null;
 	client_number?: string | null;
 	/** Partner del ERP con el que nace vinculada ("Traer desde ERP"); el que llama ya validó que exista y esté libre. */
 	odoo_partner_id?: number | null;
 }
 
 /** Columnas opcionales que solo viajan si traen valor (el alta desde un contrato no las usa). */
-const EXTRA_COLUMNS = ['phone', 'economic_activity', 'client_number', 'odoo_partner_id'] as const;
+const EXTRA_COLUMNS = ['phone', 'economic_activity', 'commune', 'client_number', 'odoo_partner_id'] as const;
 
 /**
  * Único camino que crea una razón social en la API: `client_entities` + su vínculo en `client_entity_clients`

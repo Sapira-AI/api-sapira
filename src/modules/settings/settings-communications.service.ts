@@ -1,3 +1,5 @@
+import { promises as dns } from 'dns';
+
 import {
 	BadRequestException,
 	ConflictException,
@@ -62,6 +64,15 @@ const parseRecords = (value: unknown): DnsRecord[] => {
 			}))
 		: [];
 };
+
+/** ¿El TXT de DMARC está publicado? (SendGrid no lo valida: lo agrega Sapira a los registros sugeridos.) */
+async function tieneDmarc(nombre: string): Promise<boolean> {
+	try {
+		return (await dns.resolveTxt(nombre)).some((partes) => partes.join('').trim().toUpperCase().startsWith('V=DMARC1'));
+	} catch {
+		return false;
+	}
+}
 
 /** El correo del remitente debe ser del dominio registrado o de su dominio base (`mail.empresa.com` autentica `empresa.com`). */
 export function emailBelongsToDomain(email: string, senderDomain: string): boolean {
@@ -261,13 +272,20 @@ export class SettingsCommunicationsService {
 		return body;
 	}
 
-	/** Aplica a los registros guardados el resultado de SendGrid y actualiza el estado del dominio. */
+	/**
+	 * Aplica a los registros guardados el resultado de SendGrid y actualiza el estado del dominio. SendGrid no valida el DMARC (lo
+	 * arma Sapira): ese TXT se revisa directo en el DNS, para que no aparezca siempre pendiente.
+	 */
 	private async saveStatus(row: Row, valid: boolean, results: Record<string, ValidationResult | undefined>) {
 		const records = parseRecords(row.domain_dns_records);
 
 		VALIDATED_RECORDS.forEach((key, index) => {
 			if (records[index] && results[key]) records[index].status = results[key]?.valid ? 'verified' : 'pending';
 		});
+		for (const record of records) {
+			if (record.type.toUpperCase() === 'TXT' && record.name.toLowerCase().startsWith('_dmarc.'))
+				record.status = (await tieneDmarc(record.name)) ? 'verified' : 'pending';
+		}
 		const status = valid ? 'verified' : 'pending';
 
 		await this.dataSource.query(
@@ -306,12 +324,23 @@ export class SettingsCommunicationsService {
 		};
 	}
 
-	/** Lee el estado actual en SendGrid (sin pedir validación) y refresca el estado guardado. */
+	/**
+	 * Lee el estado actual en SendGrid y refresca el estado guardado. SendGrid a veces responde `valid: false` en una consulta
+	 * suelta aunque el dominio esté validado (visto el 16-10-2026 con firmare.cl: una de varias consultas seguidas): antes de
+	 * dejarlo pendiente se le pide validar, y vale ese resultado.
+	 */
 	async checkStatus(holdingId: string, id: string) {
 		const row = await this.findDomainRow(holdingId, id);
 		const body = await this.sendgrid(`/whitelabel/domains/${this.sendgridId(row)}`, 'GET');
-		const dns = (body.dns ?? {}) as Record<string, ValidationResult | undefined>;
-		const status = await this.saveStatus(row, body.valid === true, dns);
+		let valid = body.valid === true;
+		let results = (body.dns ?? {}) as Record<string, ValidationResult | undefined>;
+
+		if (!valid) {
+			const validacion = await this.sendgrid(`/whitelabel/domains/${this.sendgridId(row)}/validate`, 'POST');
+			valid = validacion.valid === true;
+			results = (validacion.validation_results ?? {}) as Record<string, ValidationResult | undefined>;
+		}
+		const status = await this.saveStatus(row, valid, results);
 
 		return { status, domain: await this.getDomain(holdingId, id) };
 	}

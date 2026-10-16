@@ -26,6 +26,7 @@ import { SettingsCustomFieldsController } from './settings-custom-fields.control
 import { SettingsCustomFieldsService } from './settings-custom-fields.service';
 import { SettingsHoldingController } from './settings-holding.controller';
 import { SettingsHoldingService } from './settings-holding.service';
+import { SettingsInboundDomainService } from './settings-inbound-domain.service';
 import { SettingsRolesService } from './settings-roles.service';
 import { SettingsTaxDocumentsController } from './settings-tax-documents.controller';
 import { SettingsTaxDocumentsService } from './settings-tax-documents.service';
@@ -81,6 +82,7 @@ describe('Configuración · HTTP (tenancy, permisos, validación)', () => {
 		products: autoMock(),
 		taxDocuments: autoMock(),
 		communications: autoMock(),
+		inboundDomain: autoMock(),
 	};
 	const dataSource = {
 		query: jest.fn(async (sql: string, params: unknown[] = []) => {
@@ -136,6 +138,7 @@ describe('Configuración · HTTP (tenancy, permisos, validación)', () => {
 				{ provide: ProductsService, useValue: services.products },
 				{ provide: SettingsTaxDocumentsService, useValue: services.taxDocuments },
 				{ provide: SettingsCommunicationsService, useValue: services.communications },
+				{ provide: SettingsInboundDomainService, useValue: services.inboundDomain },
 			],
 		})
 			.overrideGuard(SupabaseAuthGuard)
@@ -247,6 +250,21 @@ describe('Configuración · HTTP (tenancy, permisos, validación)', () => {
 			expect(services.communications.checkStatus).toHaveBeenCalledWith(HOLDING, ID);
 			await get(`/settings/communications/domains/${ID}/check-status`, 'editor').expect(404);
 			await send('post', '/settings/communications/test-email', { to: 'ana@x.cl', holding_id: OTHER_HOLDING }).expect(403);
+		});
+
+		it('dominio de recepción de DTE: leer con VIEW, registrar y verificar con EDIT, siempre con el holding del header', async () => {
+			await get('/settings/communications/inbound-domain', 'reader').expect(200);
+			expect(services.inboundDomain.get).toHaveBeenCalledWith(HOLDING);
+			await send('post', '/settings/communications/inbound-domain', { inbound_domain: 'dte.empresa.cl' }, 'reader').expect(403);
+			await send('post', '/settings/communications/inbound-domain', { inbound_domain: ' DTE.Empresa.cl ' }).expect(201);
+			expect(services.inboundDomain.create).toHaveBeenCalledWith(HOLDING, 'dte.empresa.cl', 'editor');
+			await send('post', '/settings/communications/inbound-domain', { inbound_domain: 'no es dominio' }).expect(400);
+			await send('post', '/settings/communications/inbound-domain/verify', {}, 'reader').expect(403);
+			await send('post', '/settings/communications/inbound-domain/verify').expect(200);
+			expect(services.inboundDomain.verify).toHaveBeenCalledWith(HOLDING);
+			await send('post', '/settings/communications/inbound-domain', { inbound_domain: 'dte.empresa.cl', holding_id: OTHER_HOLDING }).expect(
+				403
+			);
 		});
 
 		it('detalle FX valida fechas y año', async () => {
