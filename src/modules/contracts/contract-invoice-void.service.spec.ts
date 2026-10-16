@@ -17,7 +17,8 @@ import { ContractInvoiceVoidService } from './contract-invoice-void.service';
 import { ContractInvoicesService } from './contract-invoices.service';
 import { ContractsController } from './contracts.controller';
 import { ContractsService } from './contracts.service';
-import { DiscountCreditNoteDto, VoidInvoiceDto } from './dtos/contract-invoice-credit-notes.dto';
+import { DiscountCreditNoteDto, RegisterCreditNoteFolioDto, VoidInvoiceDto } from './dtos/contract-invoice-credit-notes.dto';
+import { creditNoteDocumentBlockers } from './invoice-void';
 import { MC_UF_ITEM, MC_USD_ITEM, mcInvoiceRow, mcStoredLine, multicurrencyRoute, revaluedHeaders } from './multicurrency.test-fixtures';
 
 type Row = Record<string, unknown>;
@@ -166,6 +167,10 @@ interface Fixture {
 	invoice?: Row;
 	extra?: Row;
 	previous?: Row[];
+	/** Otra NC vigente ya tiene el folio pedido. */
+	taken?: boolean;
+	/** NC que carga "Registrar folio". */
+	creditNote?: Row;
 }
 
 const build = (fixture: Fixture = {}) => {
@@ -174,6 +179,8 @@ const build = (fixture: Fixture = {}) => {
 	let lineSeq = 0;
 	const route = (sql: string): Row[] => {
 		if (sql.includes('FROM users WHERE auth_id')) return [{ id: 'user-1' }];
+		if (sql.includes('upper(trim(invoice_number))')) return fixture.taken ? [{ exists: 1 }] : [];
+		if (sql.includes('FOR UPDATE OF n')) return fixture.creditNote ? [fixture.creditNote] : [];
 		if (sql.includes('get_cutoff_date')) return [contextRow];
 		if (sql.includes('priced_base')) return [invoice];
 		if (sql.includes('AS paid')) return [fixture.extra ?? { voided: false, paid: false }];
@@ -257,7 +264,8 @@ describe('ContractInvoiceVoidService (spec facturas §3.8 y §8)', () => {
 
 		expect(nc[0]).toContain('$6, $6, $6, NULL');
 		// Decisión 01-10: la NC nace siempre Emitida, nunca Por Emitir.
-		expect(ncParams[6]).toBe('Emitida');
+		// La NC de anulación nace Cancelada, igual que la original (pareja cerrada, fuera de todo cálculo; Domi 12-10).
+		expect(ncParams[6]).toBe('Cancelada');
 		expect(ncParams.slice(10, 14)).toEqual([-1500, -1425000, -270750, -1695750]);
 		expect(ncParams[16]).toBe(INV);
 		expect(ncParams[17]).toBe('other');
@@ -453,6 +461,146 @@ describe('ContractInvoiceVoidService (spec facturas §3.8 y §8)', () => {
 		expect(calls(runner.query, 'INSERT INTO')).toHaveLength(0);
 	});
 
+	describe('folio de la NC emitida a mano (Domi 12-10)', () => {
+		it('anular con folio y fecha: la NC nace con ese folio y esa fecha (no queda pendiente de emisión)', async () => {
+			const { service, runner } = build();
+			const result = await service.voidInvoice(
+				CONTRACT_ID,
+				INV,
+				{ reason: 'issue_error', reissue: false, credit_note_number: 'NC 001950', credit_note_issue_date: '2026-09-29' } as VoidInvoiceDto,
+				HOLDING,
+				'auth-1',
+				TODAY
+			);
+			const [nc] = calls(runner.query, `'NC', $17`);
+
+			expect((nc[1] as unknown[])[5]).toBe('2026-09-29');
+			expect(calls(runner.query, 'UPDATE invoices SET invoice_number = $3').map(([, params]) => params)).toEqual([
+				['nc-1', HOLDING, 'NC 001950'],
+			]);
+			expect(result.credit_note_document).toEqual({ invoice_number: 'NC 001950', issue_date: '2026-09-29' });
+		});
+
+		it('sin folio: la NC queda pendiente de emisión (no se escribe folio)', async () => {
+			const { service, runner } = build();
+
+			await service.voidInvoice(CONTRACT_ID, INV, { reason: 'issue_error', reissue: false } as VoidInvoiceDto, HOLDING, 'auth-1', TODAY);
+			expect(calls(runner.query, 'UPDATE invoices SET invoice_number')).toHaveLength(0);
+		});
+
+		it('folio repetido en otra NC → 409 blocked sin escribir nada; también en la NC de descuento', async () => {
+			const { service, runner } = build({ taken: true });
+			const voidError = (await rejection(
+				service.voidInvoice(
+					CONTRACT_ID,
+					INV,
+					{ reason: 'issue_error', reissue: false, credit_note_number: '001910' } as VoidInvoiceDto,
+					HOLDING,
+					'auth-1',
+					TODAY
+				)
+			)) as ConflictException;
+
+			expect(voidError.getResponse()).toMatchObject({
+				code: 'blocked',
+				blockers: [expect.objectContaining({ code: 'credit_note_number_taken' })],
+			});
+			const discountError = (await rejection(
+				service.createCreditNote(
+					CONTRACT_ID,
+					INV,
+					{ pct: 10, reason: 'other', revenue_treatment: 'impact_month', credit_note_number: '001910' } as DiscountCreditNoteDto,
+					HOLDING,
+					'auth-1',
+					TODAY
+				)
+			)) as ConflictException;
+
+			expect(discountError.getResponse()).toMatchObject({ blockers: [expect.objectContaining({ code: 'credit_note_number_taken' })] });
+			expect(calls(runner.query, 'INSERT INTO')).toHaveLength(0);
+		});
+
+		const pendingNc = (overrides: Row = {}): Row => ({
+			id: 'nc-9',
+			invoice_number: null,
+			status: 'Cancelada',
+			document_type: 'NC',
+			credit_type: 'cancellation',
+			due_date: null,
+			odoo_invoice_id: null,
+			sent_to_odoo_at: null,
+			issue_date: '2026-09-30',
+			related_invoice_id: INV,
+			related_number: 'F-100',
+			related_issue_date: '2026-09-01',
+			...overrides,
+		});
+
+		it('Registrar folio: guarda folio y fecha sin cambiar el estado y registra el evento', async () => {
+			const { service, runner } = build({ creditNote: pendingNc() });
+			const result = await service.registerCreditNoteFolio(
+				CONTRACT_ID,
+				'nc-9',
+				{ invoice_number: ' 001960 ', issue_date: '2026-09-29' },
+				HOLDING,
+				'auth-1',
+				TODAY
+			);
+
+			expect(calls(runner.query, 'UPDATE invoices SET invoice_number = $3').map(([, params]) => params)).toEqual([['nc-9', HOLDING, '001960']]);
+			expect(calls(runner.query, 'UPDATE invoices SET issue_date = $3::date').map(([, params]) => params)).toEqual([
+				['nc-9', HOLDING, '2026-09-29'],
+			]);
+			expect(sqlOf(runner.query).some((sql) => /SET status/.test(sql))).toBe(false);
+			const [event] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');
+
+			expect((event[1] as unknown[])[2]).toBe('INVOICE_CREDIT_NOTE_FOLIO_REGISTERED');
+			expect(metadataOf(event)).toMatchObject({ credit_note_id: 'nc-9', after: { invoice_number: '001960', issue_date: '2026-09-29' } });
+			expect(result).toMatchObject({ applied: true, credit_note_document: { invoice_number: '001960', issue_date: '2026-09-29' } });
+		});
+
+		it('Registrar folio: si ya tiene folio o vínculo con el ERP → 409 credit_note_not_pending; fecha anterior a la factura → blocked', async () => {
+			const withFolio = build({ creditNote: pendingNc({ invoice_number: '001910', odoo_invoice_id: 200021 }) });
+			const notPending = (await rejection(
+				withFolio.service.registerCreditNoteFolio(CONTRACT_ID, 'nc-9', { invoice_number: '001999' }, HOLDING, 'auth-1', TODAY)
+			)) as ConflictException;
+
+			expect(notPending.getResponse()).toMatchObject({ code: 'credit_note_not_pending' });
+			const early = build({ creditNote: pendingNc() });
+			const blocked = (await rejection(
+				early.service.registerCreditNoteFolio(
+					CONTRACT_ID,
+					'nc-9',
+					{ invoice_number: '001999', issue_date: '2026-08-15' },
+					HOLDING,
+					'auth-1',
+					TODAY
+				)
+			)) as ConflictException;
+
+			expect(blocked.getResponse()).toMatchObject({
+				code: 'blocked',
+				blockers: [expect.objectContaining({ code: 'credit_note_date_before_invoice' })],
+			});
+			expect(calls(early.runner.query, 'UPDATE invoices')).toHaveLength(0);
+		});
+
+		it('creditNoteDocumentBlockers: folio repetido, fecha antes de la factura o futura; sin folio ni fecha no bloquea', () => {
+			const ctx = { original_issue_date: '2026-09-01', today: '2026-09-30', taken: false };
+
+			expect(creditNoteDocumentBlockers({}, ctx)).toEqual([]);
+			expect(creditNoteDocumentBlockers({ invoice_number: 'A1' }, { ...ctx, taken: true }).map((blocker) => blocker.code)).toEqual([
+				'credit_note_number_taken',
+			]);
+			expect(creditNoteDocumentBlockers({ issue_date: '2026-08-31' }, ctx).map((blocker) => blocker.code)).toEqual([
+				'credit_note_date_before_invoice',
+			]);
+			expect(creditNoteDocumentBlockers({ issue_date: '2026-10-01' }, ctx).map((blocker) => blocker.code)).toEqual([
+				'credit_note_date_in_future',
+			]);
+		});
+	});
+
 	describe('DTOs y rutas', () => {
 		it('void: motivo del catálogo y reissue obligatorio; credit-note: motivo y devengo del catálogo', async () => {
 			const voidErrors = flattenValidationErrors(await validate(plainToInstance(VoidInvoiceDto, { reason: 'x' })));
@@ -463,6 +611,18 @@ describe('ContractInvoiceVoidService (spec facturas §3.8 y §8)', () => {
 			);
 
 			expect(voidErrors.map((error) => error.field).sort()).toEqual(['reason', 'reissue']);
+			const folioErrors = flattenValidationErrors(
+				await validate(
+					plainToInstance(VoidInvoiceDto, { reason: 'other', reissue: false, credit_note_number: '', credit_note_issue_date: '29-09-2026' })
+				)
+			);
+
+			expect(folioErrors.map((error) => error.field)).toEqual(['credit_note_issue_date']);
+			expect(
+				flattenValidationErrors(await validate(plainToInstance(RegisterCreditNoteFolioDto, { invoice_number: '  ' }))).map(
+					(error) => error.field
+				)
+			).toEqual(['invoice_number']);
 			expect(ncErrors.map((error) => error.field).sort()).toEqual(['lines.0.amount', 'lines.0.line_id', 'reason', 'revenue_treatment']);
 		});
 
@@ -481,6 +641,11 @@ describe('ContractInvoiceVoidService (spec facturas §3.8 y §8)', () => {
 				code: 200,
 			});
 			expect(route('createCreditNote')).toEqual({ path: ':id/invoices/:invoiceId/credit-note', method: RequestMethod.POST, code: undefined });
+			expect(route('registerCreditNoteFolio')).toEqual({
+				path: ':id/invoices/:invoiceId/credit-note-folio',
+				method: RequestMethod.POST,
+				code: 200,
+			});
 		});
 	});
 

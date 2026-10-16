@@ -28,6 +28,11 @@ import { InvoicesLegacy } from './invoices-legacy.entity';
 @Check('mrr_legacy_period_month_check', "date_trunc('month'::text, (period_month)::timestamp with time zone) = period_month")
 @Check('mrr_legacy_split_index_check', 'split_index > 0')
 @Check('mrr_legacy_term_check', 'term > 0')
+// Onboarding de datos históricos (migración 1791900000000-OnboardingDatosHistoricos, spec-onboarding-y-mrr-historico-v2.md §3.5).
+@Check(
+	'mrr_legacy_skip_reason_code_check',
+	"(skip_reason_code IS NULL) OR (skip_reason_code = ANY (ARRAY['churn'::text, 'duplicate'::text, 'error'::text]))"
+)
 @Index('idx_mrr_legacy_batch_id', ['batch_id'])
 @Index('idx_mrr_legacy_client', ['client_id'])
 @Index('idx_mrr_legacy_company', ['company_id'])
@@ -221,6 +226,19 @@ export class MrrLegacy {
 	/** User who marked this record as skip_activation */
 	@Column({ type: 'uuid', comment: 'User who marked this record as skip_activation', nullable: true })
 	skip_activation_by?: string;
+
+	/**
+	 * Motivo normalizado del `skip_activation` (onboarding §3.1): `churn` = fue baja (cuenta hasta su último mes), `duplicate` | `error` =
+	 * quitada (no cuenta en nada). El texto libre queda en `skip_activation_reason`. NULL en las filas guardadas antes: se leen con la regla
+	 * de `src/modules/metrics/mrr-historico.ts` ("duplic" / "error" en el texto → quitada; otro → churn).
+	 */
+	@Column({
+		type: 'text',
+		comment:
+			'Motivo normalizado del skip_activation: churn (fue baja) | duplicate | error (quitada, no cuenta). El texto libre queda en skip_activation_reason',
+		nullable: true,
+	})
+	skip_reason_code?: string | null;
 
 	@ManyToOne(() => Client)
 	@JoinColumn({ name: 'client_id', referencedColumnName: 'id', foreignKeyConstraintName: 'mrr_legacy_client_id_fkey' })

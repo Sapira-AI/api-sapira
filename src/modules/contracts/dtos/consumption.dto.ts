@@ -39,7 +39,7 @@ export class UpsertConsumptionDto {
 	quantity!: number;
 
 	@ApiPropertyOptional({
-		description: 'Monto final informado por el cliente: la línea usa este monto y la cantidad queda informativa',
+		description: 'Retirado (12-10): un valor responde 400. El consumo es solo cantidad; el monto sale del modelo de precio',
 		nullable: true,
 	})
 	@ValidateIf((_dto: UpsertConsumptionDto, value: unknown) => value !== null && value !== undefined)
@@ -47,7 +47,10 @@ export class UpsertConsumptionDto {
 	@Min(0, { message: 'El monto informado no puede ser negativo' })
 	amount_override?: number | null;
 
-	@ApiPropertyOptional({ default: true, description: 'Aplicar el descuento del ítem sobre el consumo (S7-9); false = "es el monto final"' })
+	@ApiPropertyOptional({
+		default: true,
+		description: 'Aplicar el descuento del ítem sobre el consumo (S7-9); false = "No aplicar el descuento del ítem"',
+	})
 	@IsBoolean({ message: 'Indica si se aplica el descuento del ítem' })
 	@IsOptional()
 	apply_item_discount?: boolean;

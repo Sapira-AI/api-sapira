@@ -69,6 +69,9 @@ export const electronicEmissionOf = (row: Record<string, unknown>) => {
 	const pending = creditNotePendingEmission({
 		document_type: toTextOrNull(row.document_type),
 		status: toTextOrNull(row.status),
+		// Solo si la consulta los trae: sin ellos una NC Cancelada no cuenta como pendiente (`creditNotePendingEmission`).
+		...('credit_type' in row ? { credit_type: toTextOrNull(row.credit_type) } : {}),
+		...('due_date' in row ? { due_date: (row.due_date as string | Date | null) ?? null } : {}),
 		invoice_number: toTextOrNull(row.invoice_number),
 		odoo_invoice_id: (row.odoo_invoice_id as number | string | null | undefined) ?? null,
 		sent_to_odoo_at: (row.sent_to_odoo_at as string | Date | null | undefined) ?? null,

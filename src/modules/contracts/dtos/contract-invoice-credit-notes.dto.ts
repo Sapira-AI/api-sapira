@@ -25,9 +25,29 @@ import { EDIT_LINES_MAX, EditInvoiceDto, NOTES_MAX } from './contract-invoice-ed
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 const present = (value: unknown) => value !== null && value !== undefined;
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const FOLIO_MAX = 100;
+
+/**
+ * Folio y fecha de la NC cuando ya se emitió a mano en el ERP o el holding no tiene ERP (Domi 12-10). Opcionales al anular o descontar: sin
+ * folio, la NC queda pendiente de emisión electrónica; con folio, nace registrada.
+ */
+class CreditNoteDocumentFields {
+	@ApiPropertyOptional({ description: 'Folio de la NC emitida en el ERP o fuera de él (opcional)', maxLength: FOLIO_MAX })
+	@Transform(trim)
+	@ValidateIf((_dto: CreditNoteDocumentFields, value: unknown) => present(value) && value !== '')
+	@IsString({ message: 'El folio debe ser texto' })
+	@MaxLength(FOLIO_MAX, { message: `El folio no puede superar ${FOLIO_MAX} caracteres` })
+	credit_note_number?: string | null;
+
+	@ApiPropertyOptional({ description: 'Fecha de emisión de la NC (YYYY-MM-DD); sin valor = hoy' })
+	@ValidateIf((_dto: CreditNoteDocumentFields, value: unknown) => present(value) && value !== '')
+	@Matches(ISO_DAY, { message: 'La fecha de la nota de crédito debe tener la forma YYYY-MM-DD' })
+	credit_note_issue_date?: string | null;
+}
 
 /** `POST …/:invoiceId/void/preview` y `POST …/:invoiceId/void` (spec facturas §3.8). */
-export class VoidInvoiceDto {
+export class VoidInvoiceDto extends CreditNoteDocumentFields {
 	@ApiProperty({
 		enum: VOID_REASONS,
 		description:
@@ -79,7 +99,7 @@ export class DiscountCreditNoteLineDto {
 }
 
 /** `POST …/:invoiceId/credit-note/preview` y `POST …/:invoiceId/credit-note`: NC de descuento parcial sobre una emitida. */
-export class DiscountCreditNoteDto {
+export class DiscountCreditNoteDto extends CreditNoteDocumentFields {
 	@ApiPropertyOptional({ type: [DiscountCreditNoteLineDto], description: 'Líneas a descontar (o `pct` para todas las líneas con monto)' })
 	@IsOptional()
 	@IsArray({ message: 'lines debe ser una lista' })
@@ -118,4 +138,19 @@ export class DiscountCreditNoteDto {
 	@Matches(/\S/, { message: 'Las notas no pueden quedar vacías' })
 	@MaxLength(NOTES_MAX, { message: `Las notas no pueden superar ${NOTES_MAX} caracteres` })
 	notes?: string | null;
+}
+
+/** `POST …/:invoiceId/credit-note-folio`: folio (y fecha) de una NC pendiente de emisión, emitida después a mano (Domi 12-10). */
+export class RegisterCreditNoteFolioDto {
+	@ApiProperty({ description: 'Folio de la NC emitida', maxLength: FOLIO_MAX })
+	@Transform(trim)
+	@IsString({ message: 'Escribe el folio de la nota de crédito' })
+	@MaxLength(FOLIO_MAX, { message: `El folio no puede superar ${FOLIO_MAX} caracteres` })
+	@Matches(/\S/, { message: 'Escribe el folio de la nota de crédito' })
+	invoice_number!: string;
+
+	@ApiPropertyOptional({ description: 'Fecha de emisión de la NC (YYYY-MM-DD); sin valor = la que tiene' })
+	@ValidateIf((_dto: RegisterCreditNoteFolioDto, value: unknown) => present(value) && value !== '')
+	@Matches(ISO_DAY, { message: 'La fecha de la nota de crédito debe tener la forma YYYY-MM-DD' })
+	issue_date?: string | null;
 }

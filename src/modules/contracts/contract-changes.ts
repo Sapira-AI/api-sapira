@@ -328,6 +328,8 @@ export interface ChangeInvoiceRow {
 	client_tax_id?: string | null;
 	/** NC: motivo (`churn`, `downsell`…) y factura que acredita. `reactivate` cancela las NC del churn pendientes de emisión electrónica (`creditNotePendingEmission`). */
 	credit_reason?: string | null;
+	/** NC: `cancellation` (espejo completo: NC y emitida Canceladas) o `discount`. */
+	credit_type?: string | null;
 	related_invoice_id?: string | null;
 }
 
@@ -360,7 +362,15 @@ export interface ChangeContext {
 	/** Series de índices (`indicadores_economicos`) que piden los pactos `index`: código → valores ordenados por fecha. */
 	index_series?: Map<string, Array<{ date: string; value: number }>>;
 	/** `reactivate`: eventos de baja (CHURN/DOWNSELL) del contrato, para marcar el original con `metadata.reversed_by`. */
-	churn_events?: Array<{ id: string; event_type: string; items_affected: string[]; effective_date: string | null; reversed: boolean }>;
+	churn_events?: Array<{
+		id: string;
+		event_type: string;
+		items_affected: string[];
+		effective_date: string | null;
+		reversed: boolean;
+		/** NC espejo completas de esa baja: emitida que pasó a Cancelada y su estado anterior (`ChangeCreated.voided_invoices`). */
+		voided_invoices?: Array<{ invoice_id: string; credit_note_id: string; previous_status: string | null }>;
+	}>;
 	/** Origen cotización: sus ítems (`quote_item_id` de `item_add` / `item_change`). */
 	quote_items?: Map<string, QuoteItemRow>;
 	/** `reactivate` rama c: los otros contratos del cliente (clasificación a nivel cliente, `classifyClientItem`, §9.1 #9). */
@@ -745,6 +755,11 @@ export type WriteOp =
 	| { kind: 'delete_line'; invoice_id: string; line_id: string }
 	| { kind: 'recompute_header'; invoice_id: string; cancel_if_empty: boolean; note: string }
 	| { kind: 'cancel_invoice'; invoice_id: string; note: string }
+	/**
+	 * `reactivate`: NC de la baja aún sin emisión electrónica que se retira (queda inactiva y Cancelada). Si era espejo completo, la emitida
+	 * que anulaba vuelve a su estado anterior (`restore`).
+	 */
+	| { kind: 'withdraw_credit_note'; credit_note_id: string; note: string; restore: { invoice_id: string; status: string } | null }
 	| { kind: 'create_invoices'; invoices: PreviewInvoice[]; fixed_rates: Array<number | null>; merge_into: Array<string | null> }
 	| {
 			kind: 'credit_note';
@@ -849,6 +864,23 @@ export const REOPEN_PERIOD_STEP = 'Reabrir el período en Configuración → Sis
 export const CONTRACT_CANCELLED = 'Cancelado';
 const REMOVAL_CATEGORIES = new Set(['CHURN', 'DOWNSELL']);
 const DELTA_CATEGORIES = new Set(['UPSELL', 'DOWNSELL']);
+
+/**
+ * `reactivate`: estado al que vuelve la emitida que anulaba una NC espejo completa de la baja (NC y emitida nacieron Canceladas, 12-10). Sale
+ * del evento de la baja (`voided_invoices.previous_status`); sin ese dato (bajas anteriores), Enviada si está en el ERP y si no Emitida (el
+ * job de vencidas y los pagos la llevan después a Vencida o Pagada). `null` si la NC no era espejo completo.
+ */
+export function voidedRestore(
+	ctx: Pick<ChangeContext, 'churn_events' | 'invoices'>,
+	creditNote: ChangeInvoiceRow
+): { invoice_id: string; status: string } | null {
+	if (creditNote.credit_type !== 'cancellation' || !creditNote.related_invoice_id) return null;
+	const recorded = (ctx.churn_events ?? []).flatMap((event) => event.voided_invoices ?? []).find((row) => row.credit_note_id === creditNote.id);
+	const original = ctx.invoices.find((row) => row.id === creditNote.related_invoice_id);
+	const fallback = original && (original.odoo_invoice_id || original.sent_to_odoo_at) ? 'Enviada' : 'Emitida';
+
+	return { invoice_id: creditNote.related_invoice_id, status: recorded?.previous_status || fallback };
+}
 
 // ------------------------------------------------------------------ helpers
 
@@ -5484,8 +5516,9 @@ export function planReactivate(ctx: ChangeContext, req: ContractChangeRequestDto
 			p.ops.push({ kind: 'update_item', item_id: item.id, set: { churn_date: null, churn_monthly_amount: null } });
 			p.itemsAfter.find((row) => row.id === item.id)!.churn_date = null;
 			p.adjusted.push(previewOf({ ...item, churn_date: null }));
-			// NC de la baja aún sin emisión electrónica (espejo de la emitida; nacen Emitida, o Por Emitir las previas): se
-			// cancelan; las ya emitidas electrónicamente quedan y sus días se vuelven a facturar.
+			// NC de la baja aún sin emisión electrónica (espejo de la emitida; nacen Emitida, o Por Emitir las previas; la espejo completa nace
+			// Cancelada con su emitida, 12-10): se retiran y, si era completa, la emitida vuelve a su estado anterior. Las ya emitidas
+			// electrónicamente quedan y sus días se vuelven a facturar.
 			for (const invoice of ctx.invoices.filter(
 				(row) => /^NC$/i.test(row.document_type ?? '') && creditNotePendingEmission(row) && row.is_active
 			)) {
@@ -5493,7 +5526,12 @@ export function planReactivate(ctx: ChangeContext, req: ContractChangeRequestDto
 
 				if (!own.length) continue;
 				if (own.length === invoice.lines.length) {
-					p.ops.push({ kind: 'cancel_invoice', invoice_id: invoice.id, note: `Cancelada: se revirtió la baja del ${churn}` });
+					p.ops.push({
+						kind: 'withdraw_credit_note',
+						credit_note_id: invoice.id,
+						note: `Retirada: se revirtió la baja del ${churn}`,
+						restore: voidedRestore(ctx, invoice),
+					});
 					p.cancelledInvoices.push({ id: invoice.id, invoice_number: invoice.invoice_number, issue_date: invoice.issue_date });
 				} else for (const line of own) p.deleteLine(invoice, line);
 				cancelledCreditNotes.add(invoice.id);
@@ -5502,7 +5540,7 @@ export function planReactivate(ctx: ChangeContext, req: ContractChangeRequestDto
 				(row) =>
 					/^NC$/i.test(row.document_type ?? '') &&
 					!creditNotePendingEmission(row) &&
-					row.status !== 'Cancelada' &&
+					(row.status !== 'Cancelada' || row.credit_type === 'cancellation') &&
 					row.is_active &&
 					row.lines.some((line) => line.contract_item_id === item.id && (line.billing_period_start ?? '') >= churn)
 			);

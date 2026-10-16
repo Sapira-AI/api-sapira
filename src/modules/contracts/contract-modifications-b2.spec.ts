@@ -687,7 +687,8 @@ describe('reactivate (§9.3.2, S2-8 / S3-9 / S5-7)', () => {
 		);
 
 		expect(plan.preview.reactivation!.map((entry) => entry.branch)).toEqual(['revert', 'revert']);
-		expect(ops(plan, 'cancel_invoice').map((op) => op.invoice_id)).toEqual(['nc-1']);
+		// Se retira (inactiva y Cancelada; antes `cancel_invoice`, que solo tocaba Por Emitir); era parcial: no hay emitida que devolver.
+		expect(ops(plan, 'withdraw_credit_note').map((op) => [op.credit_note_id, op.restore])).toEqual([['nc-1', null]]);
 		expect(codes(plan)).toContain('credit_notes_issued_kept');
 		// Soporte: la NC emitida descubrió 15–30 sep → línea proporcional (16/30 × 200); oct–dic completas para ambos.
 		const lines = plan.preview.invoices.created.flatMap((invoice) => invoice.lines);
@@ -727,8 +728,85 @@ describe('reactivate (§9.3.2, S2-8 / S3-9 / S5-7)', () => {
 			request({ type: 'reactivate' }, { effective_date: '2026-09-28', reason: 'ok' })
 		);
 
-		expect(ops(plan, 'cancel_invoice').map((op) => op.invoice_id)).toEqual(['nc-3']);
+		expect(ops(plan, 'withdraw_credit_note').map((op) => [op.credit_note_id, op.restore])).toEqual([['nc-3', null]]);
 		expect(codes(plan)).not.toContain('credit_notes_issued_kept');
+	});
+
+	// 12-10 (Domi): la NC espejo completa de la baja nace Cancelada con su emitida; al revertir la baja se retira y la emitida vuelve a su estado.
+	const fullMirror = (overrides: Partial<ChangeInvoiceRow> = {}): ChangeInvoiceRow => ({
+		...invoiceRow('09'),
+		id: 'nc-4',
+		document_type: 'NC',
+		status: 'Cancelada',
+		credit_type: 'cancellation',
+		related_invoice_id: 'inv-orig',
+		due_date: null,
+		invoice_number: null,
+		odoo_invoice_id: null,
+		sent_to_odoo_at: null,
+		lines: [
+			{
+				...invoiceRow('09').lines[0],
+				id: 'nc-4-lic',
+				invoice_id: 'nc-4',
+				subtotal: -1000,
+				billing_period_start: '2026-09-15',
+				billing_period_end: '2026-09-30',
+			},
+		],
+		...overrides,
+	});
+
+	it('(b3) NC espejo completa de la baja (Cancelada, sin folio): se retira y la emitida vuelve al estado que guardó el evento de la baja', () => {
+		const ctx = cancelled('2026-09-15');
+		const original = { ...invoiceRow('09'), id: 'inv-orig', status: 'Cancelada' };
+		const churnEvent = { id: 'ev-churn', event_type: 'CHURN', items_affected: [], effective_date: '2026-09-15', reversed: false };
+		const withEvent = planChange(
+			{
+				...ctx,
+				invoices: [...ctx.invoices, original, fullMirror()],
+				churn_events: [
+					...(ctx.churn_events ?? []),
+					{ ...churnEvent, voided_invoices: [{ invoice_id: 'inv-orig', credit_note_id: 'nc-4', previous_status: 'Pagada' }] },
+				],
+			},
+			request({ type: 'reactivate' }, { effective_date: '2026-09-28', reason: 'ok' })
+		);
+
+		expect(ops(withEvent, 'withdraw_credit_note').map((op) => [op.credit_note_id, op.restore])).toEqual([
+			['nc-4', { invoice_id: 'inv-orig', status: 'Pagada' }],
+		]);
+		// Sin el dato en el evento (bajas anteriores): Enviada si la emitida está en el ERP, si no Emitida.
+		const withoutEvent = planChange(
+			{ ...ctx, invoices: [...ctx.invoices, { ...original, odoo_invoice_id: 77 }, fullMirror()] },
+			request({ type: 'reactivate' }, { effective_date: '2026-09-28', reason: 'ok' })
+		);
+
+		expect(ops(withoutEvent, 'withdraw_credit_note').map((op) => op.restore)).toEqual([{ invoice_id: 'inv-orig', status: 'Enviada' }]);
+	});
+
+	it('(b4) NC espejo completa ya emitida (con folio) queda y avisa, aunque esté Cancelada', () => {
+		const ctx = cancelled('2026-09-15');
+		const plan = planChange(
+			{
+				...ctx,
+				// La emitida de septiembre quedó Cancelada con su NC (pareja cerrada).
+				invoices: [
+					...ctx.invoices.map((row) => (row.id === 'inv-09' ? { ...row, status: 'Cancelada' } : row)),
+					fullMirror({ invoice_number: '001999', odoo_invoice_id: 9, related_invoice_id: 'inv-09' }),
+				],
+			},
+			request({ type: 'reactivate' }, { effective_date: '2026-09-28', reason: 'ok' })
+		);
+
+		expect(ops(plan, 'withdraw_credit_note')).toEqual([]);
+		expect(codes(plan)).toContain('credit_notes_issued_kept');
+		// La NC ya existe en el facturador electrónico: no se retira; el período anulado se vuelve a facturar en una Por Emitir nueva (Domi 12-10).
+		const septLines = plan.preview.invoices.created
+			.flatMap((invoice) => invoice.lines)
+			.filter((line) => line.billing_period_start >= '2026-09-15' && line.billing_period_start <= '2026-09-30');
+
+		expect(septLines.length).toBeGreaterThan(0);
 	});
 
 	it('(c) mes cerrado → REACTIVATION nuevo desde la fecha efectiva al valor anterior; con otro contrato vigente del cliente es UPSELL', () => {

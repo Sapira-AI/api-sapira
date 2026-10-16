@@ -135,7 +135,11 @@ describe('buildItemGroups (ítem madre)', () => {
 
 	it('la cuenta separa grupos aunque el producto coincida', () => {
 		const groups = buildItemGroups(
-			[item({ id: 'a', account: 'Cuenta 1' }), item({ id: 'b', account: ' Cuenta 2 ' }), item({ id: 'c', account: 'Cuenta 1' })],
+			[
+				item({ id: 'a', account: 'Cuenta 1' }),
+				item({ id: 'b', account: ' Cuenta 2 ' }),
+				item({ id: 'c', account: 'Cuenta 1', categoria: 'UPSELL', related_item_id: 'a' }),
+			],
 			today
 		);
 
@@ -157,6 +161,48 @@ describe('buildItemGroups (ítem madre)', () => {
 		expect(groups.map((group) => group.product_name)).toEqual(['LICENCIA']);
 	});
 
+	describe('ítem madre por vínculo (Domi 12-10)', () => {
+		it('mismo producto + cuenta con madres sin relación (S04654: 9 a 130.000, 153.148,8 y 187.872) → un grupo por madre, marcados split', () => {
+			const groups = buildItemGroups(
+				[
+					item({ id: 'old-1', unit_price: 130000, end_date: '2026-06-30' }),
+					item({ id: 'r1', categoria: 'RENEWAL', renews_item_id: 'old-1', quantity: 9, monthly_price: 1170000, start_date: '2026-07-01' }),
+					item({ id: 'r2', categoria: 'RENEWAL', quantity: 9, monthly_price: 1378339.2, start_date: '2026-07-01' }),
+					item({ id: 'r3', categoria: 'RENEWAL', quantity: 9, monthly_price: 1690848, start_date: '2026-07-01' }),
+					item({
+						id: 'down',
+						categoria: 'DOWNSELL',
+						related_item_id: 'r2',
+						quantity: 7,
+						monthly_price: -1072041.6,
+						start_date: '2026-07-15',
+					}),
+				],
+				today
+			);
+
+			expect(groups.map((group) => [group.root_item_id, group.split, group.quantity, group.mrr])).toEqual(
+				expect.arrayContaining([
+					['old-1', true, 9, 1170000],
+					['r2', true, 2, 306297.6],
+					['r3', true, 9, 1690848],
+				])
+			);
+			expect(groups.find((group) => group.root_item_id === 'old-1')!.item_ids).toEqual(['old-1', 'r1']);
+			expect(new Set(groups.map((group) => group.key)).size).toBe(3);
+		});
+
+		it('con una sola madre el grupo y su clave son los de siempre; un upsell sin vínculo va con la madre más reciente', () => {
+			const groups = buildItemGroups(
+				[item({ id: 'base' }), item({ id: 'orphan', categoria: 'UPSELL', quantity: 2, monthly_price: 20, start_date: '2026-05-01' })],
+				today
+			);
+
+			expect(groups).toHaveLength(1);
+			expect(groups[0]).toMatchObject({ key: 'LICENCIA|', split: false, root_item_id: 'base', quantity: 3 });
+		});
+	});
+
 	it('usa el fin más próximo del ámbito y cruza con la próxima factura por emitir', () => {
 		const [group] = buildItemGroups(
 			[
@@ -168,7 +214,7 @@ describe('buildItemGroups (ítem madre)', () => {
 					monthly_price: 0,
 					billing_period_price: 0,
 					end_date: '2026-12-31',
-					related_item_id: 'x',
+					related_item_id: 'base',
 				}),
 			],
 			today,
@@ -234,7 +280,7 @@ describe('buildItemGroups (ítem madre)', () => {
 					item({ id: 'up', categoria: 'UPSELL', related_item_id: 'base', start_date: '2026-05-01' }),
 					item({ id: 'ended', end_date: '2026-03-31' }),
 					item({ id: 'other', product_name: 'MIXTO' }),
-					item({ id: 'plain', product_name: 'MIXTO' }),
+					item({ id: 'plain', product_name: 'MIXTO', categoria: 'UPSELL', related_item_id: 'other' }),
 				],
 				today,
 				[],

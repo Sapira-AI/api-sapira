@@ -26,7 +26,7 @@ import { ActivateContractsDto, BulkContractIdsDto, BulkContractSettingsDto } fro
 import { ConsumptionBulkDto, QueryConsumptionPendingDto, UpsertConsumptionDto } from './dtos/consumption.dto';
 import { ContractChangeRequestDto } from './dtos/contract-changes.dto';
 import { ConsolidateInvoicesDto, UndoConsolidationDto } from './dtos/contract-invoice-consolidation.dto';
-import { DiscountCreditNoteDto, VoidInvoiceDto } from './dtos/contract-invoice-credit-notes.dto';
+import { DiscountCreditNoteDto, RegisterCreditNoteFolioDto, VoidInvoiceDto } from './dtos/contract-invoice-credit-notes.dto';
 import {
 	PreviewDescriptionTemplateDto,
 	SaveDescriptionTemplateDto,
@@ -1310,6 +1310,31 @@ export class ContractsController {
 		@Request() req: AuthRequest
 	) {
 		return await this.contractInvoiceVoidService.createCreditNote(id, invoiceId, body, holdingId, authIdOf(req));
+	}
+
+	@Post(':id/invoices/:invoiceId/credit-note-folio')
+	@HttpCode(200)
+	@ApiOperation({
+		summary: 'Registrar el folio de una NC emitida a mano',
+		description:
+			'`{ invoice_number, issue_date? }`. Solo NC/ND pendientes de emisión electrónica (sin folio ni vínculo con el ERP): guarda el folio y la fecha sin cambiar el estado (la NC de anulación sigue Cancelada con su factura) y registra INVOICE_CREDIT_NOTE_FOLIO_REGISTERED. Sirve para holdings sin ERP y para NC emitidas en el ERP sin vínculo',
+	})
+	@ApiParam(CONTRACT_PARAM)
+	@ApiParam({ name: 'invoiceId', description: 'Id de la nota de crédito' })
+	@ApiResponse({ status: 200, description: '`applied`, `credit_note_id`, `credit_note_document`, `event_id`, `invoice` (detalle de la NC)' })
+	@ApiResponse({
+		status: 409,
+		description:
+			'`credit_note_not_pending` (ya tiene folio), `not_a_credit_note`, o `code: blocked` con credit_note_number_taken · credit_note_date_before_invoice · credit_note_date_in_future',
+	})
+	async registerCreditNoteFolio(
+		@Param('id') id: string,
+		@Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
+		@Body() body: RegisterCreditNoteFolioDto,
+		@HoldingId() holdingId: string,
+		@Request() req: AuthRequest
+	) {
+		return await this.contractInvoiceVoidService.registerCreditNoteFolio(id, invoiceId, body, holdingId, authIdOf(req));
 	}
 
 	@Post(':id/invoices/:invoiceId/partial-by-po/preview')

@@ -1052,7 +1052,7 @@
 		{
 			"name": "public.app_notification_recipients",
 			"rls_enabled": true,
-			"rows": 388,
+			"rows": 401,
 			"columns": [
 				{
 					"name": "id",
@@ -1155,7 +1155,7 @@
 		{
 			"name": "public.app_notifications",
 			"rls_enabled": true,
-			"rows": 52,
+			"rows": 71,
 			"columns": [
 				{
 					"name": "id",
@@ -2980,7 +2980,7 @@
 		{
 			"name": "public.client_activity_notes",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 1,
 			"columns": [
 				{
 					"name": "id",
@@ -6176,6 +6176,17 @@
 					]
 				},
 				{
+					"name": "onboarding_events_holding_id_fkey",
+					"source_table": "public.onboarding_events",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
 					"name": "overdue_check_log_holding_id_fkey",
 					"source_table": "public.overdue_check_log",
 					"source_columns": [
@@ -8805,7 +8816,7 @@
 		{
 			"name": "public.contract_items",
 			"rls_enabled": true,
-			"rows": 1223,
+			"rows": 1235,
 			"columns": [
 				{
 					"name": "id",
@@ -9460,7 +9471,7 @@
 		{
 			"name": "public.contract_lifecycle_events",
 			"rls_enabled": true,
-			"rows": 350,
+			"rows": 757,
 			"columns": [
 				{
 					"name": "id",
@@ -12123,7 +12134,7 @@
 		{
 			"name": "public.exchange_rates_monthly_avg",
 			"rls_enabled": true,
-			"rows": 342,
+			"rows": 388,
 			"columns": [
 				{
 					"name": "id",
@@ -13281,6 +13292,17 @@
 						"updatable"
 					],
 					"default_value": "4"
+				},
+				{
+					"name": "metrics_history_start",
+					"data_type": "date",
+					"format": "date",
+					"type": "date",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Inicio de la historia en Métricas: primer mes que se muestra (día 1). NULL = desde el primer dato"
 				}
 			],
 			"primary_keys": [
@@ -13611,7 +13633,7 @@
 		{
 			"name": "public.invoice_adjustments",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 1,
 			"columns": [
 				{
 					"name": "id",
@@ -13981,7 +14003,7 @@
 		{
 			"name": "public.invoice_consolidation_rules",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 3,
 			"columns": [
 				{
 					"name": "id",
@@ -14278,7 +14300,7 @@
 		{
 			"name": "public.invoice_items",
 			"rls_enabled": true,
-			"rows": 11955,
+			"rows": 11988,
 			"columns": [
 				{
 					"name": "id",
@@ -15997,7 +16019,7 @@
 		{
 			"name": "public.invoices",
 			"rls_enabled": true,
-			"rows": 9905,
+			"rows": 9961,
 			"columns": [
 				{
 					"name": "id",
@@ -16899,7 +16921,7 @@
 		{
 			"name": "public.invoices_legacy",
 			"rls_enabled": true,
-			"rows": 9294,
+			"rows": 9348,
 			"columns": [
 				{
 					"name": "id",
@@ -17168,6 +17190,17 @@
 						"updatable"
 					],
 					"comment": "ID de la factura en Odoo. Usado para mapear líneas de factura desde Odoo hacia Sapira"
+				},
+				{
+					"name": "import_batch_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Lote de importación de facturas previas (módulo onboarding): permite revertir lo importado en una pasada"
 				}
 			],
 			"primary_keys": [
@@ -18013,6 +18046,17 @@
 						"updatable"
 					],
 					"comment": "User who marked this record as skip_activation"
+				},
+				{
+					"name": "skip_reason_code",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Motivo normalizado del skip_activation: churn (fue baja) | duplicate | error (quitada, no cuenta). El texto libre queda en skip_activation_reason"
 				}
 			],
 			"primary_keys": [
@@ -18101,7 +18145,7 @@
 		{
 			"name": "public.notification_email_log",
 			"rls_enabled": true,
-			"rows": 31,
+			"rows": 79,
 			"columns": [
 				{
 					"name": "id",
@@ -19273,6 +19317,130 @@
 						"sapira_product_id"
 					],
 					"target_table": "public.products",
+					"target_columns": [
+						"id"
+					]
+				}
+			]
+		},
+		{
+			"name": "public.onboarding_events",
+			"rls_enabled": true,
+			"rows": 0,
+			"columns": [
+				{
+					"name": "id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					],
+					"default_value": "gen_random_uuid()"
+				},
+				{
+					"name": "holding_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "type",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"comment": "Tipo de cambio (history_linked, previous_invoices_imported, quick_start_applied, …)"
+				},
+				{
+					"name": "line_key",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Línea de MRR histórico: client_id|product_name|contract_currency (sin codificar)"
+				},
+				{
+					"name": "entity_type",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "entity_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "payload",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'{}'::jsonb"
+				},
+				{
+					"name": "actor_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "created_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				}
+			],
+			"primary_keys": [
+				"id"
+			],
+			"foreign_key_constraints": [
+				{
+					"name": "onboarding_events_actor_id_fkey",
+					"source_table": "public.onboarding_events",
+					"source_columns": [
+						"actor_id"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "onboarding_events_holding_id_fkey",
+					"source_table": "public.onboarding_events",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
 					"target_columns": [
 						"id"
 					]
@@ -20713,7 +20881,7 @@
 		{
 			"name": "public.quote_events",
 			"rls_enabled": true,
-			"rows": 1,
+			"rows": 10,
 			"columns": [
 				{
 					"name": "id",
@@ -22166,7 +22334,7 @@
 		{
 			"name": "public.revenue_schedule_monthly",
 			"rls_enabled": true,
-			"rows": 21238,
+			"rows": 21188,
 			"columns": [
 				{
 					"name": "id",
@@ -23030,7 +23198,7 @@
 		{
 			"name": "public.salesforce_accounts_stg",
 			"rls_enabled": true,
-			"rows": 122,
+			"rows": 130,
 			"columns": [
 				{
 					"name": "id",
@@ -23581,7 +23749,7 @@
 		{
 			"name": "public.salesforce_line_items_stg",
 			"rls_enabled": true,
-			"rows": 181,
+			"rows": 196,
 			"columns": [
 				{
 					"name": "id",
@@ -24180,7 +24348,7 @@
 		{
 			"name": "public.salesforce_opportunities_stg",
 			"rls_enabled": true,
-			"rows": 164,
+			"rows": 179,
 			"columns": [
 				{
 					"name": "id",
@@ -26153,7 +26321,7 @@
 		{
 			"name": "public.stripe_customers_bigquery",
 			"rls_enabled": true,
-			"rows": 27675,
+			"rows": 27677,
 			"columns": [
 				{
 					"name": "id",
@@ -26680,7 +26848,7 @@
 		{
 			"name": "public.stripe_subscriptions_stg",
 			"rls_enabled": true,
-			"rows": 490,
+			"rows": 491,
 			"columns": [
 				{
 					"name": "id",
@@ -26822,7 +26990,7 @@
 		{
 			"name": "public.stripe_sync_jobs",
 			"rls_enabled": true,
-			"rows": 216,
+			"rows": 224,
 			"columns": [
 				{
 					"name": "id",
@@ -26936,7 +27104,7 @@
 		{
 			"name": "public.subscription_items",
 			"rls_enabled": true,
-			"rows": 458,
+			"rows": 461,
 			"columns": [
 				{
 					"name": "id",
@@ -27300,7 +27468,7 @@
 		{
 			"name": "public.subscriptions",
 			"rls_enabled": true,
-			"rows": 435,
+			"rows": 436,
 			"columns": [
 				{
 					"name": "id",
@@ -27854,7 +28022,7 @@
 		{
 			"name": "public.user_access_events",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 2,
 			"columns": [
 				{
 					"name": "id",
@@ -27968,7 +28136,7 @@
 		{
 			"name": "public.user_holdings",
 			"rls_enabled": true,
-			"rows": 38,
+			"rows": 40,
 			"columns": [
 				{
 					"name": "user_id",
@@ -28054,7 +28222,7 @@
 		{
 			"name": "public.user_notification_preferences",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 46,
 			"columns": [
 				{
 					"name": "id",
@@ -28289,7 +28457,7 @@
 		{
 			"name": "public.users",
 			"rls_enabled": true,
-			"rows": 28,
+			"rows": 30,
 			"columns": [
 				{
 					"name": "id",
@@ -28920,6 +29088,17 @@
 					"source_table": "public.odoo_connections",
 					"source_columns": [
 						"user_id"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "onboarding_events_actor_id_fkey",
+					"source_table": "public.onboarding_events",
+					"source_columns": [
+						"actor_id"
 					],
 					"target_table": "public.users",
 					"target_columns": [

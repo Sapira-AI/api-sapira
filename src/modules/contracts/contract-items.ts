@@ -114,6 +114,13 @@ export interface ItemGroup {
 	start_date: string | null;
 	end_date: string | null;
 	item_ids: string[];
+	/**
+	 * Ítem madre del grupo (raíz de `related_item_id` / `renews_item_id`). Un mismo producto + cuenta con varias madres sin relación entre sí
+	 * (p. ej. 9 a 130.000, 9 a 153.148,8 y 9 a 187.872) forma un grupo por madre (`split`); con una sola, el grupo y su `key` son los de siempre.
+	 */
+	root_item_id: string;
+	/** El producto + cuenta tiene otros grupos vigentes (varias madres): el front los distingue por cantidad y precio. */
+	split: boolean;
 	next_invoice: { id: string; issue_date: string | null; amount: number; matches: boolean } | null;
 	/** Precio común de los ítems vigentes del grupo (todos con el mismo `price.id`); si difieren o no tienen, `null`. */
 	price: ItemPrice | null;
@@ -157,7 +164,8 @@ type GroupableItem = Pick<
 	| 'churn_date'
 	| 'related_item_id'
 	| 'currency'
->;
+> &
+	Partial<Pick<ContractItem, 'renews_item_id'>>;
 
 const num = (value: unknown) => Number(value) || 0;
 /** Ajuste (delta) = categoría UPSELL, DOWNSELL o el espejo CHURN de una baja total. */
@@ -208,9 +216,46 @@ export const buildItemGroups = <T extends GroupableItem>(
 		byKey.get(key)!.push(item);
 	}
 
+	// Ítem madre (Domi 12-10): cada ítem cuelga de su raíz siguiendo `related_item_id` (ajustes) y `renews_item_id` (renovaciones). Un
+	// upsell/downsell sin vínculo (dato antiguo) va con la madre más reciente de su producto + cuenta, como siempre.
+	const rootOf = (item: T): string => {
+		let current: T = item;
+
+		for (let depth = 0; depth < 50; depth += 1) {
+			const parentId = current.related_item_id ?? current.renews_item_id ?? null;
+			const parent = parentId ? byId.get(parentId) : undefined;
+
+			if (!parent || parent.id === item.id) break;
+			current = parent;
+		}
+
+		return current.id;
+	};
+	const subgroups: Array<{ key: string; items: T[]; root: string; split: boolean }> = [];
+
+	for (const [key, bucket] of byKey) {
+		const roots = new Map(bucket.map((item) => [item.id, rootOf(item)]));
+		const latestBase = bucket
+			.filter((item) => !isDelta(item) && isCurrent(item, today))
+			.sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''))[0];
+
+		// Sin vínculo, o con uno a un ítem que no está en el contrato (otro contrato o borrado): huérfano.
+		for (const item of bucket) if (isDelta(item) && roots.get(item.id) === item.id && latestBase) roots.set(item.id, roots.get(latestBase.id)!);
+		const byRoot = new Map<string, T[]>();
+
+		for (const item of bucket) byRoot.set(roots.get(item.id)!, [...(byRoot.get(roots.get(item.id)!) ?? []), item]);
+		const live = [...byRoot.entries()].filter(([, members]) => members.some((item) => isCurrent(item, today)));
+
+		if (live.length <= 1) {
+			subgroups.push({ key, items: bucket, root: live[0]?.[0] ?? bucket[0].id, split: false });
+			continue;
+		}
+		for (const [root, members] of live) subgroups.push({ key: `${key}#${root}`, items: members, root, split: true });
+	}
+
 	const groups: ItemGroup[] = [];
 
-	for (const [key, groupItems] of byKey) {
+	for (const { key, items: groupItems, root, split } of subgroups) {
 		const current = groupItems.filter((item) => isCurrent(item, today));
 
 		if (current.length === 0) continue;
@@ -271,6 +316,8 @@ export const buildItemGroups = <T extends GroupableItem>(
 			start_date: startDates.length > 0 ? startDates.sort()[0] : null,
 			end_date: endDates.length > 0 ? endDates.sort()[0] : null,
 			item_ids: groupItems.map((item) => item.id),
+			root_item_id: root,
+			split,
 			next_invoice: nextInvoice,
 			price: shared?.price ?? null,
 			metric: shared?.metric ?? null,

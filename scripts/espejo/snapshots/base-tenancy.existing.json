@@ -1486,11 +1486,26 @@
     "precision": null,
     "scale": null,
     "array": false
+   },
+   "metrics_history_start": {
+    "type": "date",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
    }
   },
   "uniques": {},
   "indices": {},
   "checks": [
+   {
+    "name": "holding_settings_metrics_history_start_check",
+    "expression": "\"metrics_history_start\" IS NULL OR date_trunc('month', \"metrics_history_start\"::timestamp)::date = \"metrics_history_start\""
+   },
    {
     "name": "holding_settings_quote_number_width_check",
     "expression": "\"quote_number_width\" >= 1 AND \"quote_number_width\" <= 8"

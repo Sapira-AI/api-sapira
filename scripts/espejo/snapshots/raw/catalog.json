@@ -21331,6 +21331,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": null
+				},
+				{
+					"column": "metrics_history_start",
+					"attnum": 17,
+					"data_type": "date",
+					"udt": "date",
+					"type": "date",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Inicio de la historia en Métricas: primer mes que se muestra (día 1). NULL = desde el primer dato"
 				}
 			],
 			"constraints": [
@@ -21360,6 +21376,15 @@
 					"deferred": false,
 					"ondelete": "c",
 					"onupdate": "a"
+				},
+				{
+					"name": "holding_settings_metrics_history_start_check",
+					"type": "c",
+					"def": "CHECK (((metrics_history_start IS NULL) OR ((date_trunc('month'::text, (metrics_history_start)::timestamp without time zone))::date = metrics_history_start)))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
 				},
 				{
 					"name": "holding_settings_pkey",
@@ -28344,6 +28369,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "ID de la factura en Odoo. Usado para mapear líneas de factura desde Odoo hacia Sapira"
+				},
+				{
+					"column": "import_batch_id",
+					"attnum": 28,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Lote de importación de facturas previas (módulo onboarding): permite revertir lo importado en una pasada"
 				}
 			],
 			"constraints": [
@@ -28493,6 +28534,12 @@
 				{
 					"name": "idx_invoices_legacy_holding",
 					"def": "CREATE INDEX idx_invoices_legacy_holding ON public.invoices_legacy USING btree (holding_id)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_invoices_legacy_import_batch_id",
+					"def": "CREATE INDEX idx_invoices_legacy_import_batch_id ON public.invoices_legacy USING btree (import_batch_id) WHERE (import_batch_id IS NOT NULL)",
 					"unique": false,
 					"primary": false
 				},
@@ -29898,6 +29945,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "User who marked this record as skip_activation"
+				},
+				{
+					"column": "skip_reason_code",
+					"attnum": 46,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Motivo normalizado del skip_activation: churn (fue baja) | duplicate | error (quitada, no cuenta). El texto libre queda en skip_activation_reason"
 				}
 			],
 			"constraints": [
@@ -30004,6 +30067,15 @@
 					"name": "mrr_legacy_pkey",
 					"type": "p",
 					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "mrr_legacy_skip_reason_code_check",
+					"type": "c",
+					"def": "CHECK (((skip_reason_code IS NULL) OR (skip_reason_code = ANY (ARRAY['churn'::text, 'duplicate'::text, 'error'::text]))))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -32509,6 +32581,225 @@
 			],
 			"triggers": [],
 			"policies": []
+		},
+		"onboarding_events": {
+			"comment": "Registro de cambios del onboarding de datos históricos (MRR histórico, facturas previas, arranque rápido). Solo la API escribe",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "type",
+					"attnum": 3,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Tipo de cambio (history_linked, previous_invoices_imported, quick_start_applied, …)"
+				},
+				{
+					"column": "line_key",
+					"attnum": 4,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Línea de MRR histórico: client_id|product_name|contract_currency (sin codificar)"
+				},
+				{
+					"column": "entity_type",
+					"attnum": 5,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "entity_id",
+					"attnum": 6,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "payload",
+					"attnum": 7,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'{}'::jsonb",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "actor_id",
+					"attnum": 8,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_at",
+					"attnum": 9,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "onboarding_events_actor_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
+				},
+				{
+					"name": "onboarding_events_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "onboarding_events_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "idx_onboarding_events_holding_created",
+					"def": "CREATE INDEX idx_onboarding_events_holding_created ON public.onboarding_events USING btree (holding_id, created_at)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_onboarding_events_holding_entity",
+					"def": "CREATE INDEX idx_onboarding_events_holding_entity ON public.onboarding_events USING btree (holding_id, entity_id) WHERE (entity_id IS NOT NULL)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_onboarding_events_holding_line",
+					"def": "CREATE INDEX idx_onboarding_events_holding_line ON public.onboarding_events USING btree (holding_id, line_key) WHERE (line_key IS NOT NULL)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "onboarding_events_pkey",
+					"def": "CREATE UNIQUE INDEX onboarding_events_pkey ON public.onboarding_events USING btree (id)",
+					"unique": true,
+					"primary": true
+				}
+			],
+			"triggers": [],
+			"policies": [
+				{
+					"name": "holding_access_onboarding_events",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "ALL",
+					"qual": "(holding_id = get_current_user_holding_id())",
+					"with_check": null
+				}
+			]
 		},
 		"overdue_check_log": {
 			"comment": "Registro de ejecuciones de la verificación automática de facturas vencidas. \n   Tabla de auditoría del sistema con RLS habilitado. \n   holding_id NULL indica ejecución global que afecta múltiples holdings.",
@@ -60877,6 +61168,120 @@
 				"privilege": "UPDATE"
 			}
 		],
+		"onboarding_events": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
 		"overdue_check_log": [
 			{
 				"grantee": "anon",
@@ -69494,7 +69899,7 @@
 		{
 			"tipo": "tabla",
 			"firma": "anon:DELETE, anon:INSERT, anon:REFERENCES, anon:SELECT, anon:TRIGGER, anon:TRUNCATE, anon:UPDATE, authenticated:DELETE, authenticated:INSERT, authenticated:REFERENCES, authenticated:SELECT, authenticated:TRIGGER, authenticated:TRUNCATE, authenticated:UPDATE, postgres:DELETE, postgres:INSERT, postgres:REFERENCES, postgres:SELECT, postgres:TRIGGER, postgres:TRUNCATE, postgres:UPDATE, service_role:DELETE, service_role:INSERT, service_role:REFERENCES, service_role:SELECT, service_role:TRIGGER, service_role:TRUNCATE, service_role:UPDATE",
-			"objetos": 148,
+			"objetos": 149,
 			"ejemplos": [
 				"accounting_period_cutoff",
 				"accounting_period_events",

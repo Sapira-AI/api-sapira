@@ -18,6 +18,7 @@ import {
 	unconvertedSql,
 } from './metrics-data.service';
 import { addMonths, currentMonth, type Month, monthStart, resolveRange } from './metrics-period';
+import { legacyRemovedSql } from './mrr-historico';
 import { balancesAt, forwardSchedule, indexByItem, type JournalAccount, journalMonths, type RevenueItemMonth, rollforward } from './revenue-balances';
 import { NOT_PENDING_RENEWAL, notPendingRenewalOf } from './rsm-momentum';
 
@@ -706,7 +707,7 @@ export class RevenueMetricsService {
 				`WITH legacy_end AS (
 					SELECT m.client_id, MAX(m.period_month) AS last_month
 					FROM mrr_legacy m
-					WHERE m.holding_id = $1 AND COALESCE(m.is_recurring, false) AND m.migrated_to_contract_id IS NULL
+					WHERE m.holding_id = $1 AND COALESCE(m.is_recurring, false) AND m.migrated_to_contract_id IS NULL AND NOT ${legacyRemovedSql()}
 					GROUP BY m.client_id
 				), first_contract AS (
 					SELECT c.client_id, c.id, c.contract_number, MIN(r.period_month) AS first_month
@@ -775,7 +776,7 @@ export class RevenueMetricsService {
 				type: 'legacy_unlinked',
 				severity: 'warning',
 				message:
-					'El legacy del cliente termina el mes anterior al inicio de este contrato y no están vinculados: Métricas lo ve como baja + nuevo',
+					'El MRR histórico del cliente termina el mes anterior al inicio de este contrato y no están empalmados: Métricas lo ve como baja + nuevo',
 				contract_id: str(row.contract_id),
 				contract_number: str(row.contract_number),
 				client_name: str(row.client_name),

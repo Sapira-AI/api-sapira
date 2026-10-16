@@ -28,6 +28,10 @@ este repo ([GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md)).
 4. **Pre-onboarding y prueba guiada** (propuesta en discusión 25-09): sandbox guiado en la demo,
    acuerdo de evaluación clickwrap, propuesta en 72h desde sizing declarado, calculadora en la web →
    [`docs/v2-rediseno/spec-preonboarding-prueba-guiada.md`](docs/v2-rediseno/spec-preonboarding-prueba-guiada.md).
+5. **Onboarding de datos históricos y MRR histórico** (aprobada 13-10): arranque rápido desde la última factura, bandeja
+   de MRR histórico con empalme sin SQL, facturas previas como evidencia y cobranza, motor único de import; nace en
+   `/lab/onboarding` y se publica en Administración › Datos históricos →
+   [`docs/v2-rediseno/spec-onboarding-y-mrr-historico-v2.md`](docs/v2-rediseno/spec-onboarding-y-mrr-historico-v2.md).
 
 ## 📋 Las fases (los 7 pasos del plan del 21-08, tachados según avance)
 

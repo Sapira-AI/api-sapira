@@ -2,7 +2,7 @@
  "invoices_legacy": {
   "name": "public.invoices_legacy",
   "rls_enabled": true,
-  "rows": 9294,
+  "rows": 9348,
   "columns": [
    {
     "name": "id",
@@ -271,6 +271,17 @@
      "updatable"
     ],
     "comment": "ID de la factura en Odoo. Usado para mapear líneas de factura desde Odoo hacia Sapira"
+   },
+   {
+    "name": "import_batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Lote de importación de facturas previas (módulo onboarding): permite revertir lo importado en una pasada"
    }
   ],
   "primary_keys": [
@@ -1351,6 +1362,17 @@
      "updatable"
     ],
     "comment": "User who marked this record as skip_activation"
+   },
+   {
+    "name": "skip_reason_code",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Motivo normalizado del skip_activation: churn (fue baja) | duplicate | error (quitada, no cuenta). El texto libre queda en skip_activation_reason"
    }
   ],
   "primary_keys": [
@@ -1430,6 +1452,130 @@
      "migrated_to_contract_id"
     ],
     "target_table": "public.contracts",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "onboarding_events": {
+  "name": "public.onboarding_events",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "type",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Tipo de cambio (history_linked, previous_invoices_imported, quick_start_applied, …)"
+   },
+   {
+    "name": "line_key",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Línea de MRR histórico: client_id|product_name|contract_currency (sin codificar)"
+   },
+   {
+    "name": "entity_type",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "entity_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "payload",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb"
+   },
+   {
+    "name": "actor_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "onboarding_events_actor_id_fkey",
+    "source_table": "public.onboarding_events",
+    "source_columns": [
+     "actor_id"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "onboarding_events_holding_id_fkey",
+    "source_table": "public.onboarding_events",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
     "target_columns": [
      "id"
     ]

@@ -214,6 +214,14 @@
     "where": null
    },
    {
+    "name": "idx_invoices_legacy_import_batch_id",
+    "cols": [
+     "import_batch_id"
+    ],
+    "unique": false,
+    "where": "import_batch_id IS NOT NULL"
+   },
+   {
     "name": "idx_invoices_legacy_issue_date",
     "cols": [
      "issue_date"
@@ -799,6 +807,11 @@
     ]
    },
    {
+    "name": "mrr_legacy_skip_reason_code_check",
+    "type": "c",
+    "expr": "(skip_reason_code IS NULL) OR (skip_reason_code = ANY (ARRAY['churn'::text, 'duplicate'::text, 'error'::text]))"
+   },
+   {
     "name": "mrr_legacy_split_index_check",
     "type": "c",
     "expr": "split_index > 0"
@@ -968,6 +981,80 @@
      "public"
     ],
     "cmd": "SELECT",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "onboarding_events": {
+  "comment": "Registro de cambios del onboarding de datos históricos (MRR histórico, facturas previas, arranque rápido). Solo la API escribe",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "onboarding_events_actor_id_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "onboarding_events_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "onboarding_events_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_onboarding_events_holding_created",
+    "cols": [
+     "holding_id",
+     "created_at"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_onboarding_events_holding_entity",
+    "cols": [
+     "holding_id",
+     "entity_id"
+    ],
+    "unique": false,
+    "where": "entity_id IS NOT NULL"
+   },
+   {
+    "name": "idx_onboarding_events_holding_line",
+    "cols": [
+     "holding_id",
+     "line_key"
+    ],
+    "unique": false,
+    "where": "line_key IS NOT NULL"
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "holding_access_onboarding_events (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "holding_access_onboarding_events",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "ALL",
     "qual": "(holding_id = get_current_user_holding_id())",
     "with_check": null
    }

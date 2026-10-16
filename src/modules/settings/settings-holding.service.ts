@@ -4,7 +4,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { DataSource } from 'typeorm';
 
 import { accountsCompleteSql } from '@/core/utils/account-mappings';
-import { isValidTimezone, loadHoldingPreferences, nextQuoteNumber } from '@/core/utils/holding-preferences';
+import { isValidTimezone, loadHoldingPreferences, loadMetricsHistoryStart, nextQuoteNumber } from '@/core/utils/holding-preferences';
 import { validationException } from '@/core/utils/validation-errors';
 import { withApiWriter } from '@/modules/contracts/api-writer';
 import { todayFor } from '@/modules/contracts/business-date';
@@ -137,17 +137,19 @@ export class SettingsHoldingService {
 	}
 
 	private async readPreferences(holdingId: string) {
-		const [[row], runtime] = await Promise.all([
+		const [[row], runtime, metricsHistoryStart] = await Promise.all([
 			this.dataSource.query(`SELECT system_currency, fx_system_policy FROM holding_settings WHERE holding_id = $1`, [holdingId]) as Promise<
 				Row[]
 			>,
 			loadHoldingPreferences(this.dataSource, holdingId),
+			loadMetricsHistoryStart(this.dataSource, holdingId),
 		]);
 
 		return {
 			system_currency: String(row?.system_currency ?? DEFAULT_PREFERENCES.system_currency),
 			fx_system_policy: String(row?.fx_system_policy ?? DEFAULT_PREFERENCES.fx_system_policy),
 			...runtime,
+			metrics_history_start: metricsHistoryStart,
 		};
 	}
 
@@ -171,6 +173,8 @@ export class SettingsHoldingService {
 			renewal_overdue_every_days: rest.renewal_overdue_every_days,
 			renewal_reminder_ladder: reminderLadder(rest.auto_renewal_notice_days, rest.renewal_reminder_days),
 			quote_numbering: { ...numbering, next_number_preview: await nextQuoteNumber(this.dataSource, holdingId, numbering, year) },
+			// Onboarding §3.4: primer mes que muestran Métricas (`YYYY-MM`) o null (desde el primer dato).
+			metrics_history_start: rest.metrics_history_start,
 		};
 	}
 
@@ -230,6 +234,14 @@ export class SettingsHoldingService {
 				next.quote_numbering.width,
 			]
 		);
+		// Onboarding §3.4: sentencia aparte y solo si viene en el body, para que el resto de las preferencias siga guardándose aunque la
+		// migración `1791900000000-OnboardingDatosHistoricos` (columna `metrics_history_start`) aún no esté aplicada.
+		if (dto.metrics_history_start !== undefined) {
+			await this.dataSource.query(`UPDATE holding_settings SET metrics_history_start = $2::date, updated_at = now() WHERE holding_id = $1`, [
+				holdingId,
+				dto.metrics_history_start ? `${dto.metrics_history_start}-01` : null,
+			]);
+		}
 
 		return this.getPreferences(holdingId);
 	}

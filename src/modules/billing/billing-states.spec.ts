@@ -94,6 +94,12 @@ describe('estados derivados (spec §3)', () => {
 	it('electronic_state: NC pendiente, emitida vía ERP o externa, PE automática atrasada, anulada y sin cobro', () => {
 		expect(electronicStateOf(issued({ document_type: 'NC', invoice_number: null }), TODAY)).toBe('pending_emission');
 		expect(electronicStateOf(issued({ document_type: 'NC', odoo_invoice_id: 5 }), TODAY)).toBe('issued_erp');
+		// NC de anulación de la API: nace Cancelada (12-10) y su emisión sigue el folio; una Cancelada del front anterior (con vencimiento) es anulada.
+		const voiding = { document_type: 'NC', status: 'Cancelada', credit_type: 'cancellation', due_date: null } as const;
+
+		expect(electronicStateOf(issued({ ...voiding, invoice_number: null }), TODAY)).toBe('pending_emission');
+		expect(electronicStateOf(issued({ ...voiding, invoice_number: '001910', odoo_invoice_id: 200021 }), TODAY)).toBe('issued_erp');
+		expect(electronicStateOf(issued({ ...voiding, due_date: '2026-06-30', invoice_number: null }), TODAY)).toBe('voided');
 		expect(electronicStateOf(issued({ issued_externally: true, odoo_invoice_id: 5 }), TODAY)).toBe('issued_external');
 		expect(electronicStateOf(issued({ odoo_invoice_id: 5 }), TODAY)).toBe('issued_erp');
 		expect(electronicStateOf(issued({ status: 'Por Emitir', auto_invoice: true, issue_date: '2026-09-28' }), TODAY)).toBe('pending_emission');

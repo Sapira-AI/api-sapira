@@ -281,6 +281,10 @@ export function invoicesCte(
 				WHEN b.document_kind <> 'invoice' OR NOT b.has_erp_integration OR NOT b.has_erp_partner THEN 'not_applicable'
 				ELSE 'none' END AS erp_state,
 			CASE WHEN b.voided THEN 'voided'
+				-- NC de anulación de la API (nace Cancelada con su factura, sin vencimiento; 12-10): su emisión sigue el folio, no el estado.
+				WHEN b.document_kind <> 'invoice' AND b.status = '${CANCELLED_STATUS}' AND b.credit_type = 'cancellation' AND b.due_date IS NULL THEN (CASE
+					WHEN NOT ${linked} AND COALESCE(TRIM(b.invoice_number), '') = '' THEN 'pending_emission'
+					WHEN ${linked} THEN 'issued_erp' ELSE 'issued_external' END)
 				WHEN b.status = '${CANCELLED_STATUS}' THEN (CASE WHEN b.no_charge THEN 'not_issued' ELSE 'voided' END)
 				WHEN b.document_kind <> 'invoice' THEN (CASE
 					WHEN b.status = '${PENDING_STATUS}' OR (NOT ${linked} AND COALESCE(TRIM(b.invoice_number), '') = '') THEN 'pending_emission'

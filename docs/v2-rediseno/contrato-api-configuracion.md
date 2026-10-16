@@ -610,6 +610,14 @@ Body (todo opcional, upsert; `quote_numbering` se mezcla con lo guardado):
   (se usa en `prefixed` y `sequential`).
 Sin 409 nuevos: estas preferencias se pueden cambiar con contratos (rigen hacia adelante; nada histórico se recalcula).
 
+### 9.2b Inicio de la historia en Métricas (onboarding §3.4, 13-10)
+
+`GET` agrega `"metrics_history_start": "2025-01" | null` y `PATCH` acepta `metrics_history_start` (`AAAA-MM` o `null`; 400 `El inicio de la
+historia debe ser un mes (AAAA-MM)`). Se guarda como día 1 en `holding_settings.metrics_history_start` (migración
+`1791900000000-OnboardingDatosHistoricos`) con una sentencia aparte, solo si viene en el body: el resto de las preferencias se guarda aunque la
+migración no esté aplicada, y la lectura es tolerante (columna ausente → `null`). Métricas (clientes y cohortes) arranca en el mayor entre el
+primer dato y este mes. Sin bloqueo por contratos.
+
 ### 9.3 Numeración de cotizaciones (Cotizaciones, autorizado)
 
 Solo para cotizaciones **creadas en Sapira** (`POST /quotes`; también `POST /quotes/:id/duplicate`, que la UI ya no ofrece). Las que llegan

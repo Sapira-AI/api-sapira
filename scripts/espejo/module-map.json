@@ -106,7 +106,8 @@
   "invoices_legacy",
   "invoice_items_legacy",
   "invoice_items_legacy_match",
-  "mrr_legacy"
+  "mrr_legacy",
+  "onboarding_events"
  ],
  "conciliacion": [
   "bank_movements",
