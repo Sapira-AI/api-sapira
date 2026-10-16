@@ -159,3 +159,12 @@ export class TestEmailDto {
 	@IsOptional()
 	sender_id?: string;
 }
+
+/** Subdominio de recepción de documentos tributarios (intercambio SII), p. ej. `dte.empresa.cl`. */
+export class CreateInboundDomainDto {
+	@ApiProperty({ example: 'dte.empresa.cl' })
+	@Transform(lowerTrim)
+	@IsString({ message: 'El dominio no es válido (ejemplo: dte.empresa.cl)' })
+	@Matches(SENDER_DOMAIN, { message: 'El dominio no es válido (ejemplo: dte.empresa.cl)' })
+	inbound_domain!: string;
+}

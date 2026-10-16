@@ -127,6 +127,21 @@ describe('ClientDirectoryService · edición', () => {
 		expect(params).toEqual(['e-1', 'h-1', 'Nueva']);
 	});
 
+	it('razón social: la comuna es editable (lista blanca)', async () => {
+		const { service, query } = build((sql) => {
+			if (sql.startsWith('SELECT id, tax_id')) return [{ id: 'e-1', tax_id: '1-9' }];
+			if (sql.startsWith('UPDATE')) return [[{ id: 'e-1', commune: 'Las Condes' }], 1];
+
+			return [];
+		});
+
+		await service.updateEntity('h-1', 'e-1', { commune: 'Las Condes' });
+
+		const [sql, params] = query.mock.calls.find(([text]) => (text as string).startsWith('UPDATE'))!;
+		expect(sql).toContain('SET commune = $3 WHERE id = $1 AND holding_id = $2');
+		expect(params).toEqual(['e-1', 'h-1', 'Las Condes']);
+	});
+
 	it('razón social: guarda la condición de pago (jsonb) y permite quitarla con null', async () => {
 		const { service, query } = build((sql) => {
 			if (sql.startsWith('SELECT id, tax_id')) return [{ id: 'e-1', tax_id: '1-9' }];

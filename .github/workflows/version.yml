@@ -1,0 +1,61 @@
+# Sube la versión de package.json cada vez que se mezcla un PR a `qa`.
+# Es el único que escribe `version`: las ramas de trabajo no la tocan, y por eso
+# los merges ya no chocan en esa línea. `main` la recibe al mezclar `qa`.
+# Detalle: docs/reglas-desarrollo/versionado.md
+name: Versión
+
+on:
+    pull_request:
+        types: [closed]
+        branches: [qa]
+
+permissions:
+    contents: write
+
+# Dos PRs mezclados seguidos se versionan uno detrás del otro, nunca en paralelo.
+concurrency:
+    group: version-qa
+    cancel-in-progress: false
+
+jobs:
+    bump:
+        if: github.event.pull_request.merged == true
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  # La punta actual de qa, no el commit del merge: puede haber entrado otro bump antes.
+                  ref: qa
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+
+            - name: Subir versión
+              id: bump
+              env:
+                  # Por variable de entorno, nunca interpolado en el script: el título lo escribe una persona.
+                  PR_TITLE: ${{ github.event.pull_request.title }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+              run: node scripts/ci/version-bump.js
+
+            - name: Commit, tag y push
+              env:
+                  VERSION: ${{ steps.bump.outputs.version }}
+                  MESSAGE: ${{ steps.bump.outputs.message }}
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  git commit -am "$MESSAGE"
+                  git tag "v$VERSION"
+                  # Si alguien empujó a qa mientras tanto, se rebasa y se reintenta.
+                  for intento in 1 2 3; do
+                    if git push --atomic origin HEAD:qa "refs/tags/v$VERSION"; then
+                      exit 0
+                    fi
+                    git pull --rebase origin qa
+                    git tag -f "v$VERSION"
+                  done
+                  echo "No se pudo empujar v$VERSION a qa" >&2
+                  exit 1

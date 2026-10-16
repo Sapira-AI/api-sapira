@@ -48,6 +48,7 @@ export interface CreateEntityInput {
 	/** País ISO (ronda 3 de Configuración). */
 	country_code?: string | null;
 	legal_address?: string;
+	commune?: string;
 	email?: string;
 	phone?: string;
 	economic_activity?: string;
@@ -301,6 +302,7 @@ export class ClientDirectoryService {
 		'country',
 		'country_code',
 		'legal_address',
+		'commune',
 		'email',
 		'phone',
 		'economic_activity',
@@ -408,6 +410,7 @@ export class ClientDirectoryService {
 					payment_terms: cleanTerms(data.payment_terms),
 					phone: data.phone?.trim() || null,
 					economic_activity: data.economic_activity?.trim() || null,
+					commune: data.commune?.trim() || null,
 					client_number: data.client_number?.trim() || null,
 					odoo_partner_id: odooPartnerId,
 				},

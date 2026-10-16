@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { AuthAccountsModule } from '@/auth/accounts/auth-accounts.module';
 import { PostgreSQLDatabaseModule } from '@/databases/postgresql/database.module';
 import { EmailsModule } from '@/modules/emails/emails.module';
+import { FacturaModule } from '@/modules/factura/factura.module';
 import { NotificationsModule } from '@/modules/notifications/notifications.module';
 
 import { AccountingPeriodsService } from './accounting-periods.service';
@@ -19,6 +20,7 @@ import { SettingsCustomFieldsController } from './settings-custom-fields.control
 import { SettingsCustomFieldsService } from './settings-custom-fields.service';
 import { SettingsHoldingController } from './settings-holding.controller';
 import { SettingsHoldingService } from './settings-holding.service';
+import { SettingsInboundDomainService } from './settings-inbound-domain.service';
 import { SettingsRolesService } from './settings-roles.service';
 import { SettingsStorageService } from './settings-storage.service';
 import { SettingsTaxDocumentsController } from './settings-tax-documents.controller';
@@ -33,7 +35,7 @@ import { SettingsUsersService } from './settings-users.service';
  * `GuardsModule` (global); `NotificationsModule` aporta las suscripciones de alertas por rol.
  */
 @Module({
-	imports: [PostgreSQLDatabaseModule, NotificationsModule, EmailsModule, AuthAccountsModule],
+	imports: [PostgreSQLDatabaseModule, NotificationsModule, EmailsModule, AuthAccountsModule, FacturaModule],
 	controllers: [
 		SettingsHoldingController,
 		SettingsCatalogsController,
@@ -57,6 +59,7 @@ import { SettingsUsersService } from './settings-users.service';
 		SettingsRolesService,
 		SettingsTaxDocumentsService,
 		SettingsCommunicationsService,
+		SettingsInboundDomainService,
 	],
 })
 export class SettingsModule {}

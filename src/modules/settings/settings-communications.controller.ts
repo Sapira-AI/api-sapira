@@ -21,10 +21,19 @@ import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 import { PERMISSION_CODES } from '@/guards/permission-codes';
 import { RequirePermission, RequirePermissionGuard } from '@/guards/require-permission.guard';
 
-import { CreateDomainDto, CreateSenderDto, SendersQueryDto, TestEmailDto, UpdateDomainDto, UpdateSenderDto } from './dtos/communications.dto';
+import {
+	CreateDomainDto,
+	CreateInboundDomainDto,
+	CreateSenderDto,
+	SendersQueryDto,
+	TestEmailDto,
+	UpdateDomainDto,
+	UpdateSenderDto,
+} from './dtos/communications.dto';
 import { authIdOf, type SettingsRequest } from './settings-common';
 import { SettingsCommunicationsService } from './settings-communications.service';
 import { SettingsDbErrorsInterceptor } from './settings-db-errors';
+import { SettingsInboundDomainService } from './settings-inbound-domain.service';
 
 /**
  * Comunicaciones del holding (contrato §8.2): dominios de envío (SendGrid) y remitentes. Rutas nuevas, siempre con el holding del header
@@ -38,7 +47,38 @@ import { SettingsDbErrorsInterceptor } from './settings-db-errors';
 @ApiBearerAuth()
 @ApiHeader({ name: 'x-holding-id', required: true })
 export class SettingsCommunicationsController {
-	constructor(private readonly communications: SettingsCommunicationsService) {}
+	constructor(
+		private readonly communications: SettingsCommunicationsService,
+		private readonly inboundDomain: SettingsInboundDomainService
+	) {}
+
+	@Get('inbound-domain')
+	@ApiOperation({ summary: 'Dominio de recepción de documentos tributarios del holding (null si no hay)' })
+	getInboundDomain(@HoldingId() holdingId: string) {
+		return this.inboundDomain.get(holdingId);
+	}
+
+	@Post('inbound-domain')
+	@RequirePermission(PERMISSION_CODES.editSettings)
+	@ApiOperation({ summary: 'Registra el subdominio de recepción: autenticación en SendGrid y registro MX a publicar' })
+	createInboundDomain(@HoldingId() holdingId: string, @Body() body: CreateInboundDomainDto, @Request() req: SettingsRequest) {
+		return this.inboundDomain.create(holdingId, body.inbound_domain, authIdOf(req));
+	}
+
+	@Post('inbound-domain/verify')
+	@HttpCode(200)
+	@RequirePermission(PERMISSION_CODES.editSettings)
+	@ApiOperation({ summary: 'Verifica MX y CNAME; con todo puesto, conecta el Inbound Parse con api-factura' })
+	verifyInboundDomain(@HoldingId() holdingId: string) {
+		return this.inboundDomain.verify(holdingId);
+	}
+
+	@Delete('inbound-domain')
+	@HttpCode(204)
+	@RequirePermission(PERMISSION_CODES.editSettings)
+	async deleteInboundDomain(@HoldingId() holdingId: string): Promise<void> {
+		await this.inboundDomain.remove(holdingId);
+	}
 
 	@Get('domains')
 	@ApiOperation({ summary: 'Dominios de envío del holding con sus remitentes y registros DNS' })

@@ -12,6 +12,9 @@ import { FacturaClientService } from '@/modules/factura/factura-client.service';
 
 import { CreateCafDto, IntegrateFacturaDto, ReserveFolioDto, UpdateSiiConfigurationDto } from './dtos/sii.dto';
 
+/** `DirOrigen` del DTE acepta hasta 70 caracteres (`DTE_v10.xsd`). */
+export const DIRECCION_SII_MAX = 70;
+
 @Injectable()
 export class SiiService {
 	constructor(
@@ -55,50 +58,50 @@ export class SiiService {
 		}));
 	}
 
+	/**
+	 * Activa la facturación electrónica de una compañía o, ya activa, actualiza su emisor. **api-factura es la fuente de
+	 * verdad del emisor** (giro, actividades económicas, dirección, comuna, ciudad): se provisiona allá (idempotente) y
+	 * Sapira lo lee de vuelta con `GET /empresas/actual`. `sii_configurations` solo guarda el vínculo (ambiente y si
+	 * está habilitada); sus columnas `business_activity`, `commune`, `city`, `region` y `activity_codes` quedan como
+	 * legado y ya no se escriben.
+	 */
 	async integrateWithFactura(holdingId: string, companyId: string, dto: IntegrateFacturaDto = {}) {
 		const { company } = await this.assertCompany(holdingId, companyId);
 		const configuration = await this.configurations.findOne({ where: { company_id: company.id, holding_id: holdingId } });
-		const giro = dto.business_activity || configuration?.business_activity;
-		const comuna = dto.commune || configuration?.commune;
-		const ciudad = dto.city || configuration?.city;
-		if (!company.tax_id || !company.legal_name || !company.legal_address) {
+		// Sin dirección propia del emisor se usa la legal de la compañía (al activar).
+		const direccion = dto.address?.trim() || company.legal_address?.trim();
+		if (!company.tax_id || !company.legal_name || !direccion) {
 			throw new BadRequestException('La compañía necesita RUT, razón social y dirección para integrarse con api-factura');
 		}
-		if (!giro || !comuna || !ciudad) {
+		if (!dto.business_activity || !dto.commune || !dto.city) {
 			throw new BadRequestException('Giro, comuna y ciudad son requeridos para provisionar la empresa');
+		}
+		if (direccion.length > DIRECCION_SII_MAX) {
+			throw new BadRequestException(
+				`La dirección para el SII tiene ${direccion.length} caracteres y el SII acepta hasta ${DIRECCION_SII_MAX}: escribe solo calle, número y oficina (la comuna y la ciudad van aparte)`
+			);
 		}
 
 		const provision = await this.facturaClient.provisionEmpresa({
 			externalReference: { companyId: company.id, tenantId: holdingId },
 			rut: company.tax_id,
 			razonSocial: company.legal_name,
-			giro,
-			direccion: company.legal_address,
-			comuna,
-			ciudad,
-			region: dto.region || configuration?.region,
+			giro: dto.business_activity,
+			direccion,
+			comuna: dto.commune,
+			ciudad: dto.city,
+			...(dto.region ? { region: dto.region } : {}),
+			...(dto.activity_codes ? { actividadesEconomicas: dto.activity_codes } : {}),
 			ambienteSII: dto.environment || configuration?.environment || 'certificacion',
 		});
 		const empresaId = provision.data?.empresaId || provision.data?.data?._id || provision.data?.data?.id;
 		const savedConfiguration = await this.configurations.save(
 			configuration
-				? this.configurations.merge(configuration, {
-						business_activity: giro,
-						commune: comuna,
-						city: ciudad,
-						region: dto.region || configuration.region,
-						environment: dto.environment || configuration.environment,
-						is_enabled: true,
-					})
+				? this.configurations.merge(configuration, { environment: dto.environment || configuration.environment, is_enabled: true })
 				: this.configurations.create({
 						holding_id: holdingId,
 						company_id: company.id,
-						business_activity: giro,
-						commune: comuna,
-						city: ciudad,
-						region: dto.region,
 						environment: dto.environment || 'certificacion',
-						activity_codes: ['0'],
 						enabled_document_types: [33, 34, 61],
 						is_enabled: true,
 					})
