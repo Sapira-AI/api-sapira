@@ -1,15 +1,18 @@
-import { randomUUID } from 'crypto';
-
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
-import { loadHoldingPreferences } from '@/core/utils/holding-preferences';
 import { validationException } from '@/core/utils/validation-errors';
 import { withApiWriter } from '@/modules/contracts/api-writer';
 import { ContractDraftsService } from '@/modules/contracts/contract-drafts.service';
 import type { CreateContractDto } from '@/modules/contracts/dtos/create-contract.dto';
 import { currentMonth, type Month } from '@/modules/metrics/metrics-period';
-import { LEGACY_FIRST_RSM_JOIN, legacyCountedConditions, legacyFirstRsmCte, legacySkipCodeSql } from '@/modules/metrics/mrr-historico';
+import {
+	LEGACY_FIRST_RSM_JOIN,
+	legacyCountedConditions,
+	legacyFirstRsmCte,
+	legacyRemovedSql,
+	legacySkipCodeSql,
+} from '@/modules/metrics/mrr-historico';
 import { legacyFxKey, legacySystemAmount, loadLegacySystemFx } from '@/modules/metrics/mrr-historico-fx';
 
 import {
@@ -32,6 +35,7 @@ import {
 	type Queryable,
 	queryEvents,
 	rawLineKey,
+	rawRootKey,
 	round2,
 	round6,
 	type Row,
@@ -46,7 +50,17 @@ import {
 	type LineEditRow,
 	lineInvoiceAmount,
 } from './onboarding-line-edit';
-import { candidateScore, LINE_JOINS, lineCtes, lineDto, lineSelect, type Splice, spliceOf, STATUS_PRIORITY_SQL } from './onboarding-lines';
+import {
+	candidateScore,
+	contractRowSql,
+	LINE_JOINS,
+	lineCtes,
+	lineDto,
+	lineSelect,
+	type Splice,
+	spliceOf,
+	STATUS_PRIORITY_SQL,
+} from './onboarding-lines';
 import { OnboardingRegisterService, type RegisterPlan, type ReplaceOptions } from './onboarding-register.service';
 
 import type {
@@ -55,17 +69,18 @@ import type {
 	HistoryLinesQueryDto,
 	LinkHistoryLineDto,
 	OnboardingContractDto,
-	RemoveHistoryLineDto,
+	UnifyHistoryLinesDto,
 } from './dtos/onboarding.dto';
 import type { QueryRunner } from 'typeorm';
 
 const ACTIVE = 'Activo';
 const SORT_COLUMNS: Record<string, string> = {
 	client: 'cl.name_commercial',
-	product: 'st.product_name',
+	product: 'pj.top_product',
 	last_month: 'st.last_date',
 	mrr: 'st.mrr_last_system',
 	status: STATUS_PRIORITY_SQL,
+	registered_at: 'st.registered_at',
 };
 
 /** Textos de los avisos y errores del motor de Registrar histórico en "Editar línea" (sin marcas). */
@@ -88,7 +103,7 @@ const REGISTER_ERROR_MESSAGES: Record<string, string> = {
 	sum_mismatch: 'La suma de los productos no cuadra con el monto (±1 %)',
 };
 
-/** Lo que conserva una fila reemplazada (empalme y cierre o quita). */
+/** Lo que conserva una fila reemplazada (empalme y "No activado"). */
 interface EditCarry {
 	migrated_at: unknown;
 	migrated_by: string | null;
@@ -97,7 +112,7 @@ interface EditCarry {
 	skip_by: string | null;
 }
 
-/** Contexto de una edición de línea. */
+/** Contexto de una edición de registro. */
 interface LineEditContext {
 	rows: Array<LineEditRow & EditCarry>;
 	replaced: Array<LineEditRow & EditCarry>;
@@ -105,18 +120,19 @@ interface LineEditContext {
 	plans: RegisterPlan[];
 	generated: LineEditRow[];
 	replace: ReplaceOptions;
-	/** Una factura con meses empalmados cambia de producto o moneda. */
+	/** Una factura con meses empalmados cambia de moneda (caería en otro registro). */
 	linkedRekey: boolean;
-	/** Clave cruda de destino si toda la línea se mueve a otra. */
+	/** Clave cruda de destino si todo el registro se mueve a otro (cambio de moneda de todas sus facturas). */
 	rekeyTo: string | null;
 	/** Claves crudas tocadas (la propia y las de destino). */
 	linesTouched: string[];
 }
 
-/** Fila de una línea leída para escribir (con su motivo efectivo). */
+/** Fila de un registro leída para escribir (con su motivo efectivo). */
 interface LineRow {
 	id: string;
 	period: Month;
+	product_name: string;
 	contract_id: string | null;
 	skip: boolean;
 	skip_code: string | null;
@@ -126,11 +142,29 @@ interface LineRow {
 const pendingRows = (rows: LineRow[]) => rows.filter((row) => !row.contract_id && !row.skip);
 
 /**
- * Bandeja de MRR histórico (§3.1, §4.2, §5): lista y detalle de líneas, editar línea (volver a registrar sus facturas), empalmar/desvincular, cerrar (fue baja),
- * quitar (duplicado o error), reabrir y crear el contrato desde la línea con el generador común de Contratos. Toda escritura va en
- * una transacción con la marca `sapira.writer` (`withApiWriter`) y deja su evento en `onboarding_events`; ninguna dispara
- * notificaciones, correos ni sincronizaciones. `link` y `contract` recalculan el devengo del contrato si ya está Activo (un borrador no
- * tiene devengo: se arma al activarse).
+ * Condiciones (sobre `m`) y parámetros de las filas de un registro: lote, cliente, moneda y su contrato (`IS NULL` para el registro sin
+ * contrato). `from` = número del primer placeholder (el holding suele ir en `$1`). Ninguna operación por clave cruza de un registro a otro
+ * de la misma raíz (Domi 18-10).
+ */
+function recordRows(parts: LineKeyParts, from = 2): { where: string[]; params: unknown[] } {
+	const params: unknown[] = [parts.batch_id, parts.client_id, parts.contract_currency];
+	const where = [`m.batch_id = $${from}`, `m.client_id = $${from + 1}`, `m.contract_currency = $${from + 2}`];
+
+	if (parts.contract_id) params.push(parts.contract_id);
+	where.push(contractRowSql('m', parts.contract_id ? `$${from + 3}` : null));
+
+	return { where, params };
+}
+
+/**
+ * Bandeja de MRR histórico (§3.1, §4.2, §5): lista y detalle de registros (`batch_id` × cliente × moneda × contrato, Domi 18-10), editar
+ * línea (volver a registrar sus facturas), empalmar/desvincular, no activar (cerrar), reabrir, unificar registros pendientes y crear el
+ * contrato desde el registro con el generador común de Contratos (un ítem por producto). Empalmar, cerrar, reabrir, unificar y crear
+ * contrato operan solo sobre registros **sin contrato**; desvincular, solo sobre un registro **con** contrato; editar, sobre cualquiera (las
+ * filas nuevas conservan su `batch_id` y heredan su contrato). Toda escritura va en una transacción con la marca `sapira.writer`
+ * (`withApiWriter`) y deja su evento en `onboarding_events` con la **raíz** del registro (`batch_id|client_id|contract_currency`); ninguna
+ * dispara notificaciones, correos ni sincronizaciones. `link` y `contract` recalculan el devengo del contrato si ya está Activo (un borrador
+ * no tiene devengo: se arma al activarse).
  */
 @Injectable()
 export class OnboardingHistoryService {
@@ -140,24 +174,18 @@ export class OnboardingHistoryService {
 		private readonly register: OnboardingRegisterService
 	) {}
 
-	/** Primer día del mes en curso en la zona del holding. */
-	async todayStart(holdingId: string, now = new Date()): Promise<string> {
-		const { timezone } = await loadHoldingPreferences(this.dataSource, holdingId);
-
-		return firstDay(currentMonth(now, timezone));
-	}
-
 	// ---------------------------------------------------------------- lecturas
 
-	async list(holdingId: string, query: HistoryLinesQueryDto, now = new Date()) {
+	async list(holdingId: string, query: HistoryLinesQueryDto) {
 		const page = query.page ?? 1;
 		const limit = query.limit ?? 25;
-		const params: unknown[] = [holdingId, await this.todayStart(holdingId, now)];
+		const params: unknown[] = [holdingId];
 		const add = (value: unknown) => `$${params.push(value)}`;
 		const rowWhere: string[] = [];
 
 		if (query.clientId) rowWhere.push(`m.client_id = ${add(query.clientId)}`);
-		if (query.product) rowWhere.push(`m.product_name = ${add(query.product)}`);
+		if (query.batchId) rowWhere.push(`m.batch_id = ${add(query.batchId)}`);
+		if (query.contractId) rowWhere.push(`m.migrated_to_contract_id = ${add(query.contractId)}`);
 		const where: string[] = [];
 		const statuses = (query.status ?? '')
 			.split(',')
@@ -165,24 +193,26 @@ export class OnboardingHistoryService {
 			.filter(Boolean);
 
 		if (statuses.length) where.push(`st.status = ANY(${add(statuses)}::text[])`);
-		// "Terminó sin resolver" (Domi 14-10): filtro sobre las pendientes, no un estado aparte.
-		if (query.ended === 'true') where.push(`st.status = 'pending' AND st.ended`);
-		if (query.ended === 'false') where.push(`st.status = 'pending' AND NOT st.ended`);
-		if (query.batchId) where.push(`${add(query.batchId)}::uuid = ANY(st.batch_ids)`);
+		// Registros que contienen el producto (el agregado sigue siendo de todo el registro).
+		if (query.product) where.push(`${add(query.product)} = ANY(pj.product_names)`);
+		// Problemas de datos (Domi 18-10): histórico empalmado en meses posteriores al primer mes con MRR del contrato.
+		if (query.issue === 'history_after_contract') where.push('st.has_after_contract');
 		if (query.search) {
 			const term = add(`%${query.search}%`);
 
-			where.push(`(cl.name_commercial ILIKE ${term} OR st.product_name ILIKE ${term} OR array_to_string(st.legal_names, ' ') ILIKE ${term})`);
+			where.push(
+				`(cl.name_commercial ILIKE ${term} OR array_to_string(pj.product_names, ' ') ILIKE ${term} OR array_to_string(st.legal_names, ' ') ILIKE ${term})`
+			);
 		}
-		// Sin `sortBy`: prioridad de estado (pendiente → empalmada → cerrada → quitada) y luego cliente (Domi 14-10).
+		// Sin `sortBy`: prioridad de estado (pendiente → relacionada → no activada) y luego cliente (Domi 14-10).
 		const order = query.sortBy ? (SORT_COLUMNS[query.sortBy] ?? SORT_COLUMNS.client) : STATUS_PRIORITY_SQL;
 		const direction = query.sortOrder === 'desc' ? 'DESC' : 'ASC';
 		const rows = (await this.dataSource.query(
-			`${lineCtes({ holding: '$1', today: '$2', rowWhere })}
-			SELECT ${lineSelect('$1')}, COUNT(*) OVER () AS total_count
+			`${lineCtes({ holding: '$1', rowWhere })}
+			SELECT ${lineSelect()}, COUNT(*) OVER () AS total_count
 			FROM st ${LINE_JOINS}
 			${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-			ORDER BY ${order} ${direction} NULLS LAST, cl.name_commercial, st.product_name, st.contract_currency
+			ORDER BY ${order} ${direction} NULLS LAST, cl.name_commercial, st.registered_at, st.contract_currency, st.batch_id
 			LIMIT ${Number(limit)} OFFSET ${Number((page - 1) * limit)}`,
 			params
 		)) as Row[];
@@ -190,39 +220,58 @@ export class OnboardingHistoryService {
 		return paginated(rows.map(lineDto), num(rows[0]?.total_count), page, limit);
 	}
 
-	/** Línea por clave (404 si no tiene filas en el holding). */
-	async line(holdingId: string, key: string, now = new Date()) {
-		return lineDto(await this.lineRow(this.dataSource, holdingId, decodeLineKey(key), now));
+	/** Registro por clave (404 si no tiene filas en el holding). */
+	async line(holdingId: string, key: string) {
+		return lineDto(await this.lineRow(this.dataSource, holdingId, decodeLineKey(key)));
 	}
 
-	private async lineRow(db: Queryable, holdingId: string, parts: LineKeyParts, now = new Date()): Promise<Row> {
+	private async lineRow(db: Queryable, holdingId: string, parts: LineKeyParts): Promise<Row> {
+		const record = recordRows(parts);
 		const [row] = (await db.query(
-			`${lineCtes({ holding: '$1', today: '$2', rowWhere: ['m.client_id = $3', 'm.product_name = $4', 'm.contract_currency = $5'] })}
-			SELECT ${lineSelect('$1')} FROM st ${LINE_JOINS}`,
-			[holdingId, await this.todayStart(holdingId, now), parts.client_id, parts.product_name, parts.contract_currency]
+			`${lineCtes({ holding: '$1', rowWhere: record.where })}
+			SELECT ${lineSelect()} FROM st ${LINE_JOINS}`,
+			[holdingId, ...record.params]
 		)) as Row[];
 
-		if (!row) throw new NotFoundException('Línea de MRR histórico no encontrada');
+		if (!row) throw new NotFoundException('Registro de MRR histórico no encontrado');
 
 		return row;
 	}
 
-	async detail(holdingId: string, key: string, now = new Date()) {
+	/** Productos del catálogo del holding por nombre normalizado (`mrr_legacy` no guarda `product_id`). */
+	private async productIdsByName(db: Queryable, holdingId: string): Promise<Map<string, string>> {
+		const rows = (await db.query(`SELECT id, name FROM products WHERE holding_id = $1 ORDER BY created_at`, [holdingId])) as Row[];
+		const map = new Map<string, string>();
+
+		for (const row of rows) {
+			const name = String(row.name ?? '')
+				.trim()
+				.toLowerCase();
+
+			if (!map.has(name)) map.set(name, String(row.id));
+		}
+
+		return map;
+	}
+
+	/** Detalle del registro: sus meses (× producto) y facturas; candidatos del cliente; eventos de la raíz (los mismos antes y después de empalmar). */
+	async detail(holdingId: string, key: string) {
 		const parts = decodeLineKey(key);
-		const row = await this.lineRow(this.dataSource, holdingId, parts, now);
+		const row = await this.lineRow(this.dataSource, holdingId, parts);
 		const line = lineDto(row);
-		const keyParams = [holdingId, parts.client_id, parts.product_name, parts.contract_currency];
-		const [months, invoices, candidates, events] = await Promise.all([
+		const record = recordRows(parts);
+		const keyParams = [holdingId, ...record.params];
+		const [months, invoices, candidates, events, productIds] = await Promise.all([
 			this.dataSource.query(
 				`WITH ${legacyFirstRsmCte('$1')}
-				SELECT m.id, to_char(m.period_month, 'YYYY-MM') AS period_month, m.subtotal_contract_currency, m.mrr_legacy,
+				SELECT m.id, to_char(m.period_month, 'YYYY-MM') AS period_month, m.product_name, m.subtotal_contract_currency, m.mrr_legacy,
 					m.mrr_legacy_system_currency, m.term, m.is_recurring, m.invoice_number, m.invoice_legacy_id, m.migrated_to_contract_id,
 					m.invoice_currency, m.allocated_invoice_currency, m.fx_contract_to_invoice, m.fx_contract_to_system,
 					m.skip_activation, ${legacySkipCodeSql('m')} AS skip_code,
 					(${legacyCountedConditions().join(' AND ')}) AS counted
 				FROM mrr_legacy m ${LEGACY_FIRST_RSM_JOIN}
-				WHERE m.holding_id = $1 AND m.client_id = $2 AND m.product_name = $3 AND m.contract_currency = $4
-				ORDER BY m.period_month, m.invoice_number, m.id`,
+				WHERE m.holding_id = $1 AND ${record.where.join(' AND ')}
+				ORDER BY m.period_month, m.product_name, m.invoice_number, m.id`,
 				keyParams
 			) as Promise<Row[]>,
 			this.dataSource.query(
@@ -230,7 +279,7 @@ export class OnboardingHistoryService {
 				FROM invoices_legacy il
 				WHERE il.holding_id = $1 AND il.id IN (
 					SELECT m.invoice_legacy_id FROM mrr_legacy m
-					WHERE m.holding_id = $1 AND m.client_id = $2 AND m.product_name = $3 AND m.contract_currency = $4)
+					WHERE m.holding_id = $1 AND ${record.where.join(' AND ')})
 				ORDER BY il.issue_date, il.invoice_number`,
 				keyParams
 			) as Promise<Row[]>,
@@ -239,12 +288,15 @@ export class OnboardingHistoryService {
 				this.dataSource,
 				`SELECT e.*, u.name AS actor_name FROM onboarding_events e LEFT JOIN users u ON u.id = e.actor_id
 				WHERE e.holding_id = $1 AND e.line_key = $2 ORDER BY e.created_at DESC LIMIT 50`,
-				[holdingId, rawLineKey(parts)]
+				[holdingId, rawRootKey(parts)]
 			),
+			this.productIdsByName(this.dataSource, holdingId),
 		]);
+		const productIdOf = (name: string | null) => (name ? (productIds.get(name.trim().toLowerCase()) ?? null) : null);
 		const monthDtos = months.map((month) => ({
 			id: String(month.id),
 			period_month: String(month.period_month),
+			product_name: str(month.product_name),
 			subtotal_contract_currency: num(month.subtotal_contract_currency),
 			mrr_legacy: numOrNull(month.mrr_legacy),
 			mrr_legacy_system_currency: numOrNull(month.mrr_legacy_system_currency),
@@ -258,20 +310,19 @@ export class OnboardingHistoryService {
 			fx_contract_to_invoice: numOrNull(month.fx_contract_to_invoice),
 			fx_contract_to_system: numOrNull(month.fx_contract_to_system),
 			counted: month.counted === true,
-			state: month.migrated_to_contract_id
-				? 'linked'
-				: month.skip_activation
-					? month.skip_code === 'churn'
-						? 'closed'
-						: 'removed'
-					: 'pending',
+			state: month.migrated_to_contract_id ? 'linked' : month.skip_activation ? 'closed' : 'pending',
 			contract_id: str(month.migrated_to_contract_id),
 		}));
 		const contractFirst = line.contract ? await this.contractFirstMonth(this.dataSource, line.contract.id) : null;
 		const splice = spliceOf(
 			str(row.live_last_month),
 			contractFirst,
-			monthDtos.filter((month) => month.contract_id === line.contract?.id && month.state !== 'removed').map((month) => month.period_month)
+			months
+				.filter(
+					(month) =>
+						str(month.migrated_to_contract_id) === (line.contract?.id ?? null) && !isRemovedRow({ skip_code: str(month.skip_code) })
+				)
+				.map((month) => String(month.period_month))
 		);
 
 		return {
@@ -282,12 +333,20 @@ export class OnboardingHistoryService {
 					.filter((month) => String(month.invoice_legacy_id) === String(invoice.id))
 					.map((month) => ({
 						period: String(month.period_month),
+						product_name: str(month.product_name),
 						subtotal: num(month.subtotal_contract_currency),
 						term: num(month.term) || 1,
 						is_recurring: month.is_recurring === true,
 						skip_code: str(month.skip_code),
 					}));
 				const registration = invoiceRegistration(own);
+				// Un producto por nombre con su parte del monto (Σ subtotal ÷ plazo de sus filas), para prellenar "Editar línea" (Domi 14-10).
+				const products = [...new Set(own.map((month) => month.product_name ?? ''))].map((name) => ({
+					product_id: productIdOf(name),
+					product_name: name,
+					amount_contract_currency: invoiceRegistration(own.filter((month) => (month.product_name ?? '') === name))
+						.amount_contract_currency,
+				}));
 
 				return {
 					id: String(invoice.id),
@@ -297,18 +356,7 @@ export class OnboardingHistoryService {
 					total: num(invoice.total_invoice_currency),
 					status: str(invoice.status),
 					contract_id: str(invoice.contract_id),
-					// Registro actual de la factura en esta línea, para prellenar "Editar línea" (Domi 14-10).
-					registration: {
-						...registration,
-						contract_currency: line.currency,
-						products: [
-							{
-								product_id: line.product_id,
-								product_name: line.product_name,
-								amount_contract_currency: registration.amount_contract_currency,
-							},
-						],
-					},
+					registration: { ...registration, contract_currency: line.currency, products },
 				};
 			}),
 			splice,
@@ -316,7 +364,11 @@ export class OnboardingHistoryService {
 				.map((candidate) => ({
 					...candidate,
 					score: candidateScore(
-						{ product_name: line.product_name, currency: line.currency, last_month: str(row.live_last_month) },
+						{
+							products: line.products.map((product) => product.product_name),
+							currency: line.currency,
+							last_month: str(row.live_last_month),
+						},
 						{ products: candidate.products, currency: candidate.currency, first_month: candidate.start_date?.slice(0, 7) ?? null }
 					),
 				}))
@@ -364,22 +416,29 @@ export class OnboardingHistoryService {
 
 	// ---------------------------------------------------------------- escrituras
 
-	/** Filas de la línea con lock (404 si no existe). */
+	/** 409 si la clave es de un registro con contrato (las operaciones del registro sin contrato: empalmar, cerrar, reabrir, unificar, crear contrato). */
+	private assertWithoutContract(parts: LineKeyParts, code: string, message: string) {
+		if (parts.contract_id) throw conflict(code, message);
+	}
+
+	/** Filas del registro con lock (404 si no existe). */
 	private async lockLine(runner: Queryable, holdingId: string, parts: LineKeyParts, lock = true): Promise<LineRow[]> {
+		const record = recordRows(parts);
 		const rows = (await runner.query(
-			`SELECT m.id, to_char(m.period_month, 'YYYY-MM') AS period, m.migrated_to_contract_id, m.skip_activation, m.invoice_legacy_id,
+			`SELECT m.id, to_char(m.period_month, 'YYYY-MM') AS period, m.product_name, m.migrated_to_contract_id, m.skip_activation, m.invoice_legacy_id,
 				${legacySkipCodeSql('m')} AS skip_code
 			FROM mrr_legacy m
-			WHERE m.holding_id = $1 AND m.client_id = $2 AND m.product_name = $3 AND m.contract_currency = $4
+			WHERE m.holding_id = $1 AND ${record.where.join(' AND ')}
 			ORDER BY m.period_month${lock ? '\n\t\t\tFOR UPDATE' : ''}`,
-			[holdingId, parts.client_id, parts.product_name, parts.contract_currency]
+			[holdingId, ...record.params]
 		)) as Row[];
 
-		if (!rows.length) throw new NotFoundException('Línea de MRR histórico no encontrada');
+		if (!rows.length) throw new NotFoundException('Registro de MRR histórico no encontrado');
 
 		return rows.map((row) => ({
 			id: String(row.id),
 			period: String(row.period),
+			product_name: String(row.product_name ?? ''),
 			contract_id: str(row.migrated_to_contract_id),
 			skip: row.skip_activation === true,
 			skip_code: str(row.skip_code),
@@ -389,17 +448,18 @@ export class OnboardingHistoryService {
 
 	// ---------------------------------------------------------------- editar línea = volver a registrar sus facturas (Domi 14-10)
 
-	/** Filas de una línea con lo que necesita la edición (vacío si la línea no tiene filas). */
+	/** Filas de un registro con lo que necesita la edición (vacío si el registro no tiene filas). */
 	private async editRows(db: Queryable, holdingId: string, parts: LineKeyParts, lock: boolean): Promise<Array<LineEditRow & EditCarry>> {
+		const record = recordRows(parts);
 		const rows = (await db.query(
-			`SELECT m.id, m.invoice_legacy_id, m.invoice_number, to_char(m.period_month, 'YYYY-MM') AS period, m.subtotal_contract_currency, m.term,
-				m.is_recurring, m.mrr_legacy, m.mrr_legacy_system_currency, m.fx_contract_to_system, m.allocated_invoice_currency,
+			`SELECT m.id, m.invoice_legacy_id, m.invoice_number, to_char(m.period_month, 'YYYY-MM') AS period, m.product_name, m.subtotal_contract_currency,
+				m.term, m.is_recurring, m.mrr_legacy, m.mrr_legacy_system_currency, m.fx_contract_to_system, m.allocated_invoice_currency,
 				m.fx_contract_to_invoice, m.invoice_currency, m.migrated_to_contract_id, m.migrated_at, m.migrated_by, m.skip_activation_reason,
 				m.skip_activation_at, m.skip_activation_by, ${legacySkipCodeSql('m')} AS skip_code
 			FROM mrr_legacy m
-			WHERE m.holding_id = $1 AND m.client_id = $2 AND m.product_name = $3 AND m.contract_currency = $4
+			WHERE m.holding_id = $1 AND ${record.where.join(' AND ')}
 			ORDER BY m.period_month, m.created_at, m.id${lock ? '\n\t\t\tFOR UPDATE' : ''}`,
-			[holdingId, parts.client_id, parts.product_name, parts.contract_currency]
+			[holdingId, ...record.params]
 		)) as Row[];
 		const lineKey = rawLineKey(parts);
 
@@ -408,6 +468,7 @@ export class OnboardingHistoryService {
 			invoice_id: String(row.invoice_legacy_id),
 			invoice_number: str(row.invoice_number),
 			period: String(row.period),
+			product_name: str(row.product_name),
 			subtotal: num(row.subtotal_contract_currency),
 			term: num(row.term) || 1,
 			is_recurring: row.is_recurring === true,
@@ -429,10 +490,11 @@ export class OnboardingHistoryService {
 	}
 
 	/**
-	 * Valida el body y arma la edición: filas que se reemplazan (las de cada factura listada en esta línea), plan del motor de Registrar
-	 * histórico en modo `replace` (cliente de la línea, sin `already_registered`, sin contar como cubiertos los meses que se reemplazan, tipo
-	 * de cambio desde el monto en moneda de factura que la línea tenía asignado) y las filas que se generarían. 400 si una factura no es de la
-	 * línea, está repetida o el motor la rechaza.
+	 * Valida el body y arma la edición: filas que se reemplazan (las de cada factura listada en este registro), plan del motor de Registrar
+	 * histórico en modo `replace` (cliente del registro, sin `already_registered`, sin contar como cubiertos los meses que se reemplazan, tipo
+	 * de cambio desde el monto en moneda de factura que el registro tenía asignado) y las filas que se generarían, que **conservan el
+	 * `batch_id` y heredan el contrato del registro**. Los productos viven dentro del registro: cambiar uno no lo mueve; cambiar la moneda
+	 * sí (caen en el registro de la misma raíz con esa moneda). 400 si una factura no es del registro, está repetida o el motor la rechaza.
 	 */
 	private async editContext(
 		db: Queryable,
@@ -443,7 +505,7 @@ export class OnboardingHistoryService {
 	): Promise<LineEditContext> {
 		const rows = await this.editRows(db, holdingId, parts, lock);
 
-		if (!rows.length) throw new NotFoundException('Línea de MRR histórico no encontrada');
+		if (!rows.length) throw new NotFoundException('Registro de MRR histórico no encontrado');
 		const lineInvoices = new Set(rows.map((row) => row.invoice_id));
 		const errors: Array<{ field: string; message: string }> = [];
 		const seen = new Set<string>();
@@ -451,7 +513,7 @@ export class OnboardingHistoryService {
 		dto.invoices.forEach((input, index) => {
 			if (seen.has(input.invoice_id)) errors.push({ field: `invoices.${index}.invoice_id`, message: 'La factura está repetida' });
 			else if (!lineInvoices.has(input.invoice_id))
-				errors.push({ field: `invoices.${index}.invoice_id`, message: 'La factura no es de esta línea' });
+				errors.push({ field: `invoices.${index}.invoice_id`, message: 'La factura no es de este registro' });
 			seen.add(input.invoice_id);
 		});
 		if (errors.length) throw validationException(errors);
@@ -472,15 +534,12 @@ export class OnboardingHistoryService {
 			if (error) errors.push({ field: `invoices.${index}`, message: REGISTER_ERROR_MESSAGES[error] ?? error });
 		});
 		if (errors.length) throw validationException(errors);
-		const keyOf = (productName: string, currency: string) =>
-			rawLineKey({ client_id: parts.client_id, product_name: productName, contract_currency: currency });
-		const generated = plans.flatMap((plan) => generatedRows(plan, (name) => keyOf(name, plan.input.contract_currency)));
+		const keyOf = (currency: string) => rawLineKey({ ...parts, contract_currency: currency });
+		const generated = plans.flatMap((plan) => generatedRows(plan, keyOf));
 		const ownKey = rawLineKey(parts);
-		// Empalmadas: período y montos sí; producto o moneda distintos (las filas caerían en otra línea) no.
+		// Empalmadas: período, montos y productos sí; moneda distinta (las filas caerían en otro registro) no.
 		const linkedRekey = plans.some(
-			(plan) =>
-				replaced.some((row) => row.invoice_id === plan.invoice_id && row.contract_id) &&
-				plan.products.some((product) => keyOf(product.product_name ?? '', plan.input.contract_currency) !== ownKey)
+			(plan) => replaced.some((row) => row.invoice_id === plan.invoice_id && row.contract_id) && keyOf(plan.input.contract_currency) !== ownKey
 		);
 		const remaining = rows.filter((row) => !seen.has(row.invoice_id));
 		const targets = [...new Set(generated.map((row) => row.line_key))];
@@ -500,10 +559,10 @@ export class OnboardingHistoryService {
 	}
 
 	/**
-	 * Vista previa de "Editar línea": la línea resultante (la de destino si toda la línea se mueve) por factura × mes (`kept | changed |
-	 * added | removed`) con MRR en moneda de contrato y de sistema (la de sistema de lo nuevo con la regla del trigger del MRR histórico,
-	 * `loadLegacySystemFx`; lo existente, lo guardado), tipo de cambio a factura, avisos del motor de Registrar histórico, `rekey` y
-	 * `lines_touched`. No escribe.
+	 * Vista previa de "Editar línea": el registro resultante (el de destino si todo el registro se mueve) por factura × mes (`kept | changed
+	 * | added | removed`) con MRR en moneda de contrato y de sistema (la de sistema de lo nuevo con la regla del trigger del MRR histórico,
+	 * `loadLegacySystemFx`; lo existente, lo guardado), tipo de cambio a factura, productos del mes, avisos del motor de Registrar histórico,
+	 * `rekey` y `lines_touched`. No escribe.
 	 */
 	async editPreview(holdingId: string, key: string, dto: EditHistoryLineDto) {
 		const parts = decodeLineKey(key);
@@ -514,16 +573,13 @@ export class OnboardingHistoryService {
 		const targetRows = ctx.rekeyTo ? await this.editRows(this.dataSource, holdingId, resultParts, false) : [];
 		const before = live([...ctx.rows, ...targetRows]);
 		const after = live([...(ctx.rekeyTo ? targetRows : ctx.remaining), ...ctx.generated.filter((row) => row.line_key === resultKey)]);
-		const [fx, product] = await Promise.all([
+		const [fx, productIds] = await Promise.all([
 			loadLegacySystemFx(
 				this.dataSource,
 				holdingId,
 				after.filter((row) => row.generated).map((row) => ({ currency: resultParts.contract_currency, month: row.period }))
 			),
-			this.dataSource.query(
-				`SELECT id FROM products WHERE holding_id = $1 AND lower(btrim(name)) = lower(btrim($2)) ORDER BY created_at LIMIT 1`,
-				[holdingId, resultParts.product_name]
-			) as Promise<Row[]>,
+			this.productIdsByName(this.dataSource, holdingId),
 		]);
 
 		for (const row of after.filter((value) => value.generated)) {
@@ -547,6 +603,7 @@ export class OnboardingHistoryService {
 				amount_invoice_currency: totals.amount_invoice,
 				fx_contract_to_invoice: totals.fx_invoice,
 				is_recurring: totals.is_recurring,
+				products: totals.products,
 				status: entry.status,
 			};
 		});
@@ -560,7 +617,7 @@ export class OnboardingHistoryService {
 							code,
 							invoice_id: plan.invoice_id,
 							period_month: period,
-							message: `${period} ya está cubierto por otra factura de la línea`,
+							message: `${period} ya está cubierto por otra factura del registro`,
 						});
 					}
 				} else warnings.push({ code, invoice_id: plan.invoice_id, message: REGISTER_WARNING_MESSAGES[code] ?? code });
@@ -570,19 +627,24 @@ export class OnboardingHistoryService {
 			warnings.push({
 				code: 'line_linked_rekey_blocked',
 				message:
-					'Hay meses empalmados con un contrato: solo se cambian período y montos (desvincula la línea para cambiar producto o moneda)',
+					'Hay meses empalmados con un contrato: solo se cambian período, montos y productos (desvincula el registro para cambiar la moneda)',
 			});
 		}
 		const afterPeriods = [...new Set(after.map((row) => row.period))].sort();
 		const last = afterPeriods[afterPeriods.length - 1] ?? null;
 		const lastRows = after.filter((row) => row.period === last && row.is_recurring);
+		const productNames = [...new Set(after.map((row) => row.product_name ?? ''))].filter(Boolean).sort();
 
 		return {
 			line: {
 				key: encodeLineKey(resultParts),
-				product_name: resultParts.product_name,
-				product_id: str(product[0]?.id),
+				batch_id: resultParts.batch_id,
 				currency: resultParts.contract_currency,
+				products: productNames.map((name) => ({
+					product_name: name,
+					product_id: productIds.get(name.trim().toLowerCase()) ?? null,
+					mrr_last: round2(lastRows.filter((row) => (row.product_name ?? '') === name).reduce((sum, row) => sum + (row.mrr ?? 0), 0)),
+				})),
 				first_month: afterPeriods[0] ?? null,
 				last_month: last,
 				months_count: afterPeriods.length,
@@ -600,11 +662,11 @@ export class OnboardingHistoryService {
 	}
 
 	/**
-	 * Aplica "Editar línea" en una transacción con la marca de la API: borra las filas de cada factura listada **en esta línea** y las
-	 * vuelve a registrar con el motor de Registrar histórico (`registerInTx` en modo `replace`, un lote por edición). Las filas nuevas
-	 * conservan el empalme (`migrated_to_contract_id/_at/_by`) y el cierre o la quita que tenían las reemplazadas; una factura que queda sin
-	 * filas vuelve a `reconciliation_status = 'pending'`. Bloquean (400) los errores del motor y la suma de productos que no cuadra; 409
-	 * `line_linked_rekey` si una factura con meses empalmados cambia de producto o moneda. Evento `history_line_edited`.
+	 * Aplica "Editar línea" en una transacción con la marca de la API: borra las filas de cada factura listada **en este registro** y las
+	 * vuelve a registrar con el motor de Registrar histórico (`registerInTx` en modo `replace`, con el mismo `batch_id` del registro). Las
+	 * filas nuevas conservan el empalme (`migrated_to_contract_id/_at/_by`) y el "No activado" que tenían las reemplazadas; una factura que
+	 * queda sin filas vuelve a `reconciliation_status = 'pending'`. Bloquean (400) los errores del motor y la suma de productos que no
+	 * cuadra; 409 `line_linked_rekey` si una factura con meses empalmados cambia de moneda. Evento `history_line_edited`.
 	 */
 	async editLine(holdingId: string, key: string, dto: EditHistoryLineDto, actor: OnboardingActor) {
 		const parts = decodeLineKey(key);
@@ -612,7 +674,7 @@ export class OnboardingHistoryService {
 			const ctx = await this.editContext(runner, holdingId, parts, dto, true);
 
 			if (ctx.linkedRekey) {
-				throw conflict('line_linked_rekey', 'Hay meses empalmados con un contrato: solo se pueden cambiar período y montos');
+				throw conflict('line_linked_rekey', 'Hay meses empalmados con un contrato: solo se pueden cambiar período, montos y productos');
 			}
 			const mismatch = ctx.plans.map((plan, index) => ({ plan, index })).filter(({ plan }) => plan.warnings.includes('sum_mismatch'));
 
@@ -621,30 +683,33 @@ export class OnboardingHistoryService {
 					mismatch.map(({ index }) => ({ field: `invoices.${index}.products`, message: REGISTER_ERROR_MESSAGES.sum_mismatch }))
 				);
 			}
-			const batchId = randomUUID();
-
 			await runner.query(`DELETE FROM mrr_legacy WHERE holding_id = $1 AND id = ANY($2::uuid[])`, [holdingId, ctx.replace.excludeRowIds]);
-			const registered = await this.register.registerInTx(runner, holdingId, dto.invoices, actor, { batchId, replace: ctx.replace });
+			const registered = await this.register.registerInTx(runner, holdingId, dto.invoices, actor, {
+				batchId: parts.batch_id,
+				replace: ctx.replace,
+			});
 
 			for (const invoiceId of new Set(ctx.replaced.map((row) => row.invoice_id))) {
 				const previous = ctx.replaced.filter((row) => row.invoice_id === invoiceId);
 				const linked = previous.find((row) => row.contract_id);
+				// Solo las filas recién insertadas de esa factura (nunca otras del mismo lote).
+				const ownNew = [holdingId, parts.batch_id, invoiceId, registered.created_ids];
 
 				if (linked) {
 					await runner.query(
-						`UPDATE mrr_legacy SET migrated_to_contract_id = $4, migrated_at = COALESCE($5::timestamptz, now()), migrated_by = $6
-						WHERE holding_id = $1 AND batch_id = $2 AND invoice_legacy_id = $3`,
-						[holdingId, batchId, invoiceId, linked.contract_id, linked.migrated_at, linked.migrated_by]
+						`UPDATE mrr_legacy SET migrated_to_contract_id = $5, migrated_at = COALESCE($6::timestamptz, now()), migrated_by = $7
+						WHERE holding_id = $1 AND batch_id = $2 AND invoice_legacy_id = $3 AND id = ANY($4::uuid[])`,
+						[...ownNew, linked.contract_id, linked.migrated_at, linked.migrated_by]
 					);
 				}
 				const codes = new Set(previous.map((row) => row.skip_code));
 
 				if (codes.size === 1 && previous[0].skip_code) {
 					await runner.query(
-						`UPDATE mrr_legacy SET skip_activation = true, skip_reason_code = $4, skip_activation_reason = $5,
-							skip_activation_at = COALESCE($6::timestamptz, now()), skip_activation_by = $7
-						WHERE holding_id = $1 AND batch_id = $2 AND invoice_legacy_id = $3`,
-						[holdingId, batchId, invoiceId, previous[0].skip_code, previous[0].skip_reason, previous[0].skip_at, previous[0].skip_by]
+						`UPDATE mrr_legacy SET skip_activation = true, skip_reason_code = $5, skip_activation_reason = $6,
+							skip_activation_at = COALESCE($7::timestamptz, now()), skip_activation_by = $8
+						WHERE holding_id = $1 AND batch_id = $2 AND invoice_legacy_id = $3 AND id = ANY($4::uuid[])`,
+						[...ownNew, previous[0].skip_code, previous[0].skip_reason, previous[0].skip_at, previous[0].skip_by]
 					);
 				}
 			}
@@ -662,9 +727,10 @@ export class OnboardingHistoryService {
 
 			await insertOnboardingEvent(runner, holdingId, actor.userId, {
 				type: 'history_line_edited',
-				lineKey: rawLineKey(parts),
+				lineKey: rawRootKey(parts),
 				payload: {
-					batch_id: batchId,
+					batch_id: parts.batch_id,
+					record_key: rawLineKey(parts),
 					invoices: dto.invoices.map((input) => ({
 						invoice_id: input.invoice_id,
 						period_from: input.period_from,
@@ -694,16 +760,52 @@ export class OnboardingHistoryService {
 		return { line, key: newKey, lines_touched: result.linesTouched.map((raw) => encodeLineKey(parseRawLineKey(raw)!)) };
 	}
 
-	/** Empalma los meses pendientes con un contrato del mismo cliente comercial (otra moneda permitida, S8-1). */
+	// ---------------------------------------------------------------- empalmar, desvincular, no activar, reabrir, unificar
+
+	/**
+	 * Empalma todas las filas pendientes del registro sin contrato con un contrato del mismo cliente comercial (otra moneda permitida,
+	 * S8-1). Devuelve el **registro relacionado** resultante (misma raíz × ese contrato, clave nueva) y su empalme; el registro sin contrato
+	 * sigue existiendo solo si le quedan filas no activadas.
+	 */
 	async link(holdingId: string, key: string, dto: LinkHistoryLineDto, actor: OnboardingActor) {
 		const parts = decodeLineKey(key);
+
+		this.assertWithoutContract(
+			parts,
+			'line_not_pending',
+			'El registro ya está relacionado con un contrato: no tiene meses pendientes de empalmar'
+		);
 		const splice = await withApiWriter(this.dataSource, async (runner) => this.linkInTx(runner, holdingId, parts, dto.contract_id, actor));
 
-		return { line: await this.line(holdingId, key), splice };
+		return { line: await this.line(holdingId, encodeLineKey({ ...parts, contract_id: dto.contract_id })), splice };
 	}
 
-	private async linkInTx(runner: QueryRunner, holdingId: string, parts: LineKeyParts, contractId: string, actor: OnboardingActor): Promise<Splice> {
+	/** Meses (no quitados) que ya tiene el registro de la raíz relacionado con `contractId`. */
+	private async linkedMonths(runner: Queryable, holdingId: string, parts: LineKeyParts, contractId: string): Promise<Month[]> {
+		const record = recordRows({ ...parts, contract_id: contractId });
+		const rows = (await runner.query(
+			`SELECT DISTINCT to_char(m.period_month, 'YYYY-MM') AS period FROM mrr_legacy m
+			WHERE m.holding_id = $1 AND ${record.where.join(' AND ')} AND NOT ${legacyRemovedSql('m')}`,
+			[holdingId, ...record.params]
+		)) as Row[];
+
+		return rows.map((row) => String(row.period));
+	}
+
+	/**
+	 * Empalme dentro de la transacción. `products` (crear contrato): solo las filas pendientes de esos productos; las demás quedan pendientes
+	 * en el registro sin contrato.
+	 */
+	private async linkInTx(
+		runner: QueryRunner,
+		holdingId: string,
+		parts: LineKeyParts,
+		contractId: string,
+		actor: OnboardingActor,
+		products?: string[]
+	): Promise<Splice> {
 		const rows = await this.lockLine(runner, holdingId, parts);
+		const already = await this.linkedMonths(runner, holdingId, parts, contractId);
 		const [contract] = (await runner.query(
 			`SELECT id, contract_number, status, client_id FROM contracts WHERE id = $1 AND holding_id = $2 AND deleted_at IS NULL`,
 			[contractId, holdingId]
@@ -713,9 +815,10 @@ export class OnboardingHistoryService {
 		if (String(contract.client_id) !== parts.client_id) {
 			throw conflict('contract_other_client', 'El contrato es de otro cliente comercial: solo se empalma con un contrato del mismo cliente');
 		}
-		const pending = pendingRows(rows);
+		const wanted = products ? new Set(products.map((name) => name.trim().toLowerCase())) : null;
+		const pending = pendingRows(rows).filter((row) => !wanted || wanted.has(row.product_name.trim().toLowerCase()));
 
-		if (!pending.length) throw conflict('line_not_pending', 'La línea no tiene meses pendientes de empalmar');
+		if (!pending.length) throw conflict('line_not_pending', 'El registro no tiene meses pendientes de empalmar');
 		await runner.query(
 			`UPDATE mrr_legacy SET migrated_to_contract_id = $1, migrated_at = now(), migrated_by = $2 WHERE holding_id = $3 AND id = ANY($4::uuid[])`,
 			[contractId, actor.userId || null, holdingId, pending.map((row) => row.id)]
@@ -730,38 +833,39 @@ export class OnboardingHistoryService {
 			]);
 		}
 		if (contract.status === ACTIVE) await runner.query(`SELECT revenue_schedule_rebuild($1::uuid, NULL::date)`, [contractId]);
-		const live = rows.filter((row) => row.skip_code !== 'duplicate' && row.skip_code !== 'error');
-		const lastMonth =
-			live
-				.map((row) => row.period)
-				.sort()
-				.pop() ?? null;
-		const splice = spliceOf(
-			lastMonth,
-			await this.contractFirstMonth(runner, contractId),
-			live.filter((row) => row.contract_id === contractId || pending.includes(row)).map((row) => row.period)
-		);
+		// Empalme del registro relacionado resultante: lo que ya tenía con ese contrato + los meses recién empalmados.
+		const months = [...new Set([...already, ...pending.map((row) => row.period)])].sort();
+		const splice = spliceOf(months[months.length - 1] ?? null, await this.contractFirstMonth(runner, contractId), months);
 
 		await insertOnboardingEvent(runner, holdingId, actor.userId, {
 			type: 'history_linked',
-			lineKey: rawLineKey(parts),
+			lineKey: rawRootKey(parts),
 			entityType: 'contract',
 			entityId: contractId,
-			payload: { contract_number: str(contract.contract_number), rows: pending.length, splice },
+			payload: {
+				contract_number: str(contract.contract_number),
+				rows: pending.length,
+				products: [...new Set(pending.map((row) => row.product_name))],
+				splice,
+			},
 		});
 
 		return splice;
 	}
 
-	/** Quita el empalme: las filas vuelven a pendiente y las facturas que solo respaldaban ese empalme se desvinculan. */
+	/**
+	 * Quita el empalme de un registro con contrato: sus filas vuelven al registro sin contrato de la raíz (pendientes) y las facturas que
+	 * solo respaldaban ese empalme se desvinculan. Devuelve el **registro sin contrato** resultante.
+	 */
 	async unlink(holdingId: string, key: string, actor: OnboardingActor) {
 		const parts = decodeLineKey(key);
 
+		if (!parts.contract_id) throw conflict('line_not_linked', 'El registro no está relacionado con un contrato');
 		await withApiWriter(this.dataSource, async (runner) => {
 			const rows = await this.lockLine(runner, holdingId, parts);
 			const linked = rows.filter((row) => row.contract_id);
 
-			if (!linked.length) throw conflict('line_not_linked', 'La línea no está empalmada con un contrato');
+			if (!linked.length) throw conflict('line_not_linked', 'El registro no está relacionado con un contrato');
 			const contracts = [...new Set(linked.map((row) => row.contract_id))];
 
 			await runner.query(
@@ -776,74 +880,52 @@ export class OnboardingHistoryService {
 			);
 			await insertOnboardingEvent(runner, holdingId, actor.userId, {
 				type: 'history_unlinked',
-				lineKey: rawLineKey(parts),
+				lineKey: rawRootKey(parts),
 				payload: { contract_ids: contracts, rows: linked.length },
 			});
 		});
 
-		return this.line(holdingId, key);
+		return this.line(holdingId, encodeLineKey({ ...parts, contract_id: null }));
 	}
 
-	/** Cerrar = fue baja (`churn`): los meses pendientes cuentan hasta su último mes y no esperan contrato. Reversible. */
+	/** No activar (`closed`, código siempre `churn`): los meses pendientes cuentan hasta su último mes y no esperan contrato. Reversible. */
 	async close(holdingId: string, key: string, dto: CloseHistoryLineDto, actor: OnboardingActor) {
 		const parts = decodeLineKey(key);
 
+		this.assertWithoutContract(
+			parts,
+			'line_not_pending',
+			'El registro está relacionado con un contrato: no tiene meses pendientes para no activar'
+		);
 		await withApiWriter(this.dataSource, async (runner) => {
 			const pending = pendingRows(await this.lockLine(runner, holdingId, parts));
 
-			if (!pending.length) throw conflict('line_not_pending', 'La línea no tiene meses pendientes para cerrar');
-			await this.markSkip(runner, holdingId, pending, 'churn', dto.reason || 'Fue baja', actor);
+			if (!pending.length) throw conflict('line_not_pending', 'El registro no tiene meses pendientes para no activar');
+			await runner.query(
+				`UPDATE mrr_legacy SET skip_activation = true, skip_reason_code = 'churn', skip_activation_reason = $3, skip_activation_at = now(),
+					skip_activation_by = $4
+				WHERE holding_id = $1 AND id = ANY($2::uuid[])`,
+				[holdingId, pending.map((row) => row.id), dto.notes || null, actor.userId || null]
+			);
 			await insertOnboardingEvent(runner, holdingId, actor.userId, {
 				type: 'history_closed',
-				lineKey: rawLineKey(parts),
-				payload: { rows: pending.length, reason: dto.reason ?? null },
+				lineKey: rawRootKey(parts),
+				payload: { rows: pending.length, notes: dto.notes ?? null },
 			});
 		});
 
 		return this.line(holdingId, key);
 	}
 
-	/** Quitar = duplicado o error de carga: las filas no empalmadas dejan de contar en todo. Reversible; nada se borra. */
-	async remove(holdingId: string, key: string, dto: RemoveHistoryLineDto, actor: OnboardingActor) {
-		const parts = decodeLineKey(key);
-
-		await withApiWriter(this.dataSource, async (runner) => {
-			const target = (await this.lockLine(runner, holdingId, parts)).filter(
-				(row) => !row.contract_id && row.skip_code !== 'duplicate' && row.skip_code !== 'error'
-			);
-
-			if (!target.length) {
-				throw conflict(
-					'line_not_removable',
-					'La línea no tiene meses sin empalmar para quitar (desvincúlala primero si el empalme es el error)'
-				);
-			}
-			await this.markSkip(
-				runner,
-				holdingId,
-				target,
-				dto.reason,
-				dto.notes || (dto.reason === 'duplicate' ? 'Duplicado' : 'Error de carga'),
-				actor
-			);
-			await insertOnboardingEvent(runner, holdingId, actor.userId, {
-				type: 'history_removed',
-				lineKey: rawLineKey(parts),
-				payload: { rows: target.length, reason: dto.reason, notes: dto.notes ?? null },
-			});
-		});
-
-		return this.line(holdingId, key);
-	}
-
-	/** Reabrir: las filas cerradas o quitadas (no empalmadas) vuelven a pendiente. */
+	/** Reabrir: las filas no activadas (sin contrato) vuelven a pendiente. */
 	async reopen(holdingId: string, key: string, actor: OnboardingActor) {
 		const parts = decodeLineKey(key);
 
+		this.assertWithoutContract(parts, 'line_not_closed', 'El registro está relacionado con un contrato: no tiene meses no activados');
 		await withApiWriter(this.dataSource, async (runner) => {
 			const target = (await this.lockLine(runner, holdingId, parts)).filter((row) => row.skip && !row.contract_id);
 
-			if (!target.length) throw conflict('line_not_closed', 'La línea no tiene meses cerrados ni quitados');
+			if (!target.length) throw conflict('line_not_closed', 'El registro no tiene meses no activados');
 			await runner.query(
 				`UPDATE mrr_legacy SET skip_activation = false, skip_reason_code = NULL, skip_activation_reason = NULL, skip_activation_at = NULL,
 					skip_activation_by = NULL
@@ -852,7 +934,7 @@ export class OnboardingHistoryService {
 			);
 			await insertOnboardingEvent(runner, holdingId, actor.userId, {
 				type: 'history_reopened',
-				lineKey: rawLineKey(parts),
+				lineKey: rawRootKey(parts),
 				payload: { rows: target.length, previous: [...new Set(target.map((row) => row.skip_code))] },
 			});
 		});
@@ -860,130 +942,235 @@ export class OnboardingHistoryService {
 		return this.line(holdingId, key);
 	}
 
-	private async markSkip(runner: QueryRunner, holdingId: string, rows: LineRow[], code: string, reason: string, actor: OnboardingActor) {
-		await runner.query(
-			`UPDATE mrr_legacy SET skip_activation = true, skip_reason_code = $3, skip_activation_reason = $4, skip_activation_at = now(),
-				skip_activation_by = $5
-			WHERE holding_id = $1 AND id = ANY($2::uuid[])`,
-			[holdingId, rows.map((row) => row.id), code, reason, actor.userId || null]
-		);
+	/**
+	 * Unificar (Domi 18-10): varios registros **pendientes** del mismo cliente y moneda (un cliente registrado en varias veces) pasan a ser
+	 * uno: las filas de los demás toman el `batch_id` del primero y los eventos de sus raíces se re-clavan a la raíz resultante. 409
+	 * `record_not_pending` (alguno con contrato o sin filas pendientes) | `unify_mismatch` (otro cliente u otra moneda); 400 si quedan menos
+	 * de dos registros distintos. Devuelve el registro resultante.
+	 */
+	async unify(holdingId: string, dto: UnifyHistoryLinesDto, actor: OnboardingActor) {
+		const parts = dto.keys.map((key, index) => decodeLineKey(key, `keys.${index}`));
+		const [first] = parts;
+		const distinct = parts.filter((part, index) => parts.findIndex((other) => rawLineKey(other) === rawLineKey(part)) === index);
+
+		if (distinct.length < 2) throw validationException([{ field: 'keys', message: 'Elige al menos dos registros distintos' }]);
+		for (const part of distinct) {
+			this.assertWithoutContract(part, 'record_not_pending', 'Solo se unifican registros pendientes (sin contrato)');
+			if (part.client_id !== first.client_id || part.contract_currency !== first.contract_currency) {
+				throw conflict('unify_mismatch', 'Solo se unifican registros del mismo cliente comercial y la misma moneda');
+			}
+		}
+		await withApiWriter(this.dataSource, async (runner) => {
+			const rowsOf = new Map<string, LineRow[]>();
+
+			for (const part of distinct) {
+				const rows = await this.lockLine(runner, holdingId, part);
+
+				if (!pendingRows(rows).length) throw conflict('record_not_pending', 'Solo se unifican registros pendientes (sin contrato)');
+				rowsOf.set(part.batch_id, rows);
+			}
+			const others = distinct.slice(1);
+			const ids = others.flatMap((part) => rowsOf.get(part.batch_id)!.map((row) => row.id));
+
+			await runner.query(`UPDATE mrr_legacy SET batch_id = $3 WHERE holding_id = $1 AND id = ANY($2::uuid[])`, [
+				holdingId,
+				ids,
+				first.batch_id,
+			]);
+			await runner.query(`UPDATE onboarding_events SET line_key = $3 WHERE holding_id = $1 AND line_key = ANY($2::text[])`, [
+				holdingId,
+				others.map(rawRootKey),
+				rawRootKey(first),
+			]);
+			await insertOnboardingEvent(runner, holdingId, actor.userId, {
+				type: 'history_unified',
+				lineKey: rawRootKey(first),
+				payload: {
+					batch_id: first.batch_id,
+					merged_batch_ids: others.map((part) => part.batch_id),
+					rows: ids.length,
+					records: distinct.length,
+				},
+			});
+		});
+
+		return this.line(holdingId, encodeLineKey(first));
 	}
 
-	// ---------------------------------------------------------------- contrato desde la línea
+	// ---------------------------------------------------------------- contrato desde el registro
 
 	/**
-	 * Alta prellenada (§4.2): cliente de la línea, razón social y compañía de su última factura, moneda de la línea y un ítem con la
-	 * cantidad y el unitario del último mes, Mensual Anticipado, 12 meses, inicio = mes siguiente al último.
+	 * Alta prellenada (§4.2): cliente del registro, razón social y compañía de su última factura, moneda del registro y **un ítem por
+	 * producto** con la cantidad y el unitario del último mes vivo de ese producto, Mensual Anticipado, 12 meses, inicio = mes siguiente al
+	 * último mes vivo del registro.
 	 */
 	async contractDefaults(holdingId: string, key: string, now = new Date()) {
 		const parts = decodeLineKey(key);
-		const row = await this.lineRow(this.dataSource, holdingId, parts, now);
+		const row = await this.lineRow(this.dataSource, holdingId, parts);
 		const line = lineDto(row);
-		const [last] = (await this.dataSource.query(
-			`SELECT m.company_id, il.client_entity_id, SUM(m.mrr_legacy) AS mrr, SUM(m.quantity) AS quantity, COUNT(*) AS rows,
-				BOOL_AND(m.quantity IS NOT NULL AND m.quantity > 0) AS has_quantity
-			FROM mrr_legacy m LEFT JOIN invoices_legacy il ON il.id = m.invoice_legacy_id
-			WHERE m.holding_id = $1 AND m.client_id = $2 AND m.product_name = $3 AND m.contract_currency = $4
-				AND to_char(m.period_month, 'YYYY-MM') = $5
-			GROUP BY m.company_id, il.client_entity_id
-			ORDER BY SUM(m.mrr_legacy) DESC NULLS LAST LIMIT 1`,
-			[holdingId, parts.client_id, parts.product_name, parts.contract_currency, str(row.live_last_month) ?? line.last_month]
-		)) as Row[];
+		const record = recordRows(parts);
+		const lastMonth = str(row.live_last_month) ?? line.last_month;
+		const [[last], perProduct] = await Promise.all([
+			this.dataSource.query(
+				`SELECT m.company_id, il.client_entity_id, SUM(m.mrr_legacy) AS mrr
+				FROM mrr_legacy m LEFT JOIN invoices_legacy il ON il.id = m.invoice_legacy_id
+				WHERE m.holding_id = $1 AND ${record.where.join(' AND ')}
+					AND to_char(m.period_month, 'YYYY-MM') = $${record.params.length + 2}
+				GROUP BY m.company_id, il.client_entity_id
+				ORDER BY SUM(m.mrr_legacy) DESC NULLS LAST LIMIT 1`,
+				[holdingId, ...record.params, lastMonth]
+			) as Promise<Row[]>,
+			// Por producto, en su último mes vivo: MRR, cantidad (solo si hay una fila con cantidad) y filas.
+			this.dataSource.query(
+				`WITH live AS (
+					SELECT m.product_name, MAX(m.period_month) FILTER (WHERE NOT ${legacyRemovedSql('m')}) AS last_month
+					FROM mrr_legacy m WHERE m.holding_id = $1 AND ${record.where.join(' AND ')} GROUP BY m.product_name
+				)
+				SELECT m.product_name, SUM(m.mrr_legacy) AS mrr, SUM(m.quantity) AS quantity, COUNT(*) AS rows,
+					BOOL_AND(m.quantity IS NOT NULL AND m.quantity > 0) AS has_quantity
+				FROM mrr_legacy m JOIN live l ON l.product_name = m.product_name AND l.last_month = m.period_month
+				WHERE m.holding_id = $1 AND ${record.where.join(' AND ')} AND NOT ${legacyRemovedSql('m')}
+				GROUP BY m.product_name`,
+				[holdingId, ...record.params]
+			) as Promise<Row[]>,
+		]);
 		const [entity] = last?.client_entity_id
 			? [{ id: last.client_entity_id }]
 			: ((await this.dataSource.query(
 					`SELECT ce.id FROM client_entities ce WHERE ce.holding_id = $1 AND ce.client_id = $2 ORDER BY ce.legal_name, ce.id LIMIT 1`,
 					[holdingId, parts.client_id]
 				)) as Row[]);
-		const mrr = num(last?.mrr);
-		const quantity = last?.has_quantity && num(last?.rows) === 1 && num(last?.quantity) > 0 ? num(last.quantity) : 1;
-		const lastMonth = str(row.live_last_month) ?? line.last_month;
+		const byProduct = new Map(perProduct.map((value) => [String(value.product_name ?? ''), value]));
 		const warnings: string[] = [];
+		const items = line.products.map((product, index) => {
+			const stats = byProduct.get(product.product_name);
+			const mrr = num(stats?.mrr);
+			const quantity = stats?.has_quantity && num(stats?.rows) === 1 && num(stats?.quantity) > 0 ? num(stats.quantity) : 1;
 
-		if (!line.product_id) warnings.push(`"${line.product_name}" no está en el catálogo: elige el producto antes de crear el contrato`);
+			if (!product.product_id) warnings.push(`"${product.product_name}" no está en el catálogo: elige el producto antes de crear el contrato`);
+			if (mrr <= 0) warnings.push(`"${product.product_name}" no tiene MRR en su último mes: revisa el unitario`);
+
+			return {
+				key: `history-${index + 1}`,
+				product_id: product.product_id,
+				product_name: product.product_name,
+				item_type: 'Fijo',
+				quantity,
+				unit_price: round6(Math.max(mrr, 0) / quantity),
+				billing_frequency: 'Mensual',
+				billing_method: 'Anticipado',
+				term_months: 12,
+				start_date: lastMonth ? nextMonthStart(lastMonth) : firstDay(currentMonth(now)),
+				is_recurring: true,
+				category: HISTORY_ITEM_CATEGORY,
+			};
+		});
+
 		if (!entity) warnings.push('El cliente no tiene razón social: créala antes de crear el contrato');
-		if (line.status !== 'pending') warnings.push('La línea no tiene meses pendientes: no quedará empalmada');
-		if (mrr <= 0) warnings.push('El último mes no tiene MRR: revisa el unitario');
+		if (line.status !== 'pending') warnings.push('El registro no tiene meses pendientes: no quedará empalmado');
 
 		return {
 			client_id: parts.client_id,
 			client_entity_id: str(entity?.id),
 			company_id: str(last?.company_id),
 			contract_currency: parts.contract_currency,
-			items: [
-				{
-					key: 'history-1',
-					product_id: line.product_id,
-					product_name: line.product_name,
-					item_type: 'Fijo',
-					quantity,
-					unit_price: round6(Math.max(mrr, 0) / quantity),
-					billing_frequency: 'Mensual',
-					billing_method: 'Anticipado',
-					term_months: 12,
-					start_date: lastMonth ? nextMonthStart(lastMonth) : firstDay(currentMonth(now)),
-					is_recurring: true,
-					category: HISTORY_ITEM_CATEGORY,
-				},
-			],
-			origin: { type: 'history' as const, line_key: key },
+			items,
+			products: line.products.map((product) => product.product_name),
+			origin: { type: 'history' as const, record_key: key },
 			warnings,
 		};
 	}
 
-	/** Vista previa del generador de Contratos (`POST /contracts/preview`) + el empalme que quedaría. */
-	async contractPreview(holdingId: string, key: string, dto: OnboardingContractDto, now = new Date()) {
+	/** Productos del body (`products`) que no están en el registro → 400. */
+	private assertProducts(line: { products: Array<{ product_name: string }> }, products?: string[]) {
+		if (!products) return;
+		const known = new Set(line.products.map((product) => product.product_name.trim().toLowerCase()));
+		const errors = products
+			.map((name, index) => ({ name, index }))
+			.filter(({ name }) => !known.has(name.trim().toLowerCase()))
+			.map(({ name, index }) => ({ field: `products.${index}`, message: `"${name}" no es un producto de este registro` }));
+
+		if (errors.length) throw validationException(errors);
+	}
+
+	/** Vista previa del generador de Contratos (`POST /contracts/preview`) + el empalme que quedaría (con los productos elegidos). */
+	async contractPreview(holdingId: string, key: string, dto: OnboardingContractDto) {
 		const parts = decodeLineKey(key);
-		const row = await this.lineRow(this.dataSource, holdingId, parts, now);
+
+		this.assertWithoutContract(
+			parts,
+			'line_not_pending',
+			'El registro ya está relacionado con un contrato: no tiene meses pendientes de empalmar'
+		);
+		const row = await this.lineRow(this.dataSource, holdingId, parts);
 
 		this.assertSameClient(parts, dto);
+		this.assertProducts(lineDto(row), dto.products);
 		const preview = await this.contractDrafts.preview(this.historyContractDto(dto), holdingId);
 		const starts = dto.items
 			.filter((item) => item.is_recurring !== false)
 			.map((item) => item.start_date?.slice(0, 7))
 			.filter(Boolean)
 			.sort() as Month[];
+		const record = recordRows(parts);
+		const params: unknown[] = [holdingId, ...record.params];
+		const productFilter = dto.products
+			? ` AND lower(btrim(m.product_name)) = ANY($${params.push(dto.products.map((name) => name.trim().toLowerCase()))}::text[])`
+			: '';
 		const months = (await this.dataSource.query(
 			`SELECT DISTINCT to_char(m.period_month, 'YYYY-MM') AS period FROM mrr_legacy m
-			WHERE m.holding_id = $1 AND m.client_id = $2 AND m.product_name = $3 AND m.contract_currency = $4
-				AND m.migrated_to_contract_id IS NULL AND NOT m.skip_activation`,
-			[holdingId, parts.client_id, parts.product_name, parts.contract_currency]
+			WHERE m.holding_id = $1 AND ${record.where.join(' AND ')} AND NOT m.skip_activation${productFilter}`,
+			params
 		)) as Row[];
+		const periods = months.map((month) => String(month.period)).sort();
 
 		return {
 			...preview,
-			splice: spliceOf(
-				str(row.live_last_month),
-				starts[0] ?? null,
-				months.map((month) => String(month.period))
-			),
+			splice: spliceOf(periods[periods.length - 1] ?? null, starts[0] ?? null, periods),
 		};
 	}
 
 	/**
 	 * Crea el contrato En revisión con el generador común (`ContractDraftsService.create`, su propia transacción) y empalma los meses
-	 * pendientes en una segunda transacción. Si el empalme falla, el borrador recién creado se elimina (borrado lógico de Contratos)
-	 * para no dejar un contrato sin su historia.
+	 * pendientes del registro sin contrato (de los productos elegidos; por defecto todos) en una segunda transacción. Si el empalme falla,
+	 * el borrador recién creado se elimina (borrado lógico de Contratos) para no dejar un contrato sin su historia. Devuelve el **registro
+	 * relacionado** nuevo (misma raíz × contrato creado).
 	 */
 	async createContract(holdingId: string, key: string, dto: OnboardingContractDto, actor: OnboardingActor) {
 		const parts = decodeLineKey(key);
+
+		this.assertWithoutContract(
+			parts,
+			'line_not_pending',
+			'El registro ya está relacionado con un contrato: no tiene meses pendientes de empalmar'
+		);
 		const rows = await this.lockLine(this.dataSource, holdingId, parts, false);
 
 		this.assertSameClient(parts, dto);
-		if (!pendingRows(rows).length) throw conflict('line_not_pending', 'La línea no tiene meses pendientes de empalmar');
+		this.assertProducts({ products: [...new Set(rows.map((row) => row.product_name))].map((product_name) => ({ product_name })) }, dto.products);
+		const wanted = dto.products ? new Set(dto.products.map((name) => name.trim().toLowerCase())) : null;
+
+		if (!pendingRows(rows).filter((row) => !wanted || wanted.has(row.product_name.trim().toLowerCase())).length) {
+			throw conflict('line_not_pending', 'El registro no tiene meses pendientes de empalmar');
+		}
 		const created = (await this.contractDrafts.create(this.historyContractDto(dto), holdingId, actor.authId)) as Row;
 		const contractId = String(created.id);
 
 		try {
 			await withApiWriter(this.dataSource, async (runner) => {
-				const splice = await this.linkInTx(runner, holdingId, parts, contractId, actor);
+				const splice = await this.linkInTx(runner, holdingId, parts, contractId, actor, dto.products);
 
 				await insertOnboardingEvent(runner, holdingId, actor.userId, {
 					type: 'history_contract_created',
-					lineKey: rawLineKey(parts),
+					lineKey: rawRootKey(parts),
 					entityType: 'contract',
 					entityId: contractId,
-					payload: { contract_number: str(created.contract_number), origin: { type: 'history', line_key: rawLineKey(parts) }, splice },
+					payload: {
+						contract_number: str(created.contract_number),
+						origin: { type: 'history', record_key: rawLineKey(parts) },
+						products: dto.products ?? null,
+						splice,
+					},
 				});
 			});
 		} catch (error) {
@@ -991,19 +1178,22 @@ export class OnboardingHistoryService {
 			throw error;
 		}
 
-		return { contract: { id: contractId, contract_number: str(created.contract_number) }, line: await this.line(holdingId, key) };
+		return {
+			contract: { id: contractId, contract_number: str(created.contract_number) },
+			line: await this.line(holdingId, encodeLineKey({ ...parts, contract_id: contractId })),
+		};
 	}
 
-	/** Body para el generador de Contratos: sin `origin` y con los ítems en RENEWAL salvo categoría explícita (Domi 14-10). */
+	/** Body para el generador de Contratos: sin `origin` ni `products`, y con los ítems en RENEWAL salvo categoría explícita (Domi 14-10). */
 	private historyContractDto(dto: OnboardingContractDto): CreateContractDto {
-		const body = omitKey(dto, 'origin') as CreateContractDto;
+		const body = omitKey(omitKey(dto, 'origin'), 'products') as CreateContractDto;
 
 		return { ...body, items: body.items.map((item) => ({ ...item, category: item.category ?? HISTORY_ITEM_CATEGORY })) };
 	}
 
 	private assertSameClient(parts: LineKeyParts, dto: CreateContractDto) {
 		if (dto.client_id !== parts.client_id) {
-			throw conflict('contract_other_client', 'El contrato debe ser del mismo cliente comercial que la línea');
+			throw conflict('contract_other_client', 'El contrato debe ser del mismo cliente comercial que el registro');
 		}
 	}
 }

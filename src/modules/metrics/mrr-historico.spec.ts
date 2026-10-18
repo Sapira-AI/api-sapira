@@ -6,7 +6,14 @@ import { ClientMetricsService } from '@/modules/clients/client-metrics.service';
 import { HoldingMetricsService } from './holding-metrics.service';
 import { KEY_LABELS } from './metrics-categories';
 import { MetricsDataService } from './metrics-data.service';
-import { legacyCountedConditions, legacyRemovedSql, legacySkipCodeSql, skipReasonCodeOf } from './mrr-historico';
+import {
+	legacyAfterContractSql,
+	legacyCountedConditions,
+	legacyRemovedSql,
+	legacySeamMonthSql,
+	legacySkipCodeSql,
+	skipReasonCodeOf,
+} from './mrr-historico';
 import { MrrMetricsService } from './mrr-metrics.service';
 
 import type { MrrLine } from './mrr-movements';
@@ -15,24 +22,32 @@ const HOLDING = '05583c6e-9364-4672-a610-0744324e44b4';
 const sqlOf = (query: jest.Mock, needle: string) => query.mock.calls.map(([sql]) => String(sql)).filter((sql) => sql.includes(needle));
 
 describe('MRR histórico: una sola regla de qué filas cuentan (onboarding §3.1, U14)', () => {
-	it('motivo: columna normalizada si existe; si no, el texto libre ("duplic"/"error" → quitada, otro → churn)', () => {
+	it('motivo: solo la columna normalizada; sin código es "No activado" (churn) aunque el texto diga duplicado (Domi 18-10)', () => {
 		expect(skipReasonCodeOf({ skip_activation: false, skip_activation_reason: 'duplicado' })).toBeNull();
-		expect(skipReasonCodeOf({ skip_activation: true, skip_activation_reason: 'DUPLICADO, YA SE ENCUENTRA SUSCRIPCIÓN' })).toBe('duplicate');
-		expect(skipReasonCodeOf({ skip_activation: true, skip_activation_reason: 'Error de importación' })).toBe('error');
+		expect(skipReasonCodeOf({ skip_activation: true, skip_activation_reason: 'DUPLICADO, YA SE ENCUENTRA SUSCRIPCIÓN' })).toBe('churn');
+		expect(skipReasonCodeOf({ skip_activation: true, skip_activation_reason: 'Error de importación' })).toBe('churn');
 		expect(skipReasonCodeOf({ skip_activation: true, skip_activation_reason: 'Churn Abril 2026' })).toBe('churn');
 		expect(skipReasonCodeOf({ skip_activation: true, skip_activation_reason: null })).toBe('churn');
 		expect(skipReasonCodeOf({ skip_activation: true, skip_reason_code: 'error', skip_activation_reason: 'Churn' })).toBe('error');
+		expect(skipReasonCodeOf({ skip_activation: true, skip_reason_code: 'duplicate' })).toBe('duplicate');
+		expect(skipReasonCodeOf({ skip_activation: true, skip_reason_code: 'otro' })).toBe('churn');
 	});
 
-	it('el SQL lee la columna tolerante (to_jsonb) y aplica recurrente + corte U14 + no quitada', () => {
-		expect(legacySkipCodeSql()).toContain("to_jsonb(m) ->> 'skip_reason_code'");
-		expect(legacySkipCodeSql()).toContain("ILIKE '%duplic%'");
+	it('el SQL lee la columna tolerante (to_jsonb), no interpreta el texto libre y aplica recurrente + corte U14 + no quitada', () => {
+		expect(legacySkipCodeSql()).toBe("(CASE WHEN m.skip_activation THEN COALESCE(to_jsonb(m) ->> 'skip_reason_code', 'churn') END)");
+		expect(legacySkipCodeSql()).not.toContain('skip_activation_reason');
+		expect(legacySkipCodeSql()).not.toContain('ILIKE');
 		expect(legacyRemovedSql()).toContain("IN ('duplicate', 'error')");
 		expect(legacyCountedConditions()).toEqual([
 			'COALESCE(m.is_recurring, false) = true',
 			'NOT (f.first_month IS NOT NULL AND m.period_month >= f.first_month)',
 			`NOT ${legacyRemovedSql()}`,
 		]);
+	});
+
+	it('el corte U14 se reporta en dos casos: mes de empalme (=) y histórico después del inicio del contrato (>)', () => {
+		expect(legacySeamMonthSql()).toBe('(f.first_month IS NOT NULL AND m.period_month = f.first_month)');
+		expect(legacyAfterContractSql()).toBe('(f.first_month IS NOT NULL AND m.period_month > f.first_month)');
 	});
 
 	it('Métricas, Dashboard/Clientes y Cliente 360 usan la misma regla (sin duplicarla)', async () => {

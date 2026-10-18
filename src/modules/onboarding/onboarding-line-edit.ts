@@ -29,7 +29,9 @@ export interface LineEditRow {
 	invoice_currency: string | null;
 	contract_id: string | null;
 	skip_code: string | null;
-	/** Clave cruda de la línea donde queda la fila. */
+	/** Producto de la fila (el registro agrupa varios, Domi 18-10). */
+	product_name: string | null;
+	/** Clave cruda del registro donde queda la fila (`batch_id|client_id|contract_currency|<contrato>`). */
 	line_key: string;
 	/** Fila generada por la edición (no existe aún). */
 	generated?: boolean;
@@ -60,8 +62,11 @@ export function invoiceRegistration(rows: Array<{ period: Month; subtotal: numbe
 export const lineInvoiceAmount = (rows: Array<{ allocated: number; term: number }>) =>
 	round2(rows.reduce((sum, row) => sum + row.allocated / (row.term || 1), 0));
 
-/** Filas que generaría el motor de Registrar histórico para un plan (mismas fórmulas que `insertRows`). */
-export function generatedRows(plan: RegisterPlan, rawKeyOf: (productName: string) => string): LineEditRow[] {
+/**
+ * Filas que generaría el motor de Registrar histórico para un plan (mismas fórmulas que `insertRows`). `rawKeyOf` da la clave cruda del
+ * registro de destino para la moneda de contrato del plan (el producto ya no cambia de registro: vive dentro, Domi 18-10).
+ */
+export function generatedRows(plan: RegisterPlan, rawKeyOf: (contractCurrency: string) => string): LineEditRow[] {
 	const term = plan.months.length;
 	const recurring = plan.input.is_recurring !== false;
 	const fx = plan.fx_contract_to_invoice ?? 1;
@@ -85,7 +90,8 @@ export function generatedRows(plan: RegisterPlan, rawKeyOf: (productName: string
 				invoice_currency: plan.invoice_currency,
 				contract_id: null,
 				skip_code: null,
-				line_key: rawKeyOf(product.product_name ?? ''),
+				product_name: product.product_name,
+				line_key: rawKeyOf(plan.input.contract_currency),
 				generated: true,
 			}))
 	);
@@ -119,10 +125,12 @@ export function entryTotals(rows: LineEditRow[]) {
 					: (rows[0]?.fx_invoice ?? null),
 		invoice_currency: rows.find((row) => row.invoice_currency)?.invoice_currency ?? null,
 		is_recurring: rows.every((row) => row.is_recurring),
+		/** Productos del grupo (distintos, en orden alfabético). */
+		products: [...new Set(rows.map((row) => row.product_name ?? ''))].filter(Boolean).sort(),
 	};
 }
 
-/** Antes/después por factura × mes: `kept` (igual), `changed`, `added` (solo después) y `removed` (solo antes). */
+/** Antes/después por factura × mes: `kept` (igual), `changed` (montos, recurrencia, productos o registro), `added` (solo después) y `removed` (solo antes). */
 export function diffEntries(before: LineEditRow[], after: LineEditRow[]): EditEntry[] {
 	const group = (rows: LineEditRow[]) => {
 		const map = new Map<string, LineEditRow[]>();
@@ -143,11 +151,17 @@ export function diffEntries(before: LineEditRow[], after: LineEditRow[]): EditEn
 			const a = entryTotals(previous);
 			const b = entryTotals(rows);
 
-			// Cambia si cambian montos o recurrencia, o si el mes pasó a otra línea (producto o moneda distintos).
+			// Cambia si cambian montos, recurrencia o productos, o si el mes pasó a otro registro (moneda distinta).
 			const sameLine = [...new Set(previous.map((row) => row.line_key))].join() === [...new Set(rows.map((row) => row.line_key))].join();
+			const sameProducts = a.products.join('|') === b.products.join('|');
 
 			status =
-				sameLine && a.subtotal === b.subtotal && a.mrr === b.mrr && a.is_recurring === b.is_recurring && a.amount_invoice === b.amount_invoice
+				sameLine &&
+				sameProducts &&
+				a.subtotal === b.subtotal &&
+				a.mrr === b.mrr &&
+				a.is_recurring === b.is_recurring &&
+				a.amount_invoice === b.amount_invoice
 					? 'kept'
 					: 'changed';
 		}

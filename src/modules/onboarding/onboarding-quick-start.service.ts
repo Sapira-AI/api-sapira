@@ -34,7 +34,8 @@ export type QuickStartFlag = 'no_client' | 'no_product' | 'already_has_contract'
  * nombre calza exacto con la línea). Al aplicar, la usuaria manda por cliente lo de "Registrar histórico" (§3.2b: período, monto en
  * moneda de contrato, productos) más frecuencia y método: se crea el contrato En revisión con el generador común
  * (`ContractDraftsService.create`, un ítem por producto) y, en una segunda transacción, las filas de MRR histórico de esa factura ya
- * empalmadas al contrato (`OnboardingRegisterService.registerInTx`). Si el registro falla, el borrador recién creado se elimina.
+ * empalmadas al contrato (`OnboardingRegisterService.registerInTx`: un registro —`batch_id`— nuevo por cliente × moneda, Domi 18-10). Si el
+ * registro falla, el borrador recién creado se elimina.
  */
 @Injectable()
 export class OnboardingQuickStartService {
@@ -88,9 +89,10 @@ export class OnboardingQuickStartService {
 				)
 			: [];
 		const planByInvoice = new Map(plans.map((plan) => [plan.invoice_id, plan]));
-		// Línea a la que se sumaría la última factura (Domi 18-10): solo con lo completado por la usuaria (sin producto no hay línea).
-		const lines = await this.register.linesOf(this.dataSource, holdingId, plans);
-		const lineByInvoice = new Map(plans.map((plan, index) => [plan.invoice_id, lines.rows[index]]));
+		// Registros pendientes del cliente en la moneda completada (Domi 18-10): el arranque crea un registro nuevo por cliente × moneda; esto
+		// avisa que ya hay historia pendiente de ese cliente. Solo con lo completado por la usuaria.
+		const records = await this.register.recordsOf(this.dataSource, holdingId, plans);
+		const recordsByInvoice = new Map(plans.map((plan, index) => [plan.invoice_id, records.rows[index].existing_records]));
 		const [items, products] = await Promise.all([
 			ids.length
 				? (this.dataSource.query(
@@ -153,8 +155,7 @@ export class OnboardingQuickStartService {
 				invoice_currency: str(invoice.invoice_currency),
 				amount_invoice_currency: num(invoice.amount_invoice_currency),
 				fx_contract_to_invoice: plan ? plan.fx_contract_to_invoice : 1,
-				line_key: lineByInvoice.get(String(invoice.id))?.line_key ?? null,
-				line_exists: lineByInvoice.get(String(invoice.id))?.line_exists ?? false,
+				existing_records: recordsByInvoice.get(String(invoice.id)) ?? [],
 				warnings: (plan?.warnings ?? []) as RegisterWarning[],
 				errors: (plan?.errors ?? []) as RegisterError[],
 			};
@@ -183,13 +184,20 @@ export class OnboardingQuickStartService {
 					multi_currency: flagged('multi_currency'),
 				},
 				by_currency: [...byCurrency.values()],
-				lines_touched: lines.touched,
+				// Un registro nuevo (`batch_id`) por propuesta aplicable (cliente × moneda).
+				records_to_create: records.to_create,
 			},
 		};
 	}
 
 	async apply(holdingId: string, dto: QuickStartApplyDto, actor: OnboardingActor) {
-		const created: Array<{ entity_id: string; contract: { id: string; contract_number: string | null }; history_rows: number }> = [];
+		const created: Array<{
+			entity_id: string;
+			contract: { id: string; contract_number: string | null };
+			history_rows: number;
+			/** Registro relacionado nuevo (su `batch_id` × cliente × moneda × contrato creado). */
+			record_key: string | null;
+		}> = [];
 		const skipped: Array<{ entity_id: string; reason: string; message?: string }> = [];
 		const invoices = await this.lastInvoices(
 			this.dataSource,
@@ -251,7 +259,7 @@ export class OnboardingQuickStartService {
 							invoice_id: String(invoice.id),
 							contract_id: contractId,
 							contract_number: str(contract.contract_number),
-							batch_id: registered.batch_id,
+							batch_id: registered.batch_ids[0] ?? null,
 							history_rows: registered.created_rows,
 						},
 					});
@@ -263,6 +271,7 @@ export class OnboardingQuickStartService {
 					entity_id: proposal.entity_id,
 					contract: { id: contractId, contract_number: str(contract.contract_number) },
 					history_rows: result.created_rows,
+					record_key: result.records_touched[0] ?? null,
 				});
 			} catch (error) {
 				await this.contractDrafts.remove(contractId, holdingId, actor.authId).catch(() => undefined);

@@ -159,18 +159,36 @@ describe('arranque rápido: tipo de cambio visible (Domi 14-10)', () => {
 		expect(ok).toMatchObject({ fx_contract_to_invoice: 5, warnings: [] });
 	});
 
-	it('línea a la que se sumaría (Domi 18-10): solo con lo completado; clave cliente | producto del catálogo | moneda y lines_touched', async () => {
+	it('registros pendientes del cliente en la moneda completada (Domi 18-10): solo con lo completado; el arranque crea un registro nuevo por propuesta', async () => {
 		const empty = await build().service.preview(HOLDING, { as_of: '2026-07' });
 
-		expect(empty.proposals[0]).toMatchObject({ line_key: null, line_exists: false });
-		expect(empty.summary.lines_touched).toEqual([]);
-		const key = encodeLineKey({ client_id: 'cl-1', product_name: 'PATHFINDER+', contract_currency: 'USD' });
-		const filled = await build([
+		expect(empty.proposals[0]).toMatchObject({ existing_records: [] });
+		expect(empty.proposals[0]).not.toHaveProperty('line_key');
+		expect(empty.summary).toMatchObject({ records_to_create: 0 });
+		expect(empty.summary).not.toHaveProperty('lines_touched');
+		const BATCH = '77777777-7777-4777-8777-777777777777';
+		const key = encodeLineKey({ batch_id: BATCH, client_id: 'cl-1', contract_currency: 'USD', contract_id: null });
+		const { db, service } = build([
 			[
-				'SELECT DISTINCT m.client_id, m.product_name, m.contract_currency FROM',
-				() => [{ client_id: 'cl-1', product_name: 'PATHFINDER+', contract_currency: 'USD' }],
+				'SELECT st.batch_id',
+				() => [
+					{
+						batch_id: BATCH,
+						client_id: 'cl-1',
+						contract_currency: 'USD',
+						contract_id: null,
+						status: 'pending',
+						first_month: '2026-01',
+						last_month: '2026-06',
+						months_count: '6',
+						mrr_last: '200',
+						registered_at: '2026-09-01T00:00:00.000Z',
+						products: [{ product_name: 'PATHFINDER+', product_id: PRODUCT, mrr_last: '200' }],
+					},
+				],
 			],
-		]).service.preview(HOLDING, {
+		]);
+		const filled = await service.preview(HOLDING, {
 			as_of: '2026-07',
 			proposals: [
 				proposal({
@@ -181,8 +199,25 @@ describe('arranque rápido: tipo de cambio visible (Domi 14-10)', () => {
 			],
 		});
 
-		expect(filled.proposals[0]).toMatchObject({ line_key: key, line_exists: true });
-		expect(filled.summary.lines_touched).toEqual([key]);
+		expect(filled.proposals[0].existing_records).toEqual([
+			{
+				key,
+				batch_id: BATCH,
+				products: ['PATHFINDER+'],
+				first_month: '2026-01',
+				last_month: '2026-06',
+				months_count: 6,
+				mrr_last: 200,
+				registered_at: '2026-09-01T00:00:00.000Z',
+			},
+		]);
+		expect(filled.summary.records_to_create).toBe(1);
+		// Solo registros pendientes (sin contrato) de los clientes de las propuestas.
+		const [query] = db.statements('SELECT st.batch_id');
+
+		expect(query.sql).toContain('m.migrated_to_contract_id IS NULL');
+		expect(query.sql).toContain("WHERE st.status = 'pending'");
+		expect(query.params).toEqual([HOLDING, ['cl-1']]);
 	});
 });
 
@@ -193,9 +228,19 @@ describe('arranque rápido: aplicar', () => {
 		const dto = (contractDrafts.create as jest.Mock).mock.calls[0][0];
 
 		expect(result).toEqual({
-			created: [{ entity_id: 'ce-1', contract: { id: 'ctr-1', contract_number: 'CTR-2026-50' }, history_rows: 1 }],
+			created: [
+				{ entity_id: 'ce-1', contract: { id: 'ctr-1', contract_number: 'CTR-2026-50' }, history_rows: 1, record_key: expect.any(String) },
+			],
 			skipped: [],
 		});
+		const [insert] = db.statements('INSERT INTO mrr_legacy');
+		const batchId = String(insert.params[29]);
+
+		// El registro relacionado nuevo: un `batch_id` propio (por cliente × moneda) × el contrato creado.
+		expect(batchId).toMatch(/^[0-9a-f-]{36}$/);
+		expect(result.created[0].record_key).toBe(
+			encodeLineKey({ batch_id: batchId, client_id: 'cl-1', contract_currency: 'BRL', contract_id: 'ctr-1' })
+		);
 		expect(dto).toMatchObject({
 			client_id: 'cl-1',
 			client_entity_id: 'ce-1',
@@ -216,11 +261,10 @@ describe('arranque rápido: aplicar', () => {
 				},
 			],
 		});
-		const [insert] = db.statements('INSERT INTO mrr_legacy');
-
-		// Fila del mes de la factura ya empalmada al contrato nuevo.
+		// Fila del mes de la factura ya empalmada al contrato nuevo, con el `batch_id` del registro nuevo.
 		expect(insert.params.slice(-2)).toEqual(['ctr-1', 'user-1']);
 		expect(db.statements('INSERT INTO onboarding_events').map((call) => call.params[1])).toEqual(['history_registered', 'quick_start_applied']);
+		expect(JSON.parse(String(db.statements('INSERT INTO onboarding_events')[1].params[5]))).toMatchObject({ batch_id: batchId });
 	});
 
 	it('anual: unitario = monto mensual del producto (o el que venga) e inicio tras el período cubierto', () => {

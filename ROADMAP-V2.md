@@ -32,6 +32,17 @@ este repo ([GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md)).
    de MRR histórico con empalme sin SQL, facturas previas como evidencia y cobranza, motor único de import; nace en
    `/lab/onboarding` y se publica en Administración › Datos históricos →
    [`docs/v2-rediseno/spec-onboarding-y-mrr-historico-v2.md`](docs/v2-rediseno/spec-onboarding-y-mrr-historico-v2.md).
+   **Estado 18-10**: cierre v1 el 14-10 (editar línea por factura, Renovación al crear contrato, un solo estado Pendiente,
+   registrar histórico desde facturas previas, plantilla de tres hojas con histórico, arranque rápido) y el 18-10: registro =
+   `batch_id` × cliente × moneda (tres estados, unificar registros, un ítem por producto al crear contrato), **Adoptar como
+   factura del contrato** (reconciliar una factura previa con Por Emitir), serie "MRR histórico por mes" por concepto (con
+   contrato · No activado · pendiente, filtro `concept`) y por dimensión (cliente, razón social, producto, compañía), corte
+   U14 en dos casos (mes de empalme silencioso vs histórico después del contrato). API sin commit en `domi`, sin migración
+   nueva. **Pendiente**: publicación fuera del lab (en curso en el front, Administración › Datos históricos) · Leon: la
+   sincronización del ERP no debe crear facturas previas de facturas que ya existen en Sapira, y propagar el estado de pago
+   a las facturas adoptadas · sugerencias de empalme (idea 18-10: proponer el contrato activo a una factura previa o a un
+   registro pendiente cuando calcen —mismo cliente, producto y moneda— y cierren un hueco justo antes del primer mes del
+   contrato; con solape, con aviso de ajustar el contrato; spec §8.4) · "conservar Renovación al editar borrador".
 
 ## 📋 Las fases (los 7 pasos del plan del 21-08, tachados según avance)
 

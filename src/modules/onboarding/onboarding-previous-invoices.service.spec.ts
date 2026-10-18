@@ -328,15 +328,60 @@ describe('importación con histórico en el mismo paso (Domi 14-10)', () => {
 		const [insert] = db.statements('INSERT INTO mrr_legacy');
 
 		expect(result).toMatchObject({ inserted: 2, history_rows_created: 1, history_skipped: [] });
-		expect(result.history_lines_touched).toHaveLength(1);
-		// `batch_id` del MRR histórico = lote de la importación (revertir el lote lo revierte también).
-		expect(insert.params).toContain(result.batch_id);
+		expect(result.history_records_touched).toHaveLength(1);
+		// El registro de MRR legacy nace con su propio `batch_id` (uno por cliente × moneda, Domi 18-10), nunca el lote de la importación; el
+		// lote lo guarda en su evento (`history_batch_ids`) para poder revertirlo.
+		expect(result.history_batch_ids).toHaveLength(1);
+		expect(result.history_batch_ids[0]).not.toBe(result.batch_id);
+		expect(insert.params).toContain(result.history_batch_ids[0]);
+		expect(insert.params).not.toContain(result.batch_id);
 		expect(db.statements('INSERT INTO mrr_legacy')).toHaveLength(1);
-		expect(db.statements('INSERT INTO onboarding_events').map((call) => call.params[1])).toEqual([
-			'history_registered',
-			'previous_invoices_imported',
-		]);
+		const events = db.statements('INSERT INTO onboarding_events');
+
+		expect(events.map((call) => call.params[1])).toEqual(['history_registered', 'previous_invoices_imported']);
+		expect(JSON.parse(String(events[1].params[5]))).toMatchObject({ history_batch_ids: result.history_batch_ids });
 		expect(db.committed()).toBe(1);
+	});
+
+	it('aplicar: dos facturas del mismo cliente y moneda comparten registro; otra moneda abre otro', async () => {
+		const row = (id: string, number: string, currency: string) => ({
+			id,
+			invoice_number: number,
+			issue_date: '2026-07-01',
+			company_id: CO_CL,
+			legal_client_name: 'Acme',
+			invoice_currency: currency,
+			amount_invoice_currency: '1000',
+			total_invoice_currency: '1190',
+			status: 'Enviada',
+			client_id: CLIENT,
+			item_id: `it-${number}`,
+			item_subtotal: '1000',
+			has_history: false,
+		});
+		const inserted = ['inv-a', 'inv-b', 'inv-c'];
+		const { service } = build([
+			products,
+			currencies,
+			['INSERT INTO invoices_legacy', () => [{ id: inserted.shift() }]],
+			['LEFT JOIN LATERAL', (params) => (params[1] as string[]).map((id) => row(id, id, id === 'inv-c' ? 'USD' : 'CLP'))],
+			['SELECT id, name FROM products', () => [{ id: PRODUCT, name: 'PATHFINDER+' }]],
+		]);
+		const result = await service.applyImport(
+			HOLDING,
+			{
+				invoices: [
+					invoice({ items: [historyItem()] }),
+					invoice({ row: 2, invoice_number: 'F-2', items: [historyItem()] }),
+					invoice({ row: 3, invoice_number: 'F-3', currency: 'USD', items: [historyItem({ contract_currency: 'USD' })] }),
+				],
+			},
+			ACTOR
+		);
+
+		expect(result).toMatchObject({ inserted: 3, history_rows_created: 3 });
+		expect(result.history_batch_ids).toHaveLength(2);
+		expect(result.history_records_touched).toHaveLength(2);
 	});
 
 	it('cliente comercial por número de cliente (además de RUT, nombre e id del CRM) y como candidato seguro si falta la razón social', async () => {
@@ -369,45 +414,55 @@ describe('importación con histórico en el mismo paso (Domi 14-10)', () => {
 });
 
 describe('revertir lote y relacionar cliente', () => {
-	const batch = (row: Record<string, unknown>): Handler => [
-		'AS imported',
-		() => [{ imported: true, reverted: false, with_history: 0, linked: 0, ...row }],
+	/** El evento del lote (con sus `history_batch_ids`, o sin ellos en importaciones anteriores al 18-10) y el estado del lote. */
+	const batch = (row: Record<string, unknown>, imported: unknown = { history_batch_ids: null }): Handler[] => [
+		["payload -> 'history_batch_ids'", () => (imported ? [imported] : [])],
+		['AS with_history', () => [{ reverted: false, with_history: 0, linked: 0, ...row }]],
 	];
 
 	it('revertir: 404 si el lote no existe, 409 batch_has_history / batch_linked / already_reverted, y borra las facturas del lote', async () => {
-		await expect(build([batch({ imported: false })]).service.revertImport(HOLDING, 'b-1', ACTOR)).rejects.toBeInstanceOf(NotFoundException);
-		await expect(build([batch({ with_history: 2 })]).service.revertImport(HOLDING, 'b-1', ACTOR)).rejects.toMatchObject({
+		await expect(build(batch({}, null)).service.revertImport(HOLDING, 'b-1', ACTOR)).rejects.toBeInstanceOf(NotFoundException);
+		await expect(build(batch({ with_history: 2 })).service.revertImport(HOLDING, 'b-1', ACTOR)).rejects.toMatchObject({
 			response: { code: 'batch_has_history' },
 		});
-		await expect(build([batch({ linked: 1 })]).service.revertImport(HOLDING, 'b-1', ACTOR)).rejects.toMatchObject({
+		await expect(build(batch({ linked: 1 })).service.revertImport(HOLDING, 'b-1', ACTOR)).rejects.toMatchObject({
 			response: { code: 'batch_linked' },
 		});
-		await expect(build([batch({ reverted: true })]).service.revertImport(HOLDING, 'b-1', ACTOR)).rejects.toMatchObject({
+		await expect(build(batch({ reverted: true })).service.revertImport(HOLDING, 'b-1', ACTOR)).rejects.toMatchObject({
 			response: { code: 'already_reverted' },
 		});
-		const { db, service } = build([batch({}), ['DELETE FROM invoices_legacy', () => [{ id: 'a' }, { id: 'b' }]]]);
+		const { db, service } = build([...batch({}), ['DELETE FROM invoices_legacy', () => [{ id: 'a' }, { id: 'b' }]]]);
 
 		await expect(service.revertImport(HOLDING, 'b-1', ACTOR)).resolves.toEqual({ batch_id: 'b-1', removed: 2, history_rows_removed: 0 });
 		expect(db.statements('INSERT INTO onboarding_events')[0].params[1]).toBe('previous_invoices_reverted');
 	});
 
-	it('revertir un lote con histórico propio (registrado por la misma importación, sin empalmar): lo borra también y lo informa', async () => {
+	it('revertir un lote con histórico propio (los registros que creó la importación, sin empalmar): lo borra también y lo informa', async () => {
 		const { db, service } = build([
-			batch({}),
+			...batch({}, { history_batch_ids: ['h-1', 'h-2'] }),
 			['DELETE FROM mrr_legacy', () => [{ id: 'm-1' }, { id: 'm-2' }]],
 			['DELETE FROM invoices_legacy', () => [{ id: 'a' }]],
 		]);
 
 		await expect(service.revertImport(HOLDING, 'b-1', ACTOR)).resolves.toEqual({ batch_id: 'b-1', removed: 1, history_rows_removed: 2 });
-		// El bloqueo solo cuenta histórico ajeno al lote o empalmado.
-		expect(db.statements('AS imported')[0].sql).toContain('m.batch_id IS DISTINCT FROM $2::uuid OR m.migrated_to_contract_id IS NOT NULL');
+		// El bloqueo solo cuenta histórico ajeno a los registros de la importación o empalmado.
+		const [check] = db.statements('AS with_history');
+
+		expect(check.sql).toContain('m.batch_id <> ALL($3::uuid[]) OR m.migrated_to_contract_id IS NOT NULL');
+		expect(check.params).toEqual([HOLDING, 'b-1', ['h-1', 'h-2']]);
 		const [del] = db.statements('DELETE FROM mrr_legacy');
 
-		expect(del.sql).toContain('m.batch_id = $2::uuid AND m.migrated_to_contract_id IS NULL');
+		expect(del.sql).toContain('m.batch_id = ANY($3::uuid[]) AND m.migrated_to_contract_id IS NULL');
+		expect(del.params).toEqual([HOLDING, 'b-1', ['h-1', 'h-2']]);
 		// Primero el histórico, después las facturas.
 		expect(db.calls.findIndex((call) => call.sql.includes('DELETE FROM mrr_legacy'))).toBeLessThan(
 			db.calls.findIndex((call) => call.sql.includes('DELETE FROM invoices_legacy'))
 		);
+		// Importación anterior al 18-10 (sin `history_batch_ids`): el histórico propio era el del lote mismo.
+		const legacy = build([...batch({}), ['DELETE FROM invoices_legacy', () => [{ id: 'a' }]]]);
+
+		await legacy.service.revertImport(HOLDING, 'b-1', ACTOR);
+		expect(legacy.db.statements('DELETE FROM mrr_legacy')[0].params).toEqual([HOLDING, 'b-1', ['b-1']]);
 	});
 
 	it('relacionar cliente: vincula la razón social (principal si no tenía) y completa el cliente de sus facturas', async () => {
@@ -526,37 +581,117 @@ describe('registrar histórico (§3.2b)', () => {
 		expect(covered.summary.rows_to_create).toBe(23);
 	});
 
-	it('vista previa: línea a la que se sumaría cada factura (clave de aplicar), si ya existe y lines_touched sin las bloqueadas (Domi 18-10)', async () => {
-		const keyA = encodeLineKey({ client_id: CLIENT, product_name: 'PATHFINDER+', contract_currency: 'USD' });
-		const keyB = encodeLineKey({ client_id: CLIENT, product_name: 'Soporte', contract_currency: 'USD' });
-		const { db, service } = make([
-			...handlers(invoiceRow(), [{ client_id: CLIENT, product_name: 'PATHFINDER+', contract_currency: 'USD', period: '2025-01' }]),
-		]);
+	const UUID_CLIENT = '22222222-2222-4222-8222-222222222222';
+	const BATCH = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+	const TARGET = { batch_id: BATCH, client_id: UUID_CLIENT, contract_currency: 'USD', contract_id: null };
+	const TARGET_KEY = encodeLineKey(TARGET);
+	/** El registro pendiente existente, como lo devuelven `resolveTargets` (raíz) y `pendingRecords` (fila de la bandeja). */
+	const pendingHandlers: Handler[] = [
+		['HAVING BOOL_OR(NOT m.skip_activation)', () => [{ batch_id: BATCH, client_id: UUID_CLIENT, contract_currency: 'USD' }]],
+		[
+			'SELECT st.batch_id',
+			() => [
+				{
+					batch_id: BATCH,
+					client_id: UUID_CLIENT,
+					contract_currency: 'USD',
+					contract_id: null,
+					status: 'pending',
+					first_month: '2025-01',
+					last_month: '2025-12',
+					months_count: '12',
+					mrr_last: '100',
+					registered_at: '2026-09-01T00:00:00.000Z',
+					products: [{ product_name: 'PATHFINDER+', product_id: PRODUCT_A, mrr_last: '100' }],
+				},
+			],
+		],
+	];
+
+	it('vista previa: sin destino el registro nace al aplicar (record_key null) y se listan los registros pendientes del cliente y moneda; una factura bloqueada no cuenta (Domi 18-10)', async () => {
+		const { db, service } = make([...pendingHandlers, ...handlers(invoiceRow({ client_id: UUID_CLIENT }))]);
 		const preview = await service.preview(HOLDING, { invoices: [input()] });
 
-		expect(preview.rows[0]).toMatchObject({ line_key: keyA, line_exists: true });
-		expect(preview.rows[0].products).toEqual([
-			expect.objectContaining({ product_name: 'PATHFINDER+', line_key: keyA, line_exists: true }),
-			expect.objectContaining({ product_name: 'Soporte', line_key: keyB, line_exists: false }),
+		expect(preview.rows[0]).toMatchObject({ record_key: null, record_exists: false });
+		expect(preview.rows[0].existing_records).toEqual([
+			{
+				key: TARGET_KEY,
+				batch_id: BATCH,
+				products: ['PATHFINDER+'],
+				first_month: '2025-01',
+				last_month: '2025-12',
+				months_count: 12,
+				mrr_last: 100,
+				registered_at: '2026-09-01T00:00:00.000Z',
+			},
 		]);
-		expect(preview.summary.lines_touched).toEqual([keyA, keyB]);
-		expect(db.statements('WHERE m.holding_id = $1 AND m.client_id = ANY($2::uuid[])').some((call) => !call.sql.includes('to_char'))).toBe(true);
-		// Sin cliente comercial no hay línea; una factura bloqueada no entra en lines_touched.
+		// Los dos productos de la factura caen en el mismo registro: un registro nuevo (cliente × moneda).
+		expect(preview.summary).toMatchObject({ records_touched: [], records_to_create: 1 });
+		expect(db.statements('SELECT st.batch_id')[0].params).toEqual([HOLDING, [UUID_CLIENT]]);
+		// Sin cliente comercial no hay registro; una factura bloqueada no abre registro.
 		const noClient = await make(handlers(invoiceRow({ client_id: null }))).service.preview(HOLDING, { invoices: [input()] });
 
-		expect(noClient.rows[0]).toMatchObject({ line_key: null, line_exists: false });
-		expect(noClient.summary.lines_touched).toEqual([]);
+		expect(noClient.rows[0]).toMatchObject({ record_key: null, record_exists: false, existing_records: [] });
+		expect(noClient.summary).toMatchObject({ records_touched: [], records_to_create: 0 });
 	});
 
-	it('aplicar: una fila por producto × mes no cubierto (term = meses, mrr = parte ÷ meses, fx = factura ÷ contrato) y marca la factura', async () => {
+	it('target_key (continuar un registro): por factura o global, debe ser un registro pendiente del mismo cliente y moneda; si no, target_not_found | target_mismatch', async () => {
+		const { service } = make([...pendingHandlers, ...handlers(invoiceRow({ client_id: UUID_CLIENT }))]);
+		const own = await service.preview(HOLDING, { invoices: [input({ target_key: TARGET_KEY })] });
+
+		expect(own.rows[0]).toMatchObject({ record_key: TARGET_KEY, record_exists: true, errors: [] });
+		expect(own.summary).toMatchObject({ records_touched: [TARGET_KEY], records_to_create: 0 });
+		const global = await service.preview(HOLDING, { invoices: [input()], target_key: TARGET_KEY });
+
+		expect(global.rows[0]).toMatchObject({ record_key: TARGET_KEY, record_exists: true });
+		const mismatch = await service.preview(HOLDING, { invoices: [input({ contract_currency: 'CLP', target_key: TARGET_KEY })] });
+
+		expect(mismatch.rows[0].errors).toContain('target_mismatch');
+		expect(mismatch.rows[0].record_key).toBeNull();
+		const missing = await make(handlers(invoiceRow({ client_id: UUID_CLIENT }))).service.preview(HOLDING, {
+			invoices: [input({ target_key: TARGET_KEY })],
+		});
+
+		expect(missing.rows[0].errors).toContain('target_not_found');
+		// Un registro relacionado nunca es destino; una clave rota es 400 con su campo.
+		const linked = await service.preview(HOLDING, {
+			invoices: [input({ target_key: encodeLineKey({ ...TARGET, contract_id: BATCH }) })],
+		});
+
+		expect(linked.rows[0].errors).toContain('target_not_found');
+		await expect(service.preview(HOLDING, { invoices: [input({ target_key: 'rota' })] })).rejects.toMatchObject({
+			response: { errors: [{ field: 'invoices.0.target_key' }] },
+		});
+		await expect(service.preview(HOLDING, { invoices: [input()], target_key: 'rota' })).rejects.toMatchObject({
+			response: { errors: [{ field: 'target_key' }] },
+		});
+	});
+
+	it('aplicar con target_key: las filas nacen en el batch_id del registro elegido y el evento lo dice', async () => {
+		const { db, service } = make([...pendingHandlers, ...handlers(invoiceRow({ client_id: UUID_CLIENT }))]);
+		const result = await service.register(HOLDING, { invoices: [input()], target_key: TARGET_KEY }, ACTOR);
+
+		expect(result).toMatchObject({ created_rows: 24, records_touched: [TARGET_KEY], batch_ids: [BATCH], skipped: [] });
+		expect(db.statements('INSERT INTO mrr_legacy')[0].params[29]).toBe(BATCH);
+		const [event] = db.statements('INSERT INTO onboarding_events');
+
+		expect(event.params[2]).toBe(`${BATCH}|${UUID_CLIENT}|USD`);
+		expect(JSON.parse(String(event.params[5]))).toMatchObject({ batch_id: BATCH, continued: `${BATCH}|${UUID_CLIENT}|USD|` });
+	});
+
+	it('aplicar: una fila por producto × mes no cubierto (term = meses, mrr = parte ÷ meses, fx = factura ÷ contrato), los dos productos en un solo registro, y marca la factura', async () => {
 		const { db, service } = make(
 			handlers(invoiceRow(), [{ client_id: CLIENT, product_name: 'PATHFINDER+', contract_currency: 'USD', period: '2026-03' }])
 		);
 		const result = await service.register(HOLDING, { invoices: [input()] }, ACTOR);
 		const [insert] = db.statements('INSERT INTO mrr_legacy');
 
-		expect(result).toMatchObject({ created_rows: 23, skipped: [] });
-		expect(result.lines_touched).toHaveLength(2);
+		expect(result).toMatchObject({ created_rows: 23, skipped: [], created_ids: [] });
+		// Un registro (`batch_id`) para los dos productos de la factura; su clave lleva ese lote.
+		expect(result.records_touched).toHaveLength(1);
+		expect(result.batch_ids).toHaveLength(1);
+		expect(insert.params[29]).toBe(result.batch_ids[0]);
+		expect(insert.sql).toContain('RETURNING id');
 		// Primera fila: producto A, enero: split 1, subtotal 1000, asignado 1.000.000 CLP, term 12, MRR 83,33, fx 1000.
 		expect(insert.params.slice(0, 4)).toEqual([HOLDING, INVOICE, 'it-1', 1]);
 		expect(insert.params.slice(17, 26)).toEqual([1000000, CLIENT, 'USD', 1000, 'PATHFINDER+', 12, '2026-01-01', true, 1000]);

@@ -33,15 +33,25 @@ const upper = ({ value }: { value: unknown }) => (typeof value === 'string' ? va
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
-/** Un solo estado pendiente (Domi 14-10): "terminó sin resolver" es el filtro `ended=true` sobre `pending`, no otro estado. */
-export const HISTORY_LINE_STATUSES = ['pending', 'linked', 'closed', 'removed'] as const;
+/**
+ * Tres estados (Domi 18-10, definitivo): `pending` (sin contrato, filas sin marcar), `linked` (con contrato), `closed` = "No activado" (sin
+ * contrato, todas marcadas). Sin `removed` ni "Quitar": un duplicado se corrige con "Editar línea". Sin "ya terminó": no sabemos si terminó
+ * si la usuaria no lo marca.
+ */
+export const HISTORY_LINE_STATUSES = ['pending', 'linked', 'closed'] as const;
 export type HistoryLineStatus = (typeof HISTORY_LINE_STATUSES)[number];
-export const HISTORY_SORT_FIELDS = ['client', 'product', 'last_month', 'mrr', 'status'] as const;
+/** Problemas de datos de un registro (Domi 18-10; mismo catálogo que `HistoryLine.issues`). */
+export const HISTORY_LINE_ISSUES = ['history_after_contract'] as const;
+export type HistoryLineIssue = (typeof HISTORY_LINE_ISSUES)[number];
+export const HISTORY_SORT_FIELDS = ['client', 'product', 'last_month', 'mrr', 'status', 'registered_at'] as const;
 export const PREVIOUS_INVOICE_STATUSES = ['Pagada', 'Enviada', 'Vencida'] as const;
 export const PREVIOUS_INVOICE_SORT_FIELDS = ['issue_date', 'due_date', 'invoice_number', 'client', 'total', 'status'] as const;
 export const PREVIOUS_INVOICE_SOURCE_TYPES = ['historical_import', 'erp_unmatched', 'manual_entry'] as const;
-export const REMOVE_REASONS = ['duplicate', 'error'] as const;
 export const IMPORT_MAX_INVOICES = 2000;
+/** Registros que se pueden unificar de una vez. */
+export const UNIFY_MAX_RECORDS = 50;
+/** Largo máximo de una clave de registro codificada. */
+const KEY_MAX_LENGTH = 200;
 
 /** Lista separada por comas en que cada valor pertenece a `allowed`. */
 const CsvIn = (allowed: readonly string[], message: string) =>
@@ -89,7 +99,7 @@ export class HistoryLinesQueryDto extends PageQueryDto {
 	@IsOptional()
 	clientId?: string;
 
-	@ApiPropertyOptional({ description: 'Nombre exacto del producto' })
+	@ApiPropertyOptional({ description: 'Nombre exacto del producto: registros que lo contienen' })
 	@Transform(trim)
 	@IsString()
 	@MaxLength(200)
@@ -97,17 +107,22 @@ export class HistoryLinesQueryDto extends PageQueryDto {
 	product?: string;
 
 	@ApiPropertyOptional({
-		enum: ['true', 'false'],
-		description: 'Solo líneas pendientes: `true` = su último mes ya pasó (terminó sin resolver); `false` = pendientes vigentes',
+		enum: HISTORY_LINE_ISSUES,
+		description: '`history_after_contract`: registros con histórico empalmado en meses posteriores al primer mes con MRR de su contrato',
 	})
-	@IsIn(['true', 'false'], { message: 'ended debe ser true o false' })
+	@IsIn(HISTORY_LINE_ISSUES, { message: `Problema inválido: usa ${HISTORY_LINE_ISSUES.join(', ')}` })
 	@IsOptional()
-	ended?: 'true' | 'false';
+	issue?: HistoryLineIssue;
 
-	@ApiPropertyOptional({ description: 'Lote de MRR histórico (`mrr_legacy.batch_id`)' })
-	@IsUUID(undefined, { message: 'Lote inválido' })
+	@ApiPropertyOptional({ description: 'Id del registro de MRR legacy (`mrr_legacy.batch_id`; no es el lote de importación)' })
+	@IsUUID(undefined, { message: 'Registro inválido' })
 	@IsOptional()
 	batchId?: string;
+
+	@ApiPropertyOptional({ description: 'Registros relacionados con este contrato' })
+	@IsUUID(undefined, { message: 'Contrato inválido' })
+	@IsOptional()
+	contractId?: string;
 
 	@ApiPropertyOptional({ description: 'Cliente, razón social o producto' })
 	@Transform(trim)
@@ -118,7 +133,7 @@ export class HistoryLinesQueryDto extends PageQueryDto {
 
 	@ApiPropertyOptional({
 		enum: HISTORY_SORT_FIELDS,
-		description: 'Sin orden: prioridad de estado (pendiente → empalmada → cerrada → quitada) y cliente',
+		description: 'Sin orden: prioridad de estado (pendiente → relacionada → no activada) y cliente. `product` ordena por el producto principal',
 	})
 	@IsIn(HISTORY_SORT_FIELDS, { message: 'Orden inválido' })
 	@IsOptional()
@@ -133,6 +148,12 @@ export class HistoryLinesQueryDto extends PageQueryDto {
 /** Moneda de la serie del MRR histórico (Domi 18-10): sistema, moneda de contrato o moneda de factura. */
 export const HISTORY_SERIES_CURRENCIES = ['system', 'contract', 'invoice'] as const;
 export type HistorySeriesCurrency = (typeof HISTORY_SERIES_CURRENCIES)[number];
+/** Dimensión de la serie (Domi 18-10): sin desglose, cliente comercial, razón social receptora, producto o compañía emisora. */
+export const HISTORY_SERIES_GROUP_BY = ['none', 'client', 'entity', 'product', 'company'] as const;
+export type HistorySeriesGroupBy = (typeof HISTORY_SERIES_GROUP_BY)[number];
+/** Concepto de lo que cuenta (Domi 18-10): empalmado a un contrato, "No activado" o pendiente. Sin él, los tres. */
+export const HISTORY_SERIES_CONCEPTS = ['linked', 'not_activated', 'pending'] as const;
+export type HistorySeriesConcept = (typeof HISTORY_SERIES_CONCEPTS)[number];
 
 /** Filtros comunes de la serie del MRR histórico (`GET /onboarding/history/series`). */
 export class HistorySeriesQueryDto {
@@ -145,6 +166,33 @@ export class HistorySeriesQueryDto {
 	@IsIn(HISTORY_SERIES_CURRENCIES, { message: `Moneda inválida: usa ${HISTORY_SERIES_CURRENCIES.join(', ')}` })
 	@IsOptional()
 	currency?: HistorySeriesCurrency;
+
+	@ApiPropertyOptional({
+		enum: HISTORY_SERIES_GROUP_BY,
+		default: 'none',
+		description:
+			'Con valor distinto de `none`, la respuesta trae `rows[{ key, label, currency, values[] }]` (counted por mes) con las `top` primeras y una fila `others`',
+	})
+	@IsIn(HISTORY_SERIES_GROUP_BY, { message: `Dimensión inválida: usa ${HISTORY_SERIES_GROUP_BY.join(', ')}` })
+	@IsOptional()
+	groupBy?: HistorySeriesGroupBy;
+
+	@ApiPropertyOptional({
+		enum: HISTORY_SERIES_CONCEPTS,
+		description:
+			'Solo ese concepto de lo que cuenta: `linked` (con contrato), `not_activated` (No activado) o `pending` (pendiente). `counted`, su desglose, `by_currency`, `rows` y `rows_total` consideran solo sus filas (los `counted_*` de los otros conceptos van en 0); `after_contract` y `removed` no cambian. Sin él, los tres',
+	})
+	@IsIn(HISTORY_SERIES_CONCEPTS, { message: `Concepto inválido: usa ${HISTORY_SERIES_CONCEPTS.join(', ')}` })
+	@IsOptional()
+	concept?: HistorySeriesConcept;
+
+	@ApiPropertyOptional({ default: 15, minimum: 1, maximum: 50, description: 'Filas por dimensión (el resto va en "Otros")' })
+	@Type(() => Number)
+	@IsInt({ message: 'top debe ser un entero entre 1 y 50' })
+	@Min(1, { message: 'top debe ser un entero entre 1 y 50' })
+	@Max(50, { message: 'top debe ser un entero entre 1 y 50' })
+	@IsOptional()
+	top?: number;
 
 	@ApiPropertyOptional({ description: 'Compañía emisora (`mrr_legacy.company_id`)' })
 	@IsUUID(undefined, { message: 'Compañía inválida' })
@@ -187,21 +235,9 @@ export class LinkHistoryLineDto {
 	contract_id!: string;
 }
 
+/** "No activado" (Domi 18-10): el código es siempre `churn`; solo una nota libre opcional (`skip_activation_reason`). */
 export class CloseHistoryLineDto {
-	@ApiPropertyOptional({ description: 'Comentario (queda como texto del motivo)' })
-	@Transform(trim)
-	@IsString()
-	@MaxLength(500, { message: 'Comentario: máximo 500 caracteres' })
-	@IsOptional()
-	reason?: string;
-}
-
-export class RemoveHistoryLineDto {
-	@ApiProperty({ enum: REMOVE_REASONS })
-	@IsIn(REMOVE_REASONS, { message: 'Indica si es un duplicado o un error de carga' })
-	reason!: (typeof REMOVE_REASONS)[number];
-
-	@ApiPropertyOptional()
+	@ApiPropertyOptional({ description: 'Nota libre (queda en el registro)' })
 	@Transform(trim)
 	@IsString()
 	@MaxLength(500, { message: 'Nota: máximo 500 caracteres' })
@@ -209,20 +245,32 @@ export class RemoveHistoryLineDto {
 	notes?: string;
 }
 
+/** Unificar registros pendientes del mismo cliente y moneda (Domi 18-10): todos pasan al `batch_id` del primero. */
+export class UnifyHistoryLinesDto {
+	@ApiProperty({ type: [String], description: `Claves de registros pendientes (la de la URL), 2 a ${UNIFY_MAX_RECORDS}; el primero manda` })
+	@IsString({ each: true, message: 'Clave de registro inválida' })
+	@MaxLength(KEY_MAX_LENGTH, { each: true, message: 'Clave de registro inválida' })
+	@ArrayMinSize(2, { message: 'Elige al menos dos registros' })
+	@ArrayMaxSize(UNIFY_MAX_RECORDS, { message: `Máximo ${UNIFY_MAX_RECORDS} registros por unificación` })
+	@IsArray({ message: 'Indica los registros' })
+	keys!: string[];
+}
+
 export class HistoryOriginDto {
 	@ApiProperty({ enum: ['history'] })
 	@IsIn(['history'], { message: 'Origen inválido' })
 	type!: 'history';
 
-	@ApiProperty({ description: 'Clave de la línea (la misma de la URL)' })
+	@ApiProperty({ description: 'Clave del registro (la misma de la URL)' })
 	@IsString()
-	@MaxLength(600)
-	line_key!: string;
+	@MaxLength(KEY_MAX_LENGTH)
+	record_key!: string;
 }
 
 /**
- * Alta desde el MRR histórico: el `CreateContractDto` de Contratos + `origin`. El generador común no guarda `origin` (no tiene columna):
- * el origen queda en el empalme (`mrr_legacy.migrated_to_contract_id`) y en el evento `history_contract_created`.
+ * Alta desde el MRR histórico: el `CreateContractDto` de Contratos + `origin` + `products` (nombres de los productos del registro que se
+ * empalman con el contrato; por defecto todos; uno fuera queda pendiente en el registro sin contrato). El generador común no guarda `origin`
+ * (no tiene columna): el origen queda en el empalme (`mrr_legacy.migrated_to_contract_id`) y en el evento `history_contract_created`.
  */
 export class OnboardingContractDto extends CreateContractDto {
 	@ApiPropertyOptional({ type: HistoryOriginDto })
@@ -230,6 +278,15 @@ export class OnboardingContractDto extends CreateContractDto {
 	@Type(() => HistoryOriginDto)
 	@IsOptional()
 	origin?: HistoryOriginDto;
+
+	@ApiPropertyOptional({ type: [String], description: 'Productos del registro (nombre) que se empalman con el contrato; por defecto todos' })
+	@IsString({ each: true, message: 'Producto inválido' })
+	@MaxLength(200, { each: true, message: 'Producto inválido' })
+	@ArrayMinSize(1, { message: 'Elige al menos un producto' })
+	@ArrayMaxSize(50)
+	@IsArray()
+	@IsOptional()
+	products?: string[];
 }
 
 // ── Facturas previas ──────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -264,6 +321,11 @@ export class PreviousInvoicesQueryDto extends PageQueryDto {
 	@IsIn(['true', 'false'], { message: 'hasHistory debe ser true o false' })
 	@IsOptional()
 	hasHistory?: 'true' | 'false';
+
+	@ApiPropertyOptional({ enum: ['true', 'false'], description: 'Adoptadas como factura del contrato (§4.5) o no' })
+	@IsIn(['true', 'false'], { message: 'adopted debe ser true o false' })
+	@IsOptional()
+	adopted?: 'true' | 'false';
 
 	@ApiPropertyOptional({ description: 'Compañía emisora' })
 	@IsUUID(undefined, { message: 'Compañía inválida' })
@@ -577,11 +639,21 @@ export class HistoryProductAmountDto {
 	amount_contract_currency!: number;
 }
 
-/** Lo que completa la usuaria por factura (§3.2b): período que cubre, monto en moneda de contrato y productos. */
+/**
+ * Lo que completa la usuaria por factura (§3.2b): período que cubre, monto en moneda de contrato y productos. `target_key` (Domi 18-10,
+ * "continuar un registro"): registro pendiente existente del mismo cliente y moneda al que se suman las filas; sin él, nace un registro
+ * (`batch_id`) por cliente × moneda en la misma aplicación.
+ */
 export class RegisterHistoryInvoiceDto {
 	@ApiProperty()
 	@IsUUID(undefined, { message: 'Factura inválida' })
 	invoice_id!: string;
+
+	@ApiPropertyOptional({ description: 'Registro pendiente existente (clave de la URL) al que se suma esta factura' })
+	@IsString({ message: 'Clave de registro inválida' })
+	@MaxLength(KEY_MAX_LENGTH, { message: 'Clave de registro inválida' })
+	@IsOptional()
+	target_key?: string;
 
 	@ApiProperty({ example: '2026-07' })
 	@Matches(MONTH, { message: 'Período desde inválido (AAAA-MM)' })
@@ -636,6 +708,12 @@ export class RegisterHistoryDto {
 	@ArrayMaxSize(2000, { message: 'Máximo 2.000 facturas por registro' })
 	@IsArray()
 	invoices!: RegisterHistoryInvoiceDto[];
+
+	@ApiPropertyOptional({ description: 'Registro pendiente existente al que se suman todas las facturas (las que no traen su propio target_key)' })
+	@IsString({ message: 'Clave de registro inválida' })
+	@MaxLength(KEY_MAX_LENGTH, { message: 'Clave de registro inválida' })
+	@IsOptional()
+	target_key?: string;
 }
 
 // ── Arranque rápido ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -753,9 +831,9 @@ export class QuickStartApplyDto {
 // ── Eventos ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export class OnboardingEventsQueryDto extends PageQueryDto {
-	@ApiPropertyOptional({ description: 'Clave de línea (la de la URL)' })
+	@ApiPropertyOptional({ description: 'Clave de un registro (la de la URL) o de su raíz (`root_key`): busca por la raíz' })
 	@IsString()
-	@MaxLength(600)
+	@MaxLength(KEY_MAX_LENGTH)
 	@IsOptional()
 	lineKey?: string;
 

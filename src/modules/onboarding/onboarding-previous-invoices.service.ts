@@ -139,6 +139,8 @@ export class OnboardingPreviousInvoicesService {
 		if (query.batchId) where.push(`to_jsonb(il) ->> 'import_batch_id' = ${add(query.batchId)}`);
 		if (query.hasHistory === 'true') where.push('EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id)');
 		if (query.hasHistory === 'false') where.push('NOT EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id)');
+		if (query.adopted === 'true') where.push('il.reconciled_invoice_id IS NOT NULL');
+		if (query.adopted === 'false') where.push('il.reconciled_invoice_id IS NULL');
 		if (query.companyId) where.push(`il.company_id = ${add(query.companyId)}`);
 		if (query.country) where.push(`upper(ce.country_code) = ${add(query.country)}`);
 		if (query.search) {
@@ -232,14 +234,18 @@ export class OnboardingPreviousInvoicesService {
 			il.company_id, co.legal_name AS company_legal_name, il.invoice_currency, il.amount_invoice_currency, il.vat, il.total_invoice_currency,
 			il.status, il.source_type, il.source_system, il.contract_id, ct.contract_number, to_jsonb(il) ->> 'import_batch_id' AS batch_id,
 			il.notes, upper(ce.country_code) AS entity_country,
-			EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id) AS has_history`;
+			EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id) AS has_history,
+			il.reconciliation_status, ri.id AS adopted_invoice_id, ri.invoice_number AS adopted_invoice_number, ri.status AS adopted_invoice_status,
+			ri.contract_id AS adopted_contract_id, rc.contract_number AS adopted_contract_number`;
 	}
 
 	private invoiceJoins() {
 		return `LEFT JOIN client_entities ce ON ce.id = il.client_entity_id
 			LEFT JOIN clients cl ON cl.id = COALESCE(il.client_id, ce.client_id)
 			LEFT JOIN companies co ON co.id = il.company_id
-			LEFT JOIN contracts ct ON ct.id = il.contract_id`;
+			LEFT JOIN contracts ct ON ct.id = il.contract_id
+			LEFT JOIN invoices ri ON ri.id = il.reconciled_invoice_id
+			LEFT JOIN contracts rc ON rc.id = ri.contract_id`;
 	}
 
 	private invoiceDto(row: Row) {
@@ -270,6 +276,16 @@ export class OnboardingPreviousInvoicesService {
 			contract: row.contract_id ? { id: String(row.contract_id), contract_number: str(row.contract_number) } : null,
 			batch_id: str(row.batch_id),
 			has_history: row.has_history === true,
+			/** Adoptada como factura del contrato (§4.5): la factura de Sapira que nació de esta (`reconciled_invoice_id`). */
+			adopted: row.adopted_invoice_id
+				? {
+						invoice_id: String(row.adopted_invoice_id),
+						invoice_number: str(row.adopted_invoice_number),
+						status: str(row.adopted_invoice_status),
+						contract_id: str(row.adopted_contract_id),
+						contract_number: str(row.adopted_contract_number),
+					}
+				: null,
 		};
 	}
 
@@ -628,17 +644,22 @@ export class OnboardingPreviousInvoicesService {
 					blockers: [{ code: 'nothing_to_import', duplicates: skippedDuplicates, errors }],
 				});
 			}
-			// Histórico de las facturas `ready` en la misma transacción, con el motor de Registrar histórico (mismas reglas y avisos) y el
-			// lote de la importación como `mrr_legacy.batch_id` (así revertir el lote revierte también ese histórico).
+			// Histórico de las facturas `ready` en la misma transacción, con el motor de Registrar histórico (mismas reglas y avisos). Los
+			// registros de MRR legacy nacen con un `batch_id` por cliente × moneda (Domi 18-10; nunca uno por importación): el lote guarda sus
+			// `history_batch_ids` en el evento para que revertirlo revierta también ese histórico.
 			const history = historyInputs.length
 				? await this.register.registerInTx(
 						runner,
 						holdingId,
 						historyInputs.map((entry) => entry.input),
-						actor,
-						{ batchId }
+						actor
 					)
-				: { created_rows: 0, lines_touched: [] as string[], skipped: [] as Array<{ invoice_id: string; reason: string }> };
+				: {
+						created_rows: 0,
+						records_touched: [] as string[],
+						batch_ids: [] as string[],
+						skipped: [] as Array<{ invoice_id: string; reason: string }>,
+					};
 			const rowOf = new Map(historyInputs.map((entry) => [entry.input.invoice_id, entry]));
 			const result = {
 				batch_id: batchId,
@@ -648,7 +669,8 @@ export class OnboardingPreviousInvoicesService {
 				entities_created: entitiesCreated,
 				needs_client: needsClient,
 				history_rows_created: history.created_rows,
-				history_lines_touched: history.lines_touched,
+				history_records_touched: history.records_touched,
+				history_batch_ids: history.batch_ids,
 				history_skipped: history.skipped.map((skip) => ({
 					row: rowOf.get(skip.invoice_id)?.row ?? null,
 					invoice_number: rowOf.get(skip.invoice_id)?.invoice_number ?? null,
@@ -807,25 +829,33 @@ export class OnboardingPreviousInvoicesService {
 	}
 
 	/**
-	 * Revierte un lote: borra sus facturas (y líneas). El MRR histórico registrado por la misma importación (`mrr_legacy.batch_id` = lote,
-	 * sin empalmar) se borra también; cualquier otro histórico sobre esas facturas (otro registro, una edición de la línea, filas
-	 * empalmadas) bloquea con `batch_has_history`, igual que un contrato vinculado (`batch_linked`).
+	 * Revierte un lote: borra sus facturas (y líneas). El MRR histórico registrado por la misma importación (los `history_batch_ids` del
+	 * evento del lote —o el lote mismo en importaciones anteriores al 18-10—, sin empalmar) se borra también; cualquier otro histórico sobre
+	 * esas facturas (otro registro, una unificación, filas empalmadas) bloquea con `batch_has_history`, igual que un contrato vinculado
+	 * (`batch_linked`).
 	 */
 	async revertImport(holdingId: string, batchId: string, actor: OnboardingActor) {
 		return await withApiWriter(this.dataSource, async (runner) => {
-			const [batch] = (await runner.query(
-				`SELECT
-					EXISTS (SELECT 1 FROM onboarding_events WHERE holding_id = $1 AND type = 'previous_invoices_imported' AND entity_id = $2) AS imported,
-					EXISTS (SELECT 1 FROM onboarding_events WHERE holding_id = $1 AND type = 'previous_invoices_reverted' AND entity_id = $2) AS reverted,
-					(SELECT COUNT(*) FROM invoices_legacy il WHERE il.holding_id = $1 AND il.import_batch_id = $2
-						AND EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id
-							AND (m.batch_id IS DISTINCT FROM $2::uuid OR m.migrated_to_contract_id IS NOT NULL))) AS with_history,
-					(SELECT COUNT(*) FROM invoices_legacy il WHERE il.holding_id = $1 AND il.import_batch_id = $2 AND il.contract_id IS NOT NULL) AS linked`,
+			const [imported] = (await runner.query(
+				`SELECT payload -> 'history_batch_ids' AS history_batch_ids FROM onboarding_events
+				WHERE holding_id = $1 AND type = 'previous_invoices_imported' AND entity_id = $2 ORDER BY created_at LIMIT 1`,
 				[holdingId, batchId]
 			)) as Row[];
 
-			if (!batch?.imported) throw new NotFoundException('Importación no encontrada');
-			if (batch.reverted) throw conflict('already_reverted', 'La importación ya está revertida');
+			if (!imported) throw new NotFoundException('Importación no encontrada');
+			const stored = typeof imported.history_batch_ids === 'string' ? JSON.parse(imported.history_batch_ids) : imported.history_batch_ids;
+			const historyBatches: string[] = Array.isArray(stored) && stored.length ? stored.map(String) : [batchId];
+			const [batch] = (await runner.query(
+				`SELECT
+					EXISTS (SELECT 1 FROM onboarding_events WHERE holding_id = $1 AND type = 'previous_invoices_reverted' AND entity_id = $2) AS reverted,
+					(SELECT COUNT(*) FROM invoices_legacy il WHERE il.holding_id = $1 AND il.import_batch_id = $2
+						AND EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id
+							AND (m.batch_id <> ALL($3::uuid[]) OR m.migrated_to_contract_id IS NOT NULL))) AS with_history,
+					(SELECT COUNT(*) FROM invoices_legacy il WHERE il.holding_id = $1 AND il.import_batch_id = $2 AND il.contract_id IS NOT NULL) AS linked`,
+				[holdingId, batchId, historyBatches]
+			)) as Row[];
+
+			if (batch?.reverted) throw conflict('already_reverted', 'La importación ya está revertida');
 			if (num(batch.with_history) > 0) {
 				throw conflict('batch_has_history', `${num(batch.with_history)} factura(s) del lote ya tienen MRR histórico registrado`, {
 					blockers: [{ code: 'batch_has_history', count: num(batch.with_history) }],
@@ -837,10 +867,10 @@ export class OnboardingPreviousInvoicesService {
 				});
 			}
 			const historyRemoved = (await runner.query(
-				`DELETE FROM mrr_legacy m WHERE m.holding_id = $1 AND m.batch_id = $2::uuid AND m.migrated_to_contract_id IS NULL
+				`DELETE FROM mrr_legacy m WHERE m.holding_id = $1 AND m.batch_id = ANY($3::uuid[]) AND m.migrated_to_contract_id IS NULL
 					AND m.invoice_legacy_id IN (SELECT il.id FROM invoices_legacy il WHERE il.holding_id = $1 AND il.import_batch_id = $2)
 				RETURNING m.id`,
-				[holdingId, batchId]
+				[holdingId, batchId, historyBatches]
 			)) as Row[];
 			const removed = (await runner.query(`DELETE FROM invoices_legacy WHERE holding_id = $1 AND import_batch_id = $2 RETURNING id`, [
 				holdingId,
