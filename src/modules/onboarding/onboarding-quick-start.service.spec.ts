@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import type { ContractDraftsService } from '@/modules/contracts/contract-drafts.service';
 import { fakeDb, Handler } from '@/modules/settings/fake-db.testing-spec';
 
+import { encodeLineKey } from './onboarding-common';
 import { OnboardingQuickStartService } from './onboarding-quick-start.service';
 import { OnboardingRegisterService } from './onboarding-register.service';
 
@@ -118,6 +119,73 @@ describe('arranque rápido: vista previa', () => {
 	});
 });
 
+describe('arranque rápido: tipo de cambio visible (Domi 14-10)', () => {
+	it('sin lo completado: monto y moneda de la factura con fx 1 (la propuesta es en la moneda de la factura)', async () => {
+		const [item] = (await build().service.preview(HOLDING, { as_of: '2026-07' })).proposals;
+
+		expect(item).toMatchObject({ invoice_currency: 'BRL', amount_invoice_currency: 1000, fx_contract_to_invoice: 1, warnings: [], errors: [] });
+	});
+
+	it('con lo completado por la usuaria: fx implícito del registro y aviso fx_one_with_different_currencies (USD ≈ BRL)', async () => {
+		const { service } = build();
+		const [item] = (
+			await service.preview(HOLDING, {
+				as_of: '2026-07',
+				proposals: [
+					proposal({
+						contract_currency: 'USD',
+						amount_contract_currency: 1000,
+						products: [{ product_id: PRODUCT, amount_contract_currency: 1000 }],
+					}),
+				],
+			})
+		).proposals;
+
+		expect(item.fx_contract_to_invoice).toBe(1);
+		expect(item.warnings).toContain('fx_one_with_different_currencies');
+		const [ok] = (
+			await service.preview(HOLDING, {
+				as_of: '2026-07',
+				proposals: [
+					proposal({
+						contract_currency: 'USD',
+						amount_contract_currency: 200,
+						products: [{ product_id: PRODUCT, amount_contract_currency: 200 }],
+					}),
+				],
+			})
+		).proposals;
+
+		expect(ok).toMatchObject({ fx_contract_to_invoice: 5, warnings: [] });
+	});
+
+	it('línea a la que se sumaría (Domi 18-10): solo con lo completado; clave cliente | producto del catálogo | moneda y lines_touched', async () => {
+		const empty = await build().service.preview(HOLDING, { as_of: '2026-07' });
+
+		expect(empty.proposals[0]).toMatchObject({ line_key: null, line_exists: false });
+		expect(empty.summary.lines_touched).toEqual([]);
+		const key = encodeLineKey({ client_id: 'cl-1', product_name: 'PATHFINDER+', contract_currency: 'USD' });
+		const filled = await build([
+			[
+				'SELECT DISTINCT m.client_id, m.product_name, m.contract_currency FROM',
+				() => [{ client_id: 'cl-1', product_name: 'PATHFINDER+', contract_currency: 'USD' }],
+			],
+		]).service.preview(HOLDING, {
+			as_of: '2026-07',
+			proposals: [
+				proposal({
+					contract_currency: 'USD',
+					amount_contract_currency: 200,
+					products: [{ product_id: PRODUCT, amount_contract_currency: 200 }],
+				}),
+			],
+		});
+
+		expect(filled.proposals[0]).toMatchObject({ line_key: key, line_exists: true });
+		expect(filled.summary.lines_touched).toEqual([key]);
+	});
+});
+
 describe('arranque rápido: aplicar', () => {
 	it('crea el contrato con el generador común (un ítem por producto, inicio = mes siguiente al período) y registra la última factura empalmada', async () => {
 		const { db, contractDrafts, service } = build();
@@ -143,6 +211,8 @@ describe('arranque rápido: aplicar', () => {
 					start_date: '2026-08-01',
 					term_months: 12,
 					is_recurring: true,
+					// Viene de algo que ya existía (Domi 14-10).
+					category: 'RENEWAL',
 				},
 			],
 		});

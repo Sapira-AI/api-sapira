@@ -20,10 +20,10 @@ export class OnboardingService {
 	async summary(holdingId: string, now = new Date()) {
 		const today = await this.history.todayStart(holdingId, now);
 		const [statuses, [clients], [splice], [invoices], [settings], metricsHistoryStart] = await Promise.all([
-			this.dataSource.query(`${lineCtes({ holding: '$1', today: '$2' })} SELECT st.status, COUNT(*) AS lines FROM st GROUP BY st.status`, [
-				holdingId,
-				today,
-			]) as Promise<Row[]>,
+			this.dataSource.query(
+				`${lineCtes({ holding: '$1', today: '$2' })} SELECT st.status, COUNT(*) AS lines, COUNT(*) FILTER (WHERE st.ended) AS ended FROM st GROUP BY st.status`,
+				[holdingId, today]
+			) as Promise<Row[]>,
 			this.dataSource.query(
 				`SELECT COUNT(DISTINCT m.client_id) AS clients FROM mrr_legacy m
 				WHERE m.holding_id = $1 AND NOT EXISTS (SELECT 1 FROM contracts c WHERE c.client_id = m.client_id AND c.holding_id = $1 AND c.deleted_at IS NULL)`,
@@ -46,8 +46,8 @@ export class OnboardingService {
 			) as Promise<Row[]>,
 			this.dataSource.query(
 				`SELECT COUNT(*) AS total,
-					COUNT(*) FILTER (WHERE il.contract_id IS NULL AND NOT EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id)) AS pending,
 					COUNT(*) FILTER (WHERE il.contract_id IS NOT NULL) AS linked,
+					COUNT(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id)) AS without_history,
 					COUNT(*) FILTER (WHERE il.status = 'Pagada') AS pagada,
 					COUNT(*) FILTER (WHERE il.status = 'Enviada') AS enviada,
 					COUNT(*) FILTER (WHERE il.status = 'Vencida') AS vencida
@@ -62,17 +62,21 @@ export class OnboardingService {
 		return {
 			history: {
 				lines: statuses.reduce((sum, row) => sum + num(row.lines), 0),
+				// Un solo estado pendiente (Domi 14-10): `pending` cuenta todas; `pending_ended` las que ya terminaron (subconjunto).
 				pending: count('pending'),
-				pending_ended: count('pending_ended'),
+				pending_ended: num(statuses.find((row) => row.status === 'pending')?.ended),
 				linked: count('linked'),
 				closed: count('closed'),
 				removed: count('removed'),
 				clients_without_contract: num(clients?.clients),
 			},
 			splice: { gap: num(splice?.gap), overlap_cut: num(splice?.overlap_cut), contract_without_mrr: num(splice?.contract_without_mrr) },
+			// Domi 18-10: sin `pending` (sin contrato y sin histórico, se confundía con "sin registrar"). `without_history` + `with_history` =
+			// `total`; `linked` = con contrato vinculado (con o sin histórico).
 			previous_invoices: {
 				total: num(invoices?.total),
-				pending: num(invoices?.pending),
+				without_history: num(invoices?.without_history),
+				with_history: num(invoices?.total) - num(invoices?.without_history),
 				linked: num(invoices?.linked),
 				by_status: { Pagada: num(invoices?.pagada), Enviada: num(invoices?.enviada), Vencida: num(invoices?.vencida) },
 			},

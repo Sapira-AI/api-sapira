@@ -33,7 +33,8 @@ const upper = ({ value }: { value: unknown }) => (typeof value === 'string' ? va
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
-export const HISTORY_LINE_STATUSES = ['pending', 'pending_ended', 'linked', 'closed', 'removed'] as const;
+/** Un solo estado pendiente (Domi 14-10): "terminó sin resolver" es el filtro `ended=true` sobre `pending`, no otro estado. */
+export const HISTORY_LINE_STATUSES = ['pending', 'linked', 'closed', 'removed'] as const;
 export type HistoryLineStatus = (typeof HISTORY_LINE_STATUSES)[number];
 export const HISTORY_SORT_FIELDS = ['client', 'product', 'last_month', 'mrr', 'status'] as const;
 export const PREVIOUS_INVOICE_STATUSES = ['Pagada', 'Enviada', 'Vencida'] as const;
@@ -95,6 +96,14 @@ export class HistoryLinesQueryDto extends PageQueryDto {
 	@IsOptional()
 	product?: string;
 
+	@ApiPropertyOptional({
+		enum: ['true', 'false'],
+		description: 'Solo líneas pendientes: `true` = su último mes ya pasó (terminó sin resolver); `false` = pendientes vigentes',
+	})
+	@IsIn(['true', 'false'], { message: 'ended debe ser true o false' })
+	@IsOptional()
+	ended?: 'true' | 'false';
+
 	@ApiPropertyOptional({ description: 'Lote de MRR histórico (`mrr_legacy.batch_id`)' })
 	@IsUUID(undefined, { message: 'Lote inválido' })
 	@IsOptional()
@@ -107,7 +116,10 @@ export class HistoryLinesQueryDto extends PageQueryDto {
 	@IsOptional()
 	search?: string;
 
-	@ApiPropertyOptional({ enum: HISTORY_SORT_FIELDS, default: 'client' })
+	@ApiPropertyOptional({
+		enum: HISTORY_SORT_FIELDS,
+		description: 'Sin orden: prioridad de estado (pendiente → empalmada → cerrada → quitada) y cliente',
+	})
 	@IsIn(HISTORY_SORT_FIELDS, { message: 'Orden inválido' })
 	@IsOptional()
 	sortBy?: (typeof HISTORY_SORT_FIELDS)[number];
@@ -118,30 +130,55 @@ export class HistoryLinesQueryDto extends PageQueryDto {
 	sortOrder?: 'asc' | 'desc';
 }
 
-export class HistoryMonthEditDto {
-	@ApiProperty({ description: 'Fila del mes (`mrr_legacy.id`)' })
-	@IsUUID(undefined, { message: 'Mes inválido' })
-	id!: string;
+/** Moneda de la serie del MRR histórico (Domi 18-10): sistema, moneda de contrato o moneda de factura. */
+export const HISTORY_SERIES_CURRENCIES = ['system', 'contract', 'invoice'] as const;
+export type HistorySeriesCurrency = (typeof HISTORY_SERIES_CURRENCIES)[number];
 
-	@ApiPropertyOptional({ description: 'Monto del mes en moneda de contrato' })
-	@IsNumber({ maxDecimalPlaces: 2 }, { message: 'Escribe el monto del mes' })
+/** Filtros comunes de la serie del MRR histórico (`GET /onboarding/history/series`). */
+export class HistorySeriesQueryDto {
+	@ApiPropertyOptional({
+		enum: HISTORY_SERIES_CURRENCIES,
+		default: 'system',
+		description:
+			'`system`: montos en moneda de sistema; `contract` / `invoice`: un desglose por moneda de contrato o de factura (`contracts` sigue en moneda de sistema)',
+	})
+	@IsIn(HISTORY_SERIES_CURRENCIES, { message: `Moneda inválida: usa ${HISTORY_SERIES_CURRENCIES.join(', ')}` })
 	@IsOptional()
-	subtotal_contract_currency?: number;
+	currency?: HistorySeriesCurrency;
 
-	@ApiPropertyOptional()
-	@IsBoolean({ message: 'Indica si el mes es recurrente' })
+	@ApiPropertyOptional({ description: 'Compañía emisora (`mrr_legacy.company_id`)' })
+	@IsUUID(undefined, { message: 'Compañía inválida' })
 	@IsOptional()
-	is_recurring?: boolean;
-}
+	companyId?: string;
 
-export class EditHistoryMonthsDto {
-	@ApiProperty({ type: [HistoryMonthEditDto] })
-	@ValidateNested({ each: true })
-	@Type(() => HistoryMonthEditDto)
-	@ArrayMinSize(1, { message: 'Indica al menos un mes' })
-	@ArrayMaxSize(500, { message: 'Máximo 500 meses por cambio' })
-	@IsArray({ message: 'Indica los meses' })
-	months!: HistoryMonthEditDto[];
+	@ApiPropertyOptional({ description: 'Cliente comercial' })
+	@IsUUID(undefined, { message: 'Cliente inválido' })
+	@IsOptional()
+	clientId?: string;
+
+	@ApiPropertyOptional({ description: 'Razón social receptora (la de la factura de origen)' })
+	@IsUUID(undefined, { message: 'Razón social inválida' })
+	@IsOptional()
+	entityId?: string;
+
+	@ApiPropertyOptional({ example: 'BR', description: 'País de la razón social receptora (código ISO de 2 letras)' })
+	@Transform(upper)
+	@Matches(/^[A-Z]{2}$/, { message: 'País inválido (código de 2 letras)' })
+	@IsOptional()
+	country?: string;
+
+	@ApiPropertyOptional({
+		example: '2025-01',
+		description: 'Por defecto, el mayor entre el inicio de la historia del holding y el primer mes con datos',
+	})
+	@Matches(MONTH, { message: 'Mes desde inválido (AAAA-MM)' })
+	@IsOptional()
+	from?: string;
+
+	@ApiPropertyOptional({ example: '2026-09', description: 'Por defecto, el último mes con datos' })
+	@Matches(MONTH, { message: 'Mes hasta inválido (AAAA-MM)' })
+	@IsOptional()
+	to?: string;
 }
 
 export class LinkHistoryLineDto {
@@ -223,6 +260,22 @@ export class PreviousInvoicesQueryDto extends PageQueryDto {
 	@IsOptional()
 	batchId?: string;
 
+	@ApiPropertyOptional({ enum: ['true', 'false'], description: 'Con o sin MRR histórico registrado' })
+	@IsIn(['true', 'false'], { message: 'hasHistory debe ser true o false' })
+	@IsOptional()
+	hasHistory?: 'true' | 'false';
+
+	@ApiPropertyOptional({ description: 'Compañía emisora' })
+	@IsUUID(undefined, { message: 'Compañía inválida' })
+	@IsOptional()
+	companyId?: string;
+
+	@ApiPropertyOptional({ example: 'BR', description: 'País de la razón social (código ISO de 2 letras)' })
+	@Transform(upper)
+	@Matches(/^[A-Z]{2}$/, { message: 'País inválido (código de 2 letras)' })
+	@IsOptional()
+	country?: string;
+
 	@ApiPropertyOptional({ description: 'Número de factura o razón social' })
 	@Transform(trim)
 	@IsString()
@@ -296,6 +349,41 @@ export class PreviousInvoiceItemInputDto {
 	@IsNumber({ maxDecimalPlaces: 2 }, { message: 'Total de línea inválido' })
 	@IsOptional()
 	total?: number;
+
+	// ── Histórico en el mismo paso (Domi 14-10): si todas las líneas traen esto completo, la importación registra el MRR histórico.
+
+	@ApiPropertyOptional({ description: 'Producto del catálogo: nombre o código' })
+	@Transform(trim)
+	@IsString()
+	@MaxLength(200)
+	@IsOptional()
+	product?: string;
+
+	@ApiPropertyOptional({ example: '2026-07', description: 'Primer mes que cubre la línea' })
+	@Matches(MONTH, { message: 'Período desde inválido (AAAA-MM)' })
+	@IsOptional()
+	period_from?: string;
+
+	@ApiPropertyOptional({ example: '2026-07', description: 'Último mes que cubre la línea' })
+	@Matches(MONTH, { message: 'Período hasta inválido (AAAA-MM)' })
+	@IsOptional()
+	period_to?: string;
+
+	@ApiPropertyOptional({ example: 'USD' })
+	@Transform(upper)
+	@Matches(/^[A-Z]{3}$/, { message: 'Moneda de contrato inválida' })
+	@IsOptional()
+	contract_currency?: string;
+
+	@ApiPropertyOptional({ description: 'Monto de la línea en moneda de contrato, por todo el período' })
+	@IsNumber({ maxDecimalPlaces: 2 }, { message: 'Monto en moneda de contrato inválido' })
+	@IsOptional()
+	amount_contract_currency?: number;
+
+	@ApiPropertyOptional({ default: true })
+	@IsBoolean({ message: 'Indica si la línea es recurrente' })
+	@IsOptional()
+	is_recurring?: boolean;
 }
 
 export class PreviousInvoiceInputDto {
@@ -348,6 +436,12 @@ export class PreviousInvoiceInputDto {
 	@MaxLength(80)
 	@IsOptional()
 	client_number?: string;
+
+	@ApiPropertyOptional({ example: 'BR', description: 'País de la razón social (código ISO de 2 letras); se propone al crearla' })
+	@Transform(upper)
+	@Matches(/^[A-Z]{2}$/, { message: 'País inválido (código de 2 letras)' })
+	@IsOptional()
+	country?: string;
 
 	@ApiProperty({ description: 'Razón social de la compañía emisora' })
 	@Transform(trim)
@@ -520,6 +614,20 @@ export class RegisterHistoryInvoiceDto {
 	products!: HistoryProductAmountDto[];
 }
 
+/**
+ * Editar una línea = volver a registrar sus facturas (Domi 14-10): una entrada por factura de la línea, con lo mismo que Registrar histórico
+ * (§3.2b). Las facturas no listadas no cambian. Si cambia el producto o la moneda, las filas nuevas caen en otra línea.
+ */
+export class EditHistoryLineDto {
+	@ApiProperty({ type: [RegisterHistoryInvoiceDto] })
+	@ValidateNested({ each: true })
+	@Type(() => RegisterHistoryInvoiceDto)
+	@ArrayMinSize(1, { message: 'Indica al menos una factura de la línea' })
+	@ArrayMaxSize(500, { message: 'Máximo 500 facturas por cambio' })
+	@IsArray({ message: 'Indica las facturas' })
+	invoices!: RegisterHistoryInvoiceDto[];
+}
+
 export class RegisterHistoryDto {
 	@ApiProperty({ type: [RegisterHistoryInvoiceDto] })
 	@ValidateNested({ each: true })
@@ -551,6 +659,18 @@ export class QuickStartPreviewDto {
 	@Max(24, { message: 'Meses de historia: 0 a 24' })
 	@IsOptional()
 	history_months?: number;
+
+	@ApiPropertyOptional({
+		type: () => [QuickStartProposalDto],
+		description:
+			'Opcional: lo que la usuaria ya completó por cliente (mismo cuerpo que al aplicar). Con él, la propuesta trae el tipo de cambio implícito, avisos y errores del registro',
+	})
+	@ValidateNested({ each: true })
+	@Type(() => QuickStartProposalDto)
+	@ArrayMaxSize(2000)
+	@IsArray()
+	@IsOptional()
+	proposals?: QuickStartProposalDto[];
 }
 
 export class QuickStartProductDto extends HistoryProductAmountDto {

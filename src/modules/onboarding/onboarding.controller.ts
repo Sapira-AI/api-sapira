@@ -10,8 +10,9 @@ import { RequirePermission, RequirePermissionGuard } from '@/guards/require-perm
 import {
 	AssignInvoiceClientDto,
 	CloseHistoryLineDto,
-	EditHistoryMonthsDto,
+	EditHistoryLineDto,
 	HistoryLinesQueryDto,
+	HistorySeriesQueryDto,
 	ImportApplyDto,
 	ImportPreviewDto,
 	LinkHistoryLineDto,
@@ -28,11 +29,12 @@ import { OnboardingHistoryService } from './onboarding-history.service';
 import { OnboardingPreviousInvoicesService } from './onboarding-previous-invoices.service';
 import { OnboardingQuickStartService } from './onboarding-quick-start.service';
 import { OnboardingRegisterService } from './onboarding-register.service';
+import { OnboardingSeriesService } from './onboarding-series.service';
 import { OnboardingService } from './onboarding.service';
 
 const KEY = { name: 'key', description: 'Clave de la línea de MRR histórico (cliente × producto × moneda, codificada)' };
 const LINE =
-	'{ key, client{id,name}, product_name, product_id, currency, first_month, last_month, months_count, mrr_last, mrr_last_system, status, ended, contract{id,contract_number,status}|null, batch_ids[], invoices_count, skip_reason_code, skip_reason }';
+	'{ key, client{id,name}, product_name, product_id, currency, first_month, last_month, months_count, mrr_last, mrr_last_system, status, ended, contract{id,contract_number,status}|null, batch_ids[], invoices_count, skip_reason_code, skip_reason, companies[{id,legal_name}] }';
 
 /**
  * Onboarding de datos históricos (`docs/v2-rediseno/spec-onboarding-y-mrr-historico-v2.md` §5; formas exactas en
@@ -52,7 +54,8 @@ export class OnboardingController {
 		private readonly history: OnboardingHistoryService,
 		private readonly previousInvoices: OnboardingPreviousInvoicesService,
 		private readonly registerHistory: OnboardingRegisterService,
-		private readonly quickStart: OnboardingQuickStartService
+		private readonly quickStart: OnboardingQuickStartService,
+		private readonly series: OnboardingSeriesService
 	) {}
 
 	// ---------------------------------------------------------------- resumen y eventos
@@ -61,7 +64,7 @@ export class OnboardingController {
 	@ApiOperation({
 		summary: 'Resumen del empalme',
 		description:
-			'{ history{ lines, pending, pending_ended, linked, closed, removed, clients_without_contract }, splice{ gap, overlap_cut, contract_without_mrr }, previous_invoices{ total, pending, linked, by_status }, settings{ metrics_history_start, system_currency } }',
+			'{ history{ lines, pending, pending_ended, linked, closed, removed, clients_without_contract }, splice{ gap, overlap_cut, contract_without_mrr }, previous_invoices{ total, without_history, with_history, linked, by_status }, settings{ metrics_history_start, system_currency } }',
 	})
 	summary(@HoldingId() holdingId: string) {
 		return this.onboarding.summary(holdingId);
@@ -76,7 +79,27 @@ export class OnboardingController {
 		return this.onboarding.events(holdingId, query);
 	}
 
-	// ---------------------------------------------------------------- MRR histórico
+	// ---------------------------------------------------------------- MRR histórico (rutas fijas antes de lines/:key)
+
+	@Get('history/series')
+	@ApiOperation({
+		summary: 'Serie mensual del MRR histórico',
+		description:
+			'{ currency_mode, system_currency, months[{ month, counted, cut, removed, contracts, by_currency[{ currency, counted, cut, removed }] }], totals{ last_month, counted_last, lines, clients }, filters_applied }. counted = cuenta (U14, sin quitadas); cut = solape con el contrato empalmado; removed = quitadas; contracts = MRR del devengo de los contratos empalmados (moneda de sistema). En contract/invoice, counted/cut/removed del mes son null y by_currency trae el desglose',
+	})
+	historySeries(@HoldingId() holdingId: string, @Query() query: HistorySeriesQueryDto) {
+		return this.series.series(holdingId, query);
+	}
+
+	@Get('history/filter-options')
+	@ApiOperation({
+		summary: 'Opciones de filtro de la serie del MRR histórico',
+		description:
+			'{ companies[{ id, legal_name }], countries[], currencies{ contract[], invoice[] } }: solo lo presente en el MRR histórico del holding',
+	})
+	historyFilterOptions(@HoldingId() holdingId: string) {
+		return this.series.filterOptions(holdingId);
+	}
 
 	@Get('history/lines')
 	@ApiOperation({ summary: 'Líneas de MRR histórico', description: `Paginado { data[línea], total, currentPage, pages, limit }; línea ${LINE}` })
@@ -94,12 +117,29 @@ export class OnboardingController {
 		return this.history.detail(holdingId, key);
 	}
 
-	@Patch('history/lines/:key/months')
+	@Post('history/lines/:key/edit/preview')
+	@HttpCode(200)
 	@RequirePermission(PERMISSION_CODES.editSettings)
 	@ApiParam(KEY)
-	@ApiOperation({ summary: 'Editar meses', description: 'Monto en moneda de contrato y recurrente; devuelve la línea' })
-	editMonths(@HoldingId() holdingId: string, @Param('key') key: string, @Body() body: EditHistoryMonthsDto, @Request() req: OnboardingRequest) {
-		return this.history.editMonths(holdingId, key, body, actorOf(req));
+	@ApiOperation({
+		summary: 'Vista previa: editar línea (volver a registrar sus facturas)',
+		description:
+			'Body { invoices[{ invoice_id, period_from, period_to, contract_currency, amount_contract_currency, is_recurring?, products[] }] }. { line{ key, product_name, product_id, currency, first_month, last_month, months_count }, months[{ period_month, subtotal_contract_currency, mrr_contract_ccy, mrr_system_ccy, fx_contract_to_system, invoice_id, invoice_number, invoice_currency, amount_invoice_currency, fx_contract_to_invoice, is_recurring, status: kept|changed|added|removed }], totals{ mrr_last_contract_ccy, mrr_last_system_ccy, system_currency }, warnings[{ code, invoice_id?, period_month?, message }], rekey{ from, to }|null, lines_touched[] }. No escribe',
+	})
+	editPreview(@HoldingId() holdingId: string, @Param('key') key: string, @Body() body: EditHistoryLineDto) {
+		return this.history.editPreview(holdingId, key, body);
+	}
+
+	@Patch('history/lines/:key')
+	@RequirePermission(PERMISSION_CODES.editSettings)
+	@ApiParam(KEY)
+	@ApiOperation({
+		summary: 'Editar línea (volver a registrar sus facturas)',
+		description: 'Borra las filas de cada factura listada en esta línea y las vuelve a registrar. { line|null, key, lines_touched[] }',
+	})
+	@ApiResponse({ status: 409, description: '{ code: line_linked_rekey }' })
+	editLine(@HoldingId() holdingId: string, @Param('key') key: string, @Body() body: EditHistoryLineDto, @Request() req: OnboardingRequest) {
+		return this.history.editLine(holdingId, key, body, actorOf(req));
 	}
 
 	@Post('history/lines/:key/link')
@@ -192,6 +232,15 @@ export class OnboardingController {
 		return this.previousInvoices.list(holdingId, query);
 	}
 
+	@Get('previous-invoices/filter-options')
+	@ApiOperation({
+		summary: 'Opciones de filtro de facturas previas',
+		description: '{ companies[{ id, legal_name }], countries[] }: solo las presentes en facturas previas del holding',
+	})
+	filterOptions(@HoldingId() holdingId: string) {
+		return this.previousInvoices.filterOptions(holdingId);
+	}
+
 	@Get('previous-invoices/batches')
 	@ApiOperation({ summary: 'Lotes importados', description: '[{ id, label, created_at, created_by, count, reverted }]' })
 	batches(@HoldingId() holdingId: string) {
@@ -213,7 +262,8 @@ export class OnboardingController {
 	@RequirePermission(PERMISSION_CODES.editSettings)
 	@ApiOperation({
 		summary: 'Importar facturas previas',
-		description: '{ batch_id, inserted, skipped_duplicates, errors, entities_created, needs_client }. Nunca crea clientes comerciales',
+		description:
+			'{ batch_id, inserted, skipped_duplicates, errors, entities_created, needs_client, history_rows_created, history_lines_touched[], history_skipped[] }. Registra el MRR histórico de las facturas con histórico ready. Nunca crea clientes comerciales',
 	})
 	@ApiResponse({ status: 409, description: '{ code: nothing_to_import }' })
 	importApply(@HoldingId() holdingId: string, @Body() body: ImportApplyDto, @Request() req: OnboardingRequest) {
@@ -224,7 +274,10 @@ export class OnboardingController {
 	@HttpCode(200)
 	@RequirePermission(PERMISSION_CODES.editSettings)
 	@ApiParam({ name: 'batchId', description: 'Lote de importación' })
-	@ApiOperation({ summary: 'Revertir importación', description: '{ batch_id, removed }' })
+	@ApiOperation({
+		summary: 'Revertir importación',
+		description: '{ batch_id, removed, history_rows_removed } (revierte también el MRR histórico registrado por el mismo lote)',
+	})
 	@ApiResponse({ status: 409, description: '{ code: batch_has_history | batch_linked | already_reverted }' })
 	revert(@HoldingId() holdingId: string, @Param('batchId', new ParseUUIDPipe()) batchId: string, @Request() req: OnboardingRequest) {
 		return this.previousInvoices.revertImport(holdingId, batchId, actorOf(req));

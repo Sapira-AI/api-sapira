@@ -100,6 +100,9 @@ export function decodeLineKey(key: string): LineKeyParts {
 	return parts;
 }
 
+/** Categoría de los ítems de un contrato que nace del MRR histórico o del arranque rápido (Domi 14-10: viene de algo que ya existía). */
+export const HISTORY_ITEM_CATEGORY = 'RENEWAL' as const;
+
 // ── Meses ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export function assertMonth(value: string, field: string): Month {
@@ -111,7 +114,7 @@ export function assertMonth(value: string, field: string): Month {
 // ── Eventos ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export const ONBOARDING_EVENT_TYPES = [
-	'history_months_edited',
+	'history_line_edited',
 	'history_linked',
 	'history_unlinked',
 	'history_closed',

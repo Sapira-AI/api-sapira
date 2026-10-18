@@ -15,6 +15,7 @@ import { OnboardingHistoryService } from './onboarding-history.service';
 import { OnboardingPreviousInvoicesService } from './onboarding-previous-invoices.service';
 import { OnboardingQuickStartService } from './onboarding-quick-start.service';
 import { OnboardingRegisterService } from './onboarding-register.service';
+import { OnboardingSeriesService } from './onboarding-series.service';
 import { OnboardingController } from './onboarding.controller';
 import { OnboardingService } from './onboarding.service';
 
@@ -37,7 +38,8 @@ describe('Onboarding · HTTP (tenancy, permisos, validación)', () => {
 	const history = {
 		list: fn(),
 		detail: fn(),
-		editMonths: fn(),
+		editPreview: fn(),
+		editLine: fn(),
 		link: fn(),
 		unlink: fn(),
 		close: fn(),
@@ -50,6 +52,7 @@ describe('Onboarding · HTTP (tenancy, permisos, validación)', () => {
 	const previousInvoices = {
 		list: fn(),
 		batches: fn([]),
+		filterOptions: fn({ companies: [], countries: [] }),
 		previewImport: fn(),
 		applyImport: fn(),
 		revertImport: fn(),
@@ -58,6 +61,7 @@ describe('Onboarding · HTTP (tenancy, permisos, validación)', () => {
 	};
 	const register = { preview: fn(), register: fn() };
 	const quickStart = { preview: fn(), apply: fn() };
+	const series = { series: fn(), filterOptions: fn({ companies: [], countries: [], currencies: { contract: [], invoice: [] } }) };
 	const dataSource = {
 		query: jest.fn(async (_sql: string, params: unknown[] = []) => {
 			const user = USERS[String(params[0])];
@@ -87,6 +91,7 @@ describe('Onboarding · HTTP (tenancy, permisos, validación)', () => {
 				{ provide: OnboardingPreviousInvoicesService, useValue: previousInvoices },
 				{ provide: OnboardingRegisterService, useValue: register },
 				{ provide: OnboardingQuickStartService, useValue: quickStart },
+				{ provide: OnboardingSeriesService, useValue: series },
 			],
 		})
 			.overrideGuard(SupabaseAuthGuard)
@@ -215,6 +220,126 @@ describe('Onboarding · HTTP (tenancy, permisos, validación)', () => {
 			expect(previousInvoices.applyImport).not.toHaveBeenCalled();
 		});
 
+		it('editar línea = volver a registrar sus facturas: vista previa y PATCH validan el registro por factura; solo EDIT escribe', async () => {
+			const body = {
+				invoices: [
+					{
+						invoice_id: INVOICE,
+						period_from: '2026-04',
+						period_to: '2026-06',
+						contract_currency: 'usd',
+						amount_contract_currency: 300,
+						is_recurring: true,
+						products: [{ product_id: INVOICE, amount_contract_currency: 300 }],
+					},
+				],
+			};
+
+			await send('post', `/onboarding/history/lines/${KEY}/edit/preview`, body).expect(200);
+			expect(history.editPreview).toHaveBeenCalledWith(
+				HOLDING,
+				KEY,
+				expect.objectContaining({ invoices: [expect.objectContaining({ contract_currency: 'USD' })] })
+			);
+			await send('patch', `/onboarding/history/lines/${KEY}`, body).expect(200);
+			expect(history.editLine).toHaveBeenCalledWith(HOLDING, KEY, expect.objectContaining({ invoices: expect.any(Array) }), {
+				authId: 'editor',
+				userId: 'user-editor',
+			});
+			const res = await send('patch', `/onboarding/history/lines/${KEY}`, {
+				invoices: [{ ...body.invoices[0], period_from: '2026-13' }],
+			}).expect(400);
+
+			expect(res.body.errors[0]).toMatchObject({ field: 'invoices.0.period_from' });
+			// El contrato anterior (meses sueltos) ya no existe.
+			await send('patch', `/onboarding/history/lines/${KEY}`, { months: [] }).expect(400);
+			await send('patch', `/onboarding/history/lines/${KEY}`, { invoices: [] }).expect(400);
+			await send('patch', `/onboarding/history/lines/${KEY}`, body, 'reader').expect(403);
+			expect(history.editLine).toHaveBeenCalledTimes(1);
+		});
+
+		it('un solo estado pendiente: pending_ended ya no es estado (400); ended=true|false filtra las pendientes', async () => {
+			await get('/onboarding/history/lines?status=pending_ended').expect(400);
+			await get('/onboarding/history/lines?ended=talvez').expect(400);
+			await get('/onboarding/history/lines?status=pending&ended=true').expect(200);
+			expect(history.list).toHaveBeenCalledWith(HOLDING, expect.objectContaining({ status: 'pending', ended: 'true' }));
+		});
+
+		it('serie del MRR histórico: lectura VIEW_CONFIGURACION; valida moneda, meses, uuids y país', async () => {
+			await get('/onboarding/history/series', 'nobody').expect(403);
+			await get('/onboarding/history/series', 'reader', null).expect(400);
+			await get('/onboarding/history/series', 'reader', OTHER_HOLDING).expect(403);
+			expect(series.series).not.toHaveBeenCalled();
+			await get(
+				`/onboarding/history/series?currency=invoice&companyId=${INVOICE}&entityId=${INVOICE}&country=cl&from=2025-01&to=2026-09`
+			).expect(200);
+			expect(series.series).toHaveBeenCalledWith(
+				HOLDING,
+				expect.objectContaining({ currency: 'invoice', companyId: INVOICE, entityId: INVOICE, country: 'CL', from: '2025-01', to: '2026-09' })
+			);
+			await get('/onboarding/history/series?currency=company').expect(400);
+			await get('/onboarding/history/series?from=2025-13').expect(400);
+			await get('/onboarding/history/series?clientId=acme').expect(400);
+			await get('/onboarding/history/series?country=Chile').expect(400);
+			await get('/onboarding/history/filter-options').expect(200);
+			expect(series.filterOptions).toHaveBeenCalledWith(HOLDING);
+		});
+
+		it('editar meses sueltos se retiró (18-10): PATCH …/:key/months ya no existe', async () => {
+			await send('patch', `/onboarding/history/lines/${KEY}/months`, { months: [{ id: INVOICE, subtotal_contract_currency: 1 }] }).expect(404);
+			expect(history.editLine).not.toHaveBeenCalled();
+		});
+
+		it('facturas previas: filter-options no cae en :id; hasHistory, companyId y country se validan', async () => {
+			await get('/onboarding/previous-invoices/filter-options').expect(200);
+			expect(previousInvoices.filterOptions).toHaveBeenCalledWith(HOLDING);
+			expect(previousInvoices.detail).not.toHaveBeenCalled();
+			await get(`/onboarding/previous-invoices?hasHistory=false&companyId=${INVOICE}&country=br`).expect(200);
+			expect(previousInvoices.list).toHaveBeenCalledWith(HOLDING, expect.objectContaining({ hasHistory: 'false', country: 'BR' }));
+			await get('/onboarding/previous-invoices?hasHistory=si').expect(400);
+			await get('/onboarding/previous-invoices?country=Brasil').expect(400);
+		});
+
+		it('importación con histórico en el mismo paso: acepta los campos nuevos de factura e ítem y valida sus formatos', async () => {
+			const row = {
+				row: 1,
+				invoice_number: 'F-1',
+				issue_date: '2026-07-01',
+				legal_client_name: 'Acme',
+				company_name: 'Simplit SpA',
+				currency: 'BRL',
+				amount: 1,
+				total: 1,
+				client_number: 'C-1',
+				country: 'br',
+				notes: 'nota',
+				items: [
+					{
+						subtotal: 1,
+						product: 'PF',
+						period_from: '2026-07',
+						period_to: '2026-07',
+						contract_currency: 'usd',
+						amount_contract_currency: 1,
+						is_recurring: true,
+					},
+				],
+			};
+
+			await send('post', '/onboarding/previous-invoices/import/preview', { invoices: [row] }).expect(200);
+			expect(previousInvoices.previewImport).toHaveBeenCalledWith(
+				HOLDING,
+				expect.objectContaining({
+					invoices: [expect.objectContaining({ country: 'BR', items: [expect.objectContaining({ contract_currency: 'USD' })] })],
+				})
+			);
+			const res = await send('post', '/onboarding/previous-invoices/import/preview', {
+				invoices: [{ ...row, items: [{ ...row.items[0], period_from: '2026-7' }] }],
+			}).expect(400);
+
+			expect(res.body.errors[0]).toMatchObject({ field: 'invoices.0.items.0.period_from' });
+		});
+
 		it('registrar histórico y arranque rápido validan meses y productos', async () => {
 			await send('post', '/onboarding/previous-invoices/register-history/preview', {
 				invoices: [
@@ -229,6 +354,22 @@ describe('Onboarding · HTTP (tenancy, permisos, validación)', () => {
 				],
 			}).expect(400);
 			await send('post', '/onboarding/quick-start/preview', { as_of: '2026-07', history_months: 30 }).expect(400);
+			// Lo completado por la usuaria (opcional) se valida con el mismo DTO que al aplicar.
+			const nested = await send('post', '/onboarding/quick-start/preview', {
+				as_of: '2026-07',
+				proposals: [
+					{
+						entity_id: INVOICE,
+						period_from: '2026-7',
+						period_to: '2026-07',
+						contract_currency: 'BRL',
+						amount_contract_currency: 1,
+						products: [],
+					},
+				],
+			}).expect(400);
+
+			expect(nested.body.errors[0]).toMatchObject({ field: 'proposals.0.period_from' });
 			await send('post', '/onboarding/quick-start', {
 				as_of: '2026-07',
 				proposals: [

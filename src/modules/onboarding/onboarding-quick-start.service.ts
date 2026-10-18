@@ -7,6 +7,7 @@ import type { CreateContractDto } from '@/modules/contracts/dtos/create-contract
 import { type Month, monthRange, monthsBetween } from '@/modules/metrics/metrics-period';
 
 import {
+	HISTORY_ITEM_CATEGORY,
 	insertOnboardingEvent,
 	isoDate,
 	monthOf,
@@ -21,7 +22,7 @@ import {
 	type Row,
 	str,
 } from './onboarding-common';
-import { OnboardingRegisterService } from './onboarding-register.service';
+import { OnboardingRegisterService, type RegisterError, type RegisterWarning } from './onboarding-register.service';
 
 import type { QuickStartApplyDto, QuickStartPreviewDto, QuickStartProposalDto } from './dtos/onboarding.dto';
 
@@ -76,6 +77,20 @@ export class OnboardingQuickStartService {
 	async preview(holdingId: string, dto: QuickStartPreviewDto) {
 		const invoices = await this.lastInvoices(this.dataSource, holdingId, dto.as_of, dto.entity_ids, dto.history_months ?? 0);
 		const ids = invoices.map((row) => String(row.id));
+		// Lo que la usuaria ya completó (opcional): mismo motor que al aplicar, para mostrar tipo de cambio, avisos y errores.
+		const completed = new Map((dto.proposals ?? []).map((proposal) => [proposal.entity_id, proposal]));
+		const withInput = invoices.filter((invoice) => completed.has(String(invoice.client_entity_id)));
+		const plans = withInput.length
+			? await this.register.plan(
+					this.dataSource,
+					holdingId,
+					withInput.map((invoice) => this.registerInput(completed.get(String(invoice.client_entity_id))!, String(invoice.id)))
+				)
+			: [];
+		const planByInvoice = new Map(plans.map((plan) => [plan.invoice_id, plan]));
+		// Línea a la que se sumaría la última factura (Domi 18-10): solo con lo completado por la usuaria (sin producto no hay línea).
+		const lines = await this.register.linesOf(this.dataSource, holdingId, plans);
+		const lineByInvoice = new Map(plans.map((plan, index) => [plan.invoice_id, lines.rows[index]]));
 		const [items, products] = await Promise.all([
 			ids.length
 				? (this.dataSource.query(
@@ -111,6 +126,7 @@ export class OnboardingQuickStartService {
 			if (invoice.already_has_contract === true) flags.push('already_has_contract');
 			if (num(invoice.currencies) > 1) flags.push('multi_currency');
 			const month = monthOf(invoice.issue_date)!;
+			const plan = planByInvoice.get(String(invoice.id));
 
 			return {
 				entity: { id: String(invoice.client_entity_id), legal_name: str(invoice.legal_name) },
@@ -133,6 +149,14 @@ export class OnboardingQuickStartService {
 				},
 				history_months_found: num(invoice.history_months_found),
 				flags,
+				// Tipo de cambio visible (Domi 14-10). Sin lo completado por la usuaria, la propuesta es en la moneda de la factura (fx 1).
+				invoice_currency: str(invoice.invoice_currency),
+				amount_invoice_currency: num(invoice.amount_invoice_currency),
+				fx_contract_to_invoice: plan ? plan.fx_contract_to_invoice : 1,
+				line_key: lineByInvoice.get(String(invoice.id))?.line_key ?? null,
+				line_exists: lineByInvoice.get(String(invoice.id))?.line_exists ?? false,
+				warnings: (plan?.warnings ?? []) as RegisterWarning[],
+				errors: (plan?.errors ?? []) as RegisterError[],
 			};
 		});
 		const byCurrency = new Map<string, { currency: string; count: number; total: number }>();
@@ -159,6 +183,7 @@ export class OnboardingQuickStartService {
 					multi_currency: flagged('multi_currency'),
 				},
 				by_currency: [...byCurrency.values()],
+				lines_touched: lines.touched,
 			},
 		};
 	}
@@ -291,6 +316,8 @@ export class OnboardingQuickStartService {
 					start_date: nextMonthStart(lastCovered),
 					term_months: proposal.term_months ?? 12,
 					is_recurring: true,
+					// Viene de algo que ya existía (Domi 14-10).
+					category: HISTORY_ITEM_CATEGORY,
 				};
 			}),
 		} as CreateContractDto;

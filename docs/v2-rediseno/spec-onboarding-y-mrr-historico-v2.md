@@ -59,13 +59,13 @@ sí tienen sus contratos controlados en planillas. El módulo soporta las tres e
 
 - **Grano de lectura**: cliente comercial × producto × moneda de contrato (clave `client_id|product_name|contract_currency`);
   las filas siguen siendo mes × ítem de factura. `product_id` obligatorio en lo nuevo (el texto `product_name` se conserva).
-- **Estado derivado**: `pending` (sin empalme ni cierre; `pending_ended` si su último mes ya pasó), `linked`
+- **Estado derivado**: `pending` (sin empalme ni cierre; un solo estado desde el 14-10: "terminó sin resolver" es el filtro `ended`), `linked`
   (`migrated_to_contract_id`), `closed` (`skip_activation` con motivo `churn`: cuenta hasta su último mes), `removed`
   (`skip_activation` con motivo `duplicate` | `error`: no cuenta en nada). Los 1.615 textos libres actuales se leen como
   `churn` salvo que contengan "duplic" o "error" (sin tocar datos; se normalizan al escribir).
 - **Validaciones**: un mes no se repite en la misma línea; al empalmar se informa hueco (último mes + 1 ≠ primer mes con MRR
   del contrato) y solape (lo corta U14); el contrato debe ser del mismo cliente comercial (otra moneda está permitida, S8-1).
-- **Edición** de meses (monto en moneda de contrato, recurrente) con registro de cambios (M15).
+- **Edición** = volver a registrar las facturas de la línea (14-10; editar meses sueltos se retiró el 18-10), con registro de cambios (M15).
 
 ### 3.2 Facturas previas (`invoices_legacy` + `invoice_items_legacy`)
 
@@ -175,12 +175,52 @@ Paginación `{ data, total, currentPage, pages, limit }`; errores `{ message, er
 > - El `origin` del alta desde una línea no se guarda en el contrato (no hay columna): queda en el empalme y en el evento.
 > - Líneas: los 409 extra `line_not_linked` (desvincular), `line_not_removable` (quitar) y `line_not_closed` (reabrir).
 
+> **Cierre v1 14-10 (decisiones de Domi, API sin commit, sin migración nueva).** Formas exactas en [`mapa-v2-onboarding.md`](./mapa-v2-onboarding.md) §2b.
+> 1. **Editar línea = volver a registrar sus facturas** (no existen meses sin factura): `POST …/lines/:key/edit/preview` y `PATCH
+>    …/lines/:key` con el registro de §3.2b por factura de la línea; se borran sus filas en la línea y se regeneran con el motor de Registrar
+>    histórico (empalme conservado). Vista previa por factura × mes con MRR en moneda de contrato y de sistema (regla del trigger,
+>    `src/modules/metrics/mrr-historico-fx.ts`), avisos, `rekey` y `lines_touched`. Producto o moneda en meses empalmados → 409
+>    `line_linked_rekey`. El detalle de línea trae `invoices[].registration` para prellenar.
+> 2. **Contrato desde el histórico = Renovación**: los ítems de `…/contract` y del arranque rápido nacen `RENEWAL` (`items[].category`
+>    explícito en `CreateContractDto`, que `ContractDraftsService` respeta solo cuando viene); `contract/defaults` lo devuelve.
+> 3. **Un solo estado pendiente**: `status` = `pending | linked | closed | removed`; "terminó sin resolver" = filtro `ended=true` sobre las
+>    pendientes; `summary.history.pending` cuenta todas y `pending_ended` el subconjunto. Orden por defecto: prioridad de estado y cliente.
+> 4. **Facturas previas**: filtros `hasHistory`, `companyId`, `country`; fila con `notes` y `country`; `GET …/previous-invoices/filter-options`;
+>    `summary.previous_invoices.without_history`.
+> 5. **Tipo de cambio visible**: moneda y monto de factura + fx en Registrar histórico, arranque rápido y el detalle de línea; aviso
+>    `fx_one_with_different_currencies` (monedas distintas con fx entre 0,98 y 1,02).
+> 6. **Plantilla con histórico en el mismo paso**: campos de histórico por línea; `import/preview` devuelve `history` por fila
+>    (`none | ready | incomplete | error`) y `import` registra el de las `ready` con el motor de Registrar histórico; revertir el lote revierte
+>    también su histórico propio.
+> 7. Cliente comercial en la importación también por `client_crm_id` (CRM) y `client_number`.
+>
+> Desvíos del cierre, con motivo: el tipo de cambio al volver a registrar parte del monto en moneda de factura que la línea tenía asignado
+> de la factura (no del neto completo, que puede repartirse en otras líneas); el 409 `line_linked_rekey` se evalúa por factura con meses
+> empalmados; la suma de productos que no cuadra es 400 en el PATCH (aviso en la vista previa). El arranque rápido acepta además `proposals?`
+> en la vista previa (para calcular fx y avisos antes de aplicar).
+
+> **Ajustes 18-10 (decisiones de Domi, API sin commit, sin migración).** Formas exactas en [`mapa-v2-onboarding.md`](./mapa-v2-onboarding.md) §2c.
+> 1. **Serie mensual del MRR histórico** para el Resumen: `GET /onboarding/history/series` (`counted` con la regla U14 única, `cut` por solape,
+>    `removed`, `contracts` = devengo de los contratos empalmados en moneda de sistema; modos `system | contract | invoice`; filtros compañía
+>    emisora, cliente, razón social receptora y país) y `GET /onboarding/history/filter-options`.
+> 2. **Resumen**: `previous_invoices = { total, without_history, with_history, linked, by_status }` (se retira `pending`); `history` ya traía
+>    `closed` (fue baja) y `removed` (duplicado o error) por separado, así que no se agregó un campo nuevo.
+> 3. **Línea con sus compañías emisoras**: `companies[{ id, legal_name }]` en la lista y el detalle.
+> 4. **Retiro** de `PATCH /onboarding/history/lines/:key/months`: la línea se corrige solo con `PATCH …/lines/:key` por factura.
+> 5. **Línea de destino en las vistas previas** de Registrar histórico y del arranque rápido: por fila `line_key` (cliente comercial | producto
+>    del catálogo | moneda de contrato, igual que al aplicar; por producto en `products[]` y en la fila la del primer producto) y `line_exists`
+>    (la línea ya tiene filas en el holding); en el total `lines_touched[]` (claves distintas de lo que se aplicaría).
+>
+> Desvío, con motivo: `contracts` usa `mrr_period_contracted_system_ccy` sin pendiente de renovar (la columna y el filtro de Métricas, para que
+> el contraste cuadre) en vez de `mrr_period_system_ccy`; en SimpliRoute ambas columnas son idénticas (0 filas distintas jul–sep 2026).
+
 | Método y ruta | Entrada | Salida |
 |---|---|---|
-| `GET /onboarding/summary` | — | `{ history: { lines, pending, pending_ended, linked, closed, removed, clients_without_contract }, splice: { gap, overlap_cut, contract_without_mrr }, previous_invoices: { total, pending, linked, by_status{Pagada,Enviada,Vencida} }, settings: { metrics_history_start, system_currency } }` |
-| `GET /onboarding/history/lines` | `status`(`pending,pending_ended,linked,closed,removed`), `clientId`, `product`, `batchId`, `search`, `page`, `limit`, `sortBy`(`client,product,last_month,mrr,status`), `sortOrder` | paginado de `{ key, client{id,name}, product_name, product_id, currency, first_month, last_month, months_count, mrr_last, mrr_last_system, status, ended, contract{id,contract_number,status}\|null, batch_ids[], invoices_count, skip_reason_code, skip_reason }` |
+| `GET /onboarding/summary` | — | `{ history: { lines, pending, pending_ended, linked, closed, removed, clients_without_contract }, splice: { gap, overlap_cut, contract_without_mrr }, previous_invoices: { total, without_history, with_history, linked, by_status{Pagada,Enviada,Vencida} }, settings: { metrics_history_start, system_currency } }` |
+| `GET /onboarding/history/series` | `currency`(`system,contract,invoice`), `companyId`, `clientId`, `entityId`, `country`, `from`, `to` (`AAAA-MM`) | `{ currency_mode, system_currency, months[{ month, counted, cut, removed, contracts, by_currency[{ currency, counted, cut, removed }] }], totals{ last_month, counted_last, lines, clients }, filters_applied }` |
+| `GET /onboarding/history/filter-options` | — | `{ companies[{ id, legal_name }], countries[], currencies{ contract[], invoice[] } }` |
+| `GET /onboarding/history/lines` | `status`(`pending,linked,closed,removed`), `ended`, `clientId`, `product`, `batchId`, `search`, `page`, `limit`, `sortBy`(`client,product,last_month,mrr,status`), `sortOrder` | paginado de `{ key, client{id,name}, product_name, product_id, currency, first_month, last_month, months_count, mrr_last, mrr_last_system, status, ended, contract{id,contract_number,status}\|null, batch_ids[], invoices_count, skip_reason_code, skip_reason, companies[{id,legal_name}] }` |
 | `GET /onboarding/history/lines/:key` | — | línea + `months[{ id, period_month, subtotal_contract_currency, mrr_legacy, mrr_legacy_system_currency, term, is_recurring, invoice_number, invoice_legacy_id, counted (U14) }]`, `invoices[]`, `splice{ gap_months, overlap_months, contract_first_month }`, `candidates[{ id, contract_number, status, products[], currency, start_date, end_date, score }]`, `events[]` |
-| `PATCH /onboarding/history/lines/:key/months` | `{ months:[{ id, subtotal_contract_currency?, is_recurring? }] }` | línea actualizada; evento `history_months_edited` |
 | `POST /onboarding/history/lines/:key/link` | `{ contract_id }` | `{ line, splice }`; 409 `contract_other_client` \| `line_not_pending` |
 | `POST /onboarding/history/lines/:key/unlink` | — | línea |
 | `POST /onboarding/history/lines/:key/close` | `{ reason?: string }` | línea (`closed`) |
@@ -194,11 +234,11 @@ Paginación `{ data, total, currentPage, pages, limit }`; errores `{ message, er
 | `POST /onboarding/previous-invoices/import/preview` | `{ invoices:[{ row, invoice_number, issue_date, due_date?, legal_client_name, client_tax_id?, company_name, source_type?, source_system?, currency, amount, vat?, total, status?, notes?, items:[{ description?, product_external_code?, quantity?, unit_price?, discount_pct?, subtotal, tax_amount?, total? }] }], batch_label? }` (máx. 2.000) | `{ rows:[{ row, status: 'new' \| 'duplicate' \| 'error' \| 'needs_entity' \| 'needs_client', errors[], entity{id,legal_name}\|null, client{id,name}\|null (por RUT o id del CRM), entity_suggestion{ legal_name, tax_id, country?, client_candidates[{id,name,score}] }, company{id}\|null }], summary{ new, duplicate, error, needs_entity, needs_client, by_currency[] }, missing_entities[{ legal_name, tax_id, rows, client_candidates[] }], missing_companies[] }` |
 | `POST /onboarding/previous-invoices/import` | `{ invoices, batch_label?, create_entities?: [{ legal_name, tax_id?, country, client_id? }] }` (nunca crea clientes comerciales; `client_id` es uno existente del CRM) | `{ batch_id, inserted, skipped_duplicates, errors, entities_created, needs_client }`; 409 `nothing_to_import` |
 | `POST /onboarding/previous-invoices/:id/client` | `{ client_id }` | relaciona la razón social de la factura con un cliente comercial existente (`client_entity_clients`) |
-| `POST /onboarding/previous-invoices/register-history/preview` | `{ invoices:[{ invoice_id, period_from: 'YYYY-MM', period_to: 'YYYY-MM', contract_currency, amount_contract_currency, is_recurring?, products:[{ product_id, amount_contract_currency }] }] }` | `{ rows:[{ invoice_id, months[], mrr_per_month, fx_contract_to_invoice, warnings[] (`sum_mismatch`, `month_already_covered`, `fx_outlier`, `no_client`) }], summary }` |
+| `POST /onboarding/previous-invoices/register-history/preview` | `{ invoices:[{ invoice_id, period_from: 'YYYY-MM', period_to: 'YYYY-MM', contract_currency, amount_contract_currency, is_recurring?, products:[{ product_id, amount_contract_currency }] }] }` | `{ rows:[{ invoice_id, months[], mrr_per_month, fx_contract_to_invoice, line_key, line_exists, warnings[] (`sum_mismatch`, `month_already_covered`, `fx_outlier`, `no_client`) }], summary{ …, lines_touched[] } }` |
 | `POST /onboarding/previous-invoices/register-history` | mismo body | `{ created_rows, lines_touched[], skipped[{ invoice_id, reason }] }`; marca `reconciliation_status = mrr_legacy` |
 | `POST /onboarding/previous-invoices/import/:batchId/revert` | — | `{ batch_id, removed }`; 409 `batch_has_history` \| `batch_linked` |
 | `GET /onboarding/previous-invoices/batches` | — | `[{ id, label, created_at, created_by, count, reverted }]` |
-| `POST /onboarding/quick-start/preview` | `{ as_of: 'YYYY-MM', entity_ids?: [], history_months?: 0..24 }` | `{ proposals:[{ entity{id,legal_name}, client{id,name}\|null, last_invoice{id,number,issue_date,total,currency}, items:[{ description, quantity, unit_price, product_id\|null, product_suggestion }], contract{ start_date, currency, billing_frequency, billing_method }, history_months_found, flags[] (`no_client`, `no_product`, `already_has_contract`, `multi_currency`) }], summary }` |
+| `POST /onboarding/quick-start/preview` | `{ as_of: 'YYYY-MM', entity_ids?: [], history_months?: 0..24 }` | `{ proposals:[{ entity{id,legal_name}, client{id,name}\|null, last_invoice{id,number,issue_date,total,currency}, items:[{ description, quantity, unit_price, product_id\|null, product_suggestion }], contract{ start_date, currency, billing_frequency, billing_method }, history_months_found, flags[] (`no_client`, `no_product`, `already_has_contract`, `multi_currency`), line_key, line_exists }], summary{ …, lines_touched[] } }` |
 | `POST /onboarding/quick-start` | `{ as_of, proposals:[{ entity_id, period_from, period_to, contract_currency, amount_contract_currency, products:[{ product_id, amount_contract_currency, quantity?, unit_price? }], billing_frequency?, billing_method?, term_months? }] }` (lo de §3.2b por cliente; sin producto o sin cliente comercial no se aplica) | `{ created:[{ entity_id, contract{id,contract_number}, history_rows }], skipped:[{ entity_id, reason }] }` |
 | `GET /onboarding/events` | `lineKey?`, `entityId?`, `page` | paginado de eventos |
 | `PATCH /settings/holding/preferences` | `+ metrics_history_start` | (existente, un campo más) |

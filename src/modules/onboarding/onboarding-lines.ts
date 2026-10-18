@@ -8,7 +8,7 @@ import type { HistoryLineStatus } from './dtos/onboarding.dto';
 /**
  * Lectura de las líneas de MRR histórico (§3.1) sobre `mrr_legacy`, sin tabla nueva. Una línea = cliente comercial × producto × moneda
  * de contrato; las filas siguen siendo mes × ítem de factura (varias filas en un mes se suman). Estado derivado, con precedencia:
- * - `pending` / `pending_ended`: tiene filas sin empalme ni cierre (`pending_ended` si su último mes ya pasó);
+ * - `pending`: tiene filas sin empalme ni cierre (un solo estado, Domi 14-10; `ended` dice si su último mes ya pasó);
  * - `linked`: sin pendientes y con filas empalmadas (`migrated_to_contract_id`);
  * - `closed`: solo filas marcadas con motivo `churn` (fue baja; cuenta hasta su último mes);
  * - `removed`: solo filas quitadas (`duplicate` | `error`; no cuentan en nada).
@@ -49,6 +49,7 @@ export function lineCtes({ holding, today, rowWhere = [] }: LineSqlOptions): str
 				(ARRAY_AGG(x.migrated_to_contract_id ORDER BY x.period_month DESC) FILTER (WHERE x.migrated_to_contract_id IS NOT NULL))[1] AS contract_id,
 				ARRAY_AGG(DISTINCT x.batch_id) AS batch_ids,
 				ARRAY_AGG(DISTINCT x.legal_client_name) AS legal_names,
+				ARRAY_AGG(DISTINCT x.company_id) FILTER (WHERE x.company_id IS NOT NULL) AS company_ids,
 				COUNT(DISTINCT x.invoice_legacy_id) AS invoices_count,
 				(ARRAY_AGG(x.skip_code ORDER BY x.skip_activation_at DESC NULLS LAST, x.period_month DESC) FILTER (WHERE x.skip_activation))[1] AS skip_reason_code,
 				(ARRAY_AGG(x.skip_activation_reason ORDER BY x.skip_activation_at DESC NULLS LAST, x.period_month DESC) FILTER (WHERE x.skip_activation))[1] AS skip_reason
@@ -57,8 +58,7 @@ export function lineCtes({ holding, today, rowWhere = [] }: LineSqlOptions): str
 		),
 		st AS (
 			SELECT l.*,
-				CASE WHEN l.has_pending THEN CASE WHEN l.last_date < ${today}::date THEN 'pending_ended' ELSE 'pending' END
-					WHEN l.has_linked THEN 'linked' WHEN l.has_closed THEN 'closed' ELSE 'removed' END AS status,
+				CASE WHEN l.has_pending THEN 'pending' WHEN l.has_linked THEN 'linked' WHEN l.has_closed THEN 'closed' ELSE 'removed' END AS status,
 				l.last_date < ${today}::date AS ended
 			FROM lines l
 		)`;
@@ -70,9 +70,14 @@ export function lineSelect(holding: string): string {
 		to_char(st.last_date, 'YYYY-MM') AS last_month, to_char(st.live_last, 'YYYY-MM') AS live_last_month, st.months_count, st.mrr_last,
 		st.mrr_last_system, st.status, st.ended, st.contract_id, st.batch_ids, st.invoices_count, st.skip_reason_code, st.skip_reason,
 		cl.name_commercial AS client_name, c.contract_number, c.status AS contract_status,
+		(SELECT COALESCE(json_agg(json_build_object('id', co.id, 'legal_name', co.legal_name) ORDER BY co.legal_name, co.id), '[]'::json)
+			FROM companies co WHERE co.id = ANY(st.company_ids)) AS companies,
 		(SELECT p.id FROM products p WHERE p.holding_id = ${holding} AND lower(btrim(p.name)) = lower(btrim(st.product_name))
 			ORDER BY p.created_at LIMIT 1) AS product_id`;
 }
+
+/** Prioridad de estado para el orden por defecto de la bandeja (pendiente → empalmada → cerrada → quitada). */
+export const STATUS_PRIORITY_SQL = `CASE st.status WHEN 'pending' THEN 0 WHEN 'linked' THEN 1 WHEN 'closed' THEN 2 ELSE 3 END`;
 
 export const LINE_JOINS = `LEFT JOIN clients cl ON cl.id = st.client_id LEFT JOIN contracts c ON c.id = st.contract_id`;
 
@@ -94,6 +99,15 @@ export interface HistoryLine {
 	invoices_count: number;
 	skip_reason_code: string | null;
 	skip_reason: string | null;
+	/** Compañías emisoras de sus filas (Domi 18-10: el front sugiere series "del mismo emisor y receptor"). */
+	companies: Array<{ id: string; legal_name: string | null }>;
+}
+
+/** `json_agg` llega como arreglo (pg) o como texto JSON. */
+function companiesOf(value: unknown): Array<{ id: string; legal_name: string | null }> {
+	const list = typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
+
+	return Array.isArray(list) ? list.map((company: Row) => ({ id: String(company.id), legal_name: str(company.legal_name) })) : [];
 }
 
 const arrayOf = (value: unknown): string[] =>
@@ -133,6 +147,7 @@ export function lineDto(row: Row): HistoryLine {
 		invoices_count: num(row.invoices_count),
 		skip_reason_code: str(row.skip_reason_code),
 		skip_reason: str(row.skip_reason),
+		companies: companiesOf(row.companies),
 	};
 }
 

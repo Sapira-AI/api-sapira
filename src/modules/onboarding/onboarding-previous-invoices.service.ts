@@ -7,6 +7,7 @@ import { resolveCountryInput } from '@/core/utils/country-resolve';
 import { validationException } from '@/core/utils/validation-errors';
 import { insertClientEntity } from '@/modules/clients/client-entity-writer';
 import { withApiWriter } from '@/modules/contracts/api-writer';
+import { monthsBetween } from '@/modules/metrics/metrics-period';
 
 import {
 	conflict,
@@ -29,6 +30,14 @@ import {
 	type Row,
 	str,
 } from './onboarding-common';
+import {
+	type FxWarning,
+	fxWarningsOf,
+	loadFxReferences,
+	OnboardingRegisterService,
+	REGISTER_MAX_MONTHS,
+	SUM_TOLERANCE,
+} from './onboarding-register.service';
 
 import type {
 	AssignInvoiceClientDto,
@@ -37,9 +46,29 @@ import type {
 	ImportPreviewDto,
 	PreviousInvoiceInputDto,
 	PreviousInvoicesQueryDto,
+	RegisterHistoryInvoiceDto,
 } from './dtos/onboarding.dto';
 
 export type ImportRowStatus = 'new' | 'duplicate' | 'error' | 'needs_entity' | 'needs_client';
+/** Histórico en el mismo paso de la importación (Domi 14-10). */
+export type ImportHistoryStatus = 'none' | 'ready' | 'incomplete' | 'error';
+
+export interface ImportRowHistory {
+	status: ImportHistoryStatus;
+	errors: string[];
+	product: { id: string; name: string | null } | null;
+	fx_contract_to_invoice: number | null;
+	warnings: FxWarning[];
+}
+
+/** Campos del histórico por línea de la planilla (todos o ninguno). */
+const HISTORY_ITEM_FIELDS = [
+	['product', 'el producto'],
+	['period_from', 'el período desde'],
+	['period_to', 'el período hasta'],
+	['contract_currency', 'la moneda de contrato'],
+	['amount_contract_currency', 'el monto en moneda de contrato'],
+] as const;
 
 export interface ClientCandidate {
 	id: string;
@@ -55,6 +84,9 @@ export interface ImportRowPlan {
 	client: { id: string; name: string | null } | null;
 	entity_suggestion: { legal_name: string; tax_id: string | null; country: string | null; client_candidates: ClientCandidate[] } | null;
 	company: { id: string } | null;
+	history: ImportRowHistory;
+	/** Productos resueltos por línea (solo para registrar el histórico; no sale en la respuesta). */
+	history_products: Array<string | null>;
 	input: PreviousInvoiceInputDto;
 }
 
@@ -81,7 +113,10 @@ const entityKey = (legalName: string, taxId: string | null | undefined) =>
  */
 @Injectable()
 export class OnboardingPreviousInvoicesService {
-	constructor(private readonly dataSource: DataSource) {}
+	constructor(
+		private readonly dataSource: DataSource,
+		private readonly register: OnboardingRegisterService
+	) {}
 
 	// ---------------------------------------------------------------- lista y detalle
 
@@ -102,6 +137,10 @@ export class OnboardingPreviousInvoicesService {
 		if (query.clientId) where.push(`COALESCE(il.client_id, ce.client_id) = ${add(query.clientId)}`);
 		if (query.entityId) where.push(`il.client_entity_id = ${add(query.entityId)}`);
 		if (query.batchId) where.push(`to_jsonb(il) ->> 'import_batch_id' = ${add(query.batchId)}`);
+		if (query.hasHistory === 'true') where.push('EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id)');
+		if (query.hasHistory === 'false') where.push('NOT EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id)');
+		if (query.companyId) where.push(`il.company_id = ${add(query.companyId)}`);
+		if (query.country) where.push(`upper(ce.country_code) = ${add(query.country)}`);
 		if (query.search) {
 			const term = add(`%${query.search}%`);
 
@@ -192,6 +231,7 @@ export class OnboardingPreviousInvoicesService {
 			il.legal_client_name, il.client_tax_id, COALESCE(il.client_id, ce.client_id) AS client_id, cl.name_commercial AS client_name,
 			il.company_id, co.legal_name AS company_legal_name, il.invoice_currency, il.amount_invoice_currency, il.vat, il.total_invoice_currency,
 			il.status, il.source_type, il.source_system, il.contract_id, ct.contract_number, to_jsonb(il) ->> 'import_batch_id' AS batch_id,
+			il.notes, upper(ce.country_code) AS entity_country,
 			EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id) AS has_history`;
 	}
 
@@ -222,11 +262,35 @@ export class OnboardingPreviousInvoicesService {
 			status: str(row.status),
 			source_type: str(row.source_type),
 			source_system: str(row.source_system),
+			notes: str(row.notes),
+			/** País de la razón social (ISO 3166-1 alfa-2). */
+			country: str(row.entity_country),
 			/** Siempre externa: no se emitió desde Sapira (§3.2). */
 			origin: 'external' as const,
 			contract: row.contract_id ? { id: String(row.contract_id), contract_number: str(row.contract_number) } : null,
 			batch_id: str(row.batch_id),
 			has_history: row.has_history === true,
+		};
+	}
+
+	/** Compañías emisoras y países de razón social presentes en las facturas previas del holding (para los filtros de la lista). */
+	async filterOptions(holdingId: string) {
+		const [companies, countries] = await Promise.all([
+			this.dataSource.query(
+				`SELECT DISTINCT co.id, co.legal_name FROM invoices_legacy il JOIN companies co ON co.id = il.company_id
+				WHERE il.holding_id = $1 ORDER BY co.legal_name, co.id`,
+				[holdingId]
+			) as Promise<Row[]>,
+			this.dataSource.query(
+				`SELECT DISTINCT upper(ce.country_code) AS country FROM invoices_legacy il JOIN client_entities ce ON ce.id = il.client_entity_id
+				WHERE il.holding_id = $1 AND NULLIF(btrim(ce.country_code), '') IS NOT NULL ORDER BY 1`,
+				[holdingId]
+			) as Promise<Row[]>,
+		]);
+
+		return {
+			companies: companies.map((row) => ({ id: String(row.id), legal_name: str(row.legal_name) })),
+			countries: countries.map((row) => String(row.country)),
 		};
 	}
 
@@ -259,8 +323,10 @@ export class OnboardingPreviousInvoicesService {
 		}
 		const count = (status: ImportRowStatus) => rows.filter((row) => row.status === status).length;
 
+		const historyCount = (status: ImportHistoryStatus) => rows.filter((row) => row.history.status === status).length;
+
 		return {
-			rows: rows.map((row) => omitKey(row, 'input')),
+			rows: rows.map((row) => omitKey(omitKey(row, 'input'), 'history_products')),
 			summary: {
 				new: count('new'),
 				duplicate: count('duplicate'),
@@ -268,6 +334,9 @@ export class OnboardingPreviousInvoicesService {
 				needs_entity: count('needs_entity'),
 				needs_client: count('needs_client'),
 				by_currency: [...byCurrency.values()],
+				history_ready: historyCount('ready'),
+				history_incomplete: historyCount('incomplete'),
+				history_error: historyCount('error'),
 			},
 			missing_entities: [...missing.values()],
 			missing_companies: [...new Set(rows.flatMap((row) => (row.company ? [] : [row.input.company_name])))],
@@ -352,6 +421,8 @@ export class OnboardingPreviousInvoicesService {
 					? null
 					: { legal_name: input.legal_client_name, tax_id: input.client_tax_id ?? null, country: null, client_candidates: [] },
 				company: company ? { id: String(company.id) } : null,
+				history: { status: 'none', errors: [], product: null, fx_contract_to_invoice: null, warnings: [] },
+				history_products: [],
 				input,
 			};
 		});
@@ -366,12 +437,124 @@ export class OnboardingPreviousInvoicesService {
 
 		for (const plan of plans) {
 			if (plan.entity_suggestion) {
-				plan.entity_suggestion.country = plan.company ? (countries.get(plan.company.id) ?? null) : null;
-				plan.entity_suggestion.client_candidates = plan.client ? [] : (candidates.get(plan.input.legal_client_name) ?? []);
+				// País: el de la fila (de la razón social) o, sin él, el de la compañía emisora.
+				plan.entity_suggestion.country = plan.input.country ?? (plan.company ? (countries.get(plan.company.id) ?? null) : null);
+				// Cliente comercial por id del CRM o número de cliente: primer candidato (seguro) para crear la razón social.
+				plan.entity_suggestion.client_candidates = plan.client
+					? [{ id: plan.client.id, name: plan.client.name, score: 1 }]
+					: (candidates.get(plan.input.legal_client_name) ?? []);
 			}
 		}
+		await this.planHistory(db, holdingId, plans);
 
 		return plans;
+	}
+
+	/**
+	 * Histórico en el mismo paso (Domi 14-10): por factura, `ready` si todas sus líneas traen producto del catálogo (nombre o código),
+	 * período, moneda y monto en moneda de contrato válidos; `incomplete` si faltan campos; `error` si un producto no existe, un período es
+	 * inválido, las líneas no comparten período y moneda, la suma de las líneas no cuadra con el neto (±1 %) o no hay cliente comercial;
+	 * `none` si ninguna línea trae datos de histórico. Avisos de tipo de cambio con la misma regla que Registrar histórico.
+	 */
+	private async planHistory(db: Queryable, holdingId: string, plans: ImportRowPlan[]) {
+		const wanted = plans.filter((plan) => plan.input.items.some((item) => HISTORY_ITEM_FIELDS.some(([field]) => item[field] !== undefined)));
+
+		if (!wanted.length) return;
+		const [products, currencies, references] = await Promise.all([
+			db.query(`SELECT id, name, product_code FROM products WHERE holding_id = $1`, [holdingId]) as Promise<Row[]>,
+			db.query(`SELECT code FROM currencies WHERE is_active = true`) as Promise<Row[]>,
+			loadFxReferences(db, holdingId),
+		]);
+		const known = new Set(currencies.map((row) => String(row.code)));
+		const resolve = (value: string) => {
+			const byCode = products.filter((product) => str(product.product_code) === value);
+			const matches = byCode.length ? byCode : products.filter((product) => normalizeName(product.name) === normalizeName(value));
+
+			return matches.length === 1 ? matches[0] : matches.length ? 'ambiguous' : null;
+		};
+
+		for (const plan of wanted) {
+			const { input } = plan;
+			const errors: string[] = [];
+			const missing: string[] = [];
+			const resolved: Array<string | null> = [];
+			let product: ImportRowHistory['product'] = null;
+
+			input.items.forEach((item, index) => {
+				const label = `Línea ${index + 1}`;
+
+				for (const [field, name] of HISTORY_ITEM_FIELDS) if (item[field] === undefined) missing.push(`${label}: falta ${name}`);
+				if (item.product !== undefined) {
+					const match = resolve(item.product);
+
+					if (match === 'ambiguous') errors.push(`${label}: hay varios productos "${item.product}" en el catálogo`);
+					else if (!match) errors.push(`${label}: el producto "${item.product}" no está en el catálogo`);
+					else product ??= { id: String(match.id), name: str(match.name) };
+					resolved.push(match && match !== 'ambiguous' ? String(match.id) : null);
+				} else resolved.push(null);
+				if (item.period_from && item.period_to) {
+					const span = monthsBetween(item.period_from, item.period_to);
+
+					if (span < 0 || span >= REGISTER_MAX_MONTHS)
+						errors.push(`${label}: período inválido (hasta antes de desde o más de ${REGISTER_MAX_MONTHS} meses)`);
+				}
+				if (item.contract_currency && known.size && !known.has(item.contract_currency)) {
+					errors.push(`${label}: la moneda ${item.contract_currency} no está habilitada`);
+				}
+			});
+			const complete = !missing.length;
+			const first = input.items[0];
+			const contractAmount = input.items.reduce((sum, item) => sum + (item.amount_contract_currency ?? 0), 0);
+			const fx = complete && contractAmount !== 0 ? round6(input.amount / contractAmount) : null;
+
+			if (complete) {
+				const shared = input.items.every(
+					(item) =>
+						item.period_from === first.period_from &&
+						item.period_to === first.period_to &&
+						item.contract_currency === first.contract_currency &&
+						(item.is_recurring ?? true) === (first.is_recurring ?? true)
+				);
+				const itemsTotal = input.items.reduce((sum, item) => sum + item.subtotal, 0);
+
+				if (!shared) errors.push('Las líneas de la factura deben cubrir el mismo período, moneda de contrato y recurrencia');
+				if (Math.abs(itemsTotal - input.amount) > Math.abs(input.amount) * SUM_TOLERANCE + 0.005) {
+					errors.push('La suma de las líneas no cuadra con el neto de la factura (±1 %)');
+				}
+				if (fx !== null && fx <= 0) errors.push('El monto en moneda de contrato no es válido');
+				if (!plan.client) errors.push('La factura no tiene cliente comercial: registra el histórico después de relacionarla');
+			}
+			plan.history_products = resolved;
+			plan.history = {
+				status: errors.length ? 'error' : complete ? 'ready' : 'incomplete',
+				errors: errors.length ? errors : complete ? [] : missing,
+				product,
+				fx_contract_to_invoice: fx,
+				warnings: fx !== null && first.contract_currency ? fxWarningsOf(input.currency, first.contract_currency, fx, references) : [],
+			};
+		}
+	}
+
+	/** Lo de Registrar histórico (§3.2b) para una factura importada con histórico `ready`: un producto por línea, montos sumados por producto. */
+	private registerInputOf(plan: ImportRowPlan, invoiceId: string): RegisterHistoryInvoiceDto {
+		const first = plan.input.items[0];
+		const byProduct = new Map<string, number>();
+
+		plan.input.items.forEach((item, index) => {
+			const productId = plan.history_products[index]!;
+
+			byProduct.set(productId, round2((byProduct.get(productId) ?? 0) + (item.amount_contract_currency ?? 0)));
+		});
+
+		return {
+			invoice_id: invoiceId,
+			period_from: first.period_from!,
+			period_to: first.period_to!,
+			contract_currency: first.contract_currency!,
+			amount_contract_currency: round2([...byProduct.values()].reduce((sum, value) => sum + value, 0)),
+			is_recurring: first.is_recurring ?? true,
+			products: [...byProduct].map(([product_id, amount_contract_currency]) => ({ product_id, amount_contract_currency })),
+		};
 	}
 
 	/** Cliente comercial de la fila: el de la razón social (principal o único vínculo) y, si no tiene, el del id del CRM o número de cliente. */
@@ -426,11 +609,16 @@ export class OnboardingPreviousInvoicesService {
 			const batchId = randomUUID();
 			let inserted = 0;
 			let needsClient = 0;
+			const historyInputs: Array<{ row: number; invoice_number: string; input: RegisterHistoryInvoiceDto }> = [];
 
 			for (const plan of plans.filter((row) => row.status === 'new' || row.status === 'needs_client')) {
-				await this.insertInvoice(runner, holdingId, plan, batchId, actor);
+				const invoiceId = await this.insertInvoice(runner, holdingId, plan, batchId, actor);
+
 				inserted += 1;
 				if (plan.status === 'needs_client') needsClient += 1;
+				if (plan.history.status === 'ready') {
+					historyInputs.push({ row: plan.row, invoice_number: plan.input.invoice_number, input: this.registerInputOf(plan, invoiceId) });
+				}
 			}
 			const skippedDuplicates = plans.filter((row) => row.status === 'duplicate').length;
 			const errors = plans.filter((row) => row.status === 'error' || row.status === 'needs_entity').length;
@@ -440,6 +628,18 @@ export class OnboardingPreviousInvoicesService {
 					blockers: [{ code: 'nothing_to_import', duplicates: skippedDuplicates, errors }],
 				});
 			}
+			// Histórico de las facturas `ready` en la misma transacción, con el motor de Registrar histórico (mismas reglas y avisos) y el
+			// lote de la importación como `mrr_legacy.batch_id` (así revertir el lote revierte también ese histórico).
+			const history = historyInputs.length
+				? await this.register.registerInTx(
+						runner,
+						holdingId,
+						historyInputs.map((entry) => entry.input),
+						actor,
+						{ batchId }
+					)
+				: { created_rows: 0, lines_touched: [] as string[], skipped: [] as Array<{ invoice_id: string; reason: string }> };
+			const rowOf = new Map(historyInputs.map((entry) => [entry.input.invoice_id, entry]));
 			const result = {
 				batch_id: batchId,
 				inserted,
@@ -447,6 +647,13 @@ export class OnboardingPreviousInvoicesService {
 				errors,
 				entities_created: entitiesCreated,
 				needs_client: needsClient,
+				history_rows_created: history.created_rows,
+				history_lines_touched: history.lines_touched,
+				history_skipped: history.skipped.map((skip) => ({
+					row: rowOf.get(skip.invoice_id)?.row ?? null,
+					invoice_number: rowOf.get(skip.invoice_id)?.invoice_number ?? null,
+					reason: skip.reason,
+				})),
 			};
 
 			await insertOnboardingEvent(runner, holdingId, actor.userId, {
@@ -536,7 +743,7 @@ export class OnboardingPreviousInvoicesService {
 		return created;
 	}
 
-	private async insertInvoice(db: Queryable, holdingId: string, plan: ImportRowPlan, batchId: string, actor: OnboardingActor) {
+	private async insertInvoice(db: Queryable, holdingId: string, plan: ImportRowPlan, batchId: string, actor: OnboardingActor): Promise<string> {
 		const input = plan.input;
 		const [row] = (await db.query(
 			`INSERT INTO invoices_legacy (holding_id, company_id, client_id, client_entity_id, client_tax_id, legal_client_name, source_type,
@@ -595,9 +802,15 @@ export class OnboardingPreviousInvoicesService {
 			VALUES ${tuples.join(', ')}`,
 			values
 		);
+
+		return String(row.id);
 	}
 
-	/** Revierte un lote: borra sus facturas (y líneas). Bloqueado si alguna ya tiene MRR histórico o contrato vinculado. */
+	/**
+	 * Revierte un lote: borra sus facturas (y líneas). El MRR histórico registrado por la misma importación (`mrr_legacy.batch_id` = lote,
+	 * sin empalmar) se borra también; cualquier otro histórico sobre esas facturas (otro registro, una edición de la línea, filas
+	 * empalmadas) bloquea con `batch_has_history`, igual que un contrato vinculado (`batch_linked`).
+	 */
 	async revertImport(holdingId: string, batchId: string, actor: OnboardingActor) {
 		return await withApiWriter(this.dataSource, async (runner) => {
 			const [batch] = (await runner.query(
@@ -605,7 +818,8 @@ export class OnboardingPreviousInvoicesService {
 					EXISTS (SELECT 1 FROM onboarding_events WHERE holding_id = $1 AND type = 'previous_invoices_imported' AND entity_id = $2) AS imported,
 					EXISTS (SELECT 1 FROM onboarding_events WHERE holding_id = $1 AND type = 'previous_invoices_reverted' AND entity_id = $2) AS reverted,
 					(SELECT COUNT(*) FROM invoices_legacy il WHERE il.holding_id = $1 AND il.import_batch_id = $2
-						AND EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id)) AS with_history,
+						AND EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id
+							AND (m.batch_id IS DISTINCT FROM $2::uuid OR m.migrated_to_contract_id IS NOT NULL))) AS with_history,
 					(SELECT COUNT(*) FROM invoices_legacy il WHERE il.holding_id = $1 AND il.import_batch_id = $2 AND il.contract_id IS NOT NULL) AS linked`,
 				[holdingId, batchId]
 			)) as Row[];
@@ -622,6 +836,12 @@ export class OnboardingPreviousInvoicesService {
 					blockers: [{ code: 'batch_linked', count: num(batch.linked) }],
 				});
 			}
+			const historyRemoved = (await runner.query(
+				`DELETE FROM mrr_legacy m WHERE m.holding_id = $1 AND m.batch_id = $2::uuid AND m.migrated_to_contract_id IS NULL
+					AND m.invoice_legacy_id IN (SELECT il.id FROM invoices_legacy il WHERE il.holding_id = $1 AND il.import_batch_id = $2)
+				RETURNING m.id`,
+				[holdingId, batchId]
+			)) as Row[];
 			const removed = (await runner.query(`DELETE FROM invoices_legacy WHERE holding_id = $1 AND import_batch_id = $2 RETURNING id`, [
 				holdingId,
 				batchId,
@@ -631,10 +851,10 @@ export class OnboardingPreviousInvoicesService {
 				type: 'previous_invoices_reverted',
 				entityType: 'invoice_batch',
 				entityId: batchId,
-				payload: { removed: removed.length },
+				payload: { removed: removed.length, history_rows_removed: historyRemoved.length },
 			});
 
-			return { batch_id: batchId, removed: removed.length };
+			return { batch_id: batchId, removed: removed.length, history_rows_removed: historyRemoved.length };
 		});
 	}
 

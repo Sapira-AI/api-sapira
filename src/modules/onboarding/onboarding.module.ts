@@ -7,6 +7,7 @@ import { OnboardingHistoryService } from './onboarding-history.service';
 import { OnboardingPreviousInvoicesService } from './onboarding-previous-invoices.service';
 import { OnboardingQuickStartService } from './onboarding-quick-start.service';
 import { OnboardingRegisterService } from './onboarding-register.service';
+import { OnboardingSeriesService } from './onboarding-series.service';
 import { OnboardingController } from './onboarding.controller';
 import { OnboardingService } from './onboarding.service';
 
@@ -23,6 +24,7 @@ import { OnboardingService } from './onboarding.service';
 		OnboardingPreviousInvoicesService,
 		OnboardingRegisterService,
 		OnboardingQuickStartService,
+		OnboardingSeriesService,
 	],
 })
 export class OnboardingModule {}
