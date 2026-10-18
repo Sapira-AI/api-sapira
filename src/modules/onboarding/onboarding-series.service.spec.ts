@@ -414,6 +414,7 @@ describe('serie mensual del MRR histórico (Domi 18-10)', () => {
 		const { db, service } = build([
 			['FROM mrr_legacy m JOIN companies co', () => [{ id: COMPANY, legal_name: 'SimpliRoute SpA' }]],
 			['AS country', () => [{ country: 'BR' }, { country: 'CL' }]],
+			['AS product_name FROM mrr_legacy', () => [{ product_name: 'PATHFINDER+' }]],
 			[
 				"'contract' AS kind",
 				() => [
@@ -428,6 +429,7 @@ describe('serie mensual del MRR histórico (Domi 18-10)', () => {
 			companies: [{ id: COMPANY, legal_name: 'SimpliRoute SpA' }],
 			countries: ['BR', 'CL'],
 			currencies: { contract: ['USD'], invoice: ['BRL', 'USD'] },
+			products: ['PATHFINDER+'],
 		});
 		expect(db.calls.every((call) => call.params[0] === HOLDING)).toBe(true);
 	});

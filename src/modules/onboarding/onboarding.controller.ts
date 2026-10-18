@@ -102,7 +102,7 @@ export class OnboardingController {
 	@ApiOperation({
 		summary: 'Opciones de filtro de la serie del MRR histórico',
 		description:
-			'{ companies[{ id, legal_name }], countries[], currencies{ contract[], invoice[] } }: solo lo presente en el MRR histórico del holding',
+			'{ companies[{ id, legal_name }], countries[], currencies{ contract[], invoice[] }, products[] }: solo lo presente en el MRR histórico del holding',
 	})
 	historyFilterOptions(@HoldingId() holdingId: string) {
 		return this.series.filterOptions(holdingId);

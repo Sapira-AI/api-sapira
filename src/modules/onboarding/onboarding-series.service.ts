@@ -269,7 +269,7 @@ export class OnboardingSeriesService {
 
 	/** Opciones de filtro de la serie: lo presente en el MRR histórico del holding. */
 	async filterOptions(holdingId: string) {
-		const [companies, countries, currencies] = await Promise.all([
+		const [companies, countries, currencies, products] = await Promise.all([
 			this.dataSource.query(
 				`SELECT DISTINCT co.id, co.legal_name FROM mrr_legacy m JOIN companies co ON co.id = m.company_id
 				WHERE m.holding_id = $1 ORDER BY co.legal_name, co.id`,
@@ -290,6 +290,12 @@ export class OnboardingSeriesService {
 				ORDER BY 1, 2`,
 				[holdingId]
 			) as Promise<Row[]>,
+			// Productos presentes en el histórico (filtro de la bandeja por registro, Domi 18-10: selector, no texto libre).
+			this.dataSource.query(
+				`SELECT DISTINCT btrim(m.product_name) AS product_name FROM mrr_legacy m
+				WHERE m.holding_id = $1 AND NULLIF(btrim(m.product_name), '') IS NOT NULL ORDER BY 1`,
+				[holdingId]
+			) as Promise<Row[]>,
 		]);
 		const currenciesOf = (kind: string) => currencies.filter((row) => row.kind === kind).map((row) => String(row.currency));
 
@@ -297,6 +303,7 @@ export class OnboardingSeriesService {
 			companies: companies.map((row) => ({ id: String(row.id), legal_name: str(row.legal_name) })),
 			countries: countries.map((row) => String(row.country)),
 			currencies: { contract: currenciesOf('contract'), invoice: currenciesOf('invoice') },
+			products: products.map((row) => String(row.product_name)),
 		};
 	}
 }

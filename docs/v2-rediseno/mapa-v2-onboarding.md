@@ -445,7 +445,7 @@ Métricas); `to` = el último mes con datos del filtro (en SimpliRoute, 2027-02 
 
 ### `GET /onboarding/history/filter-options`
 
-`{ companies: [{ id, legal_name }], countries: string[], currencies: { contract: string[], invoice: string[] } }`: solo lo presente en el MRR
+`{ companies: [{ id, legal_name }], countries: string[], currencies: { contract: string[], invoice: string[] }, products: string[] }`: solo lo presente en el MRR
 histórico del holding (compañías de `mrr_legacy.company_id`, países de la razón social de la factura de origen, monedas de contrato y de
 factura). Prod 18-10: 5 compañías, 16 países, contrato `CLF, CLP, COP, MXN, PEN, USD, UYU`; factura además `UF` (filas viejas con `UF` en vez
 de `CLF`: dato, no se normaliza aquí).
