@@ -15,6 +15,7 @@ import { PermissionsService } from '@/guards/permissions.service';
 import { REQUIRED_PERMISSIONS_KEY, RequirePermissionGuard } from '@/guards/require-permission.guard';
 import { UserHoldingsService } from '@/guards/user-holdings.service';
 import { EmailsService } from '@/modules/emails/emails.service';
+import { FacturaClientService } from '@/modules/factura/factura-client.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { ProductsController } from '@/modules/products/products.controller';
 import { ProductsModule } from '@/modules/products/products.module';
@@ -82,7 +83,7 @@ describe('Controladores de Configuración y Productos', () => {
 		expect(Reflect.getMetadata(GUARDS_METADATA, CountriesController)).toEqual([SupabaseAuthGuard]);
 	});
 
-	it('SettingsModule y ProductsModule resuelven sus dependencias (guards globales, DataSource, Config, Notificaciones)', async () => {
+	it('SettingsModule y ProductsModule resuelven sus dependencias (guards globales, DataSource, Config, Notificaciones, Factura)', async () => {
 		const metadata = (module: object, key: string) => (Reflect.getMetadata(key, module) as unknown[]) ?? [];
 		const moduleRef = await Test.createTestingModule({
 			controllers: [
@@ -102,6 +103,7 @@ describe('Controladores de Configuración y Productos', () => {
 				{ provide: ConfigService, useValue: { get: jest.fn() } },
 				{ provide: NotificationsService, useValue: {} },
 				{ provide: EmailsService, useValue: {} },
+				{ provide: FacturaClientService, useValue: {} },
 			],
 		})
 			.overrideGuard(SupabaseAuthGuard)

@@ -369,7 +369,12 @@ export class QuotesService {
 		};
 	}
 
-	/** Alertas del Resumen (§5c). */
+	/**
+	 * Alertas del Resumen (§5c): solo lo que la usuaria puede resolver. Domi 13-10 retiró tres avisos que no pedían nada:
+	 * "Firmada sin contrato" (la línea de vida y los botones ya lo dicen), "total guardado ≠ suma de ítems" (en las del CRM el
+	 * total es el monto mensual sin descuento de la oportunidad; es una diferencia de definición, no un error) y "fin distinto
+	 * de inicio + plazo − 1" (el contrato recalcula el fin al crearse; la importación del CRM ya guarda el −1 cuando lo deriva).
+	 */
 	static alerts(header: QuoteListRow, items: ReturnType<typeof QuotesService.itemView>[], entities: number, today: string) {
 		const alerts: Array<{ code: string; severity: 'error' | 'warning' | 'info'; message: string; count?: number }> = [];
 		const push = (code: string, severity: 'error' | 'warning' | 'info', message: string, count?: number) => {
@@ -377,20 +382,12 @@ export class QuotesService {
 		};
 		const withoutProduct = items.filter((item) => !item.product_id).length;
 		const withoutStart = items.filter((item) => !item.start_date).length;
-		const endOff = items.filter((item) => item.expected_end_date && item.end_date && item.end_date !== item.expected_end_date).length;
 		const currencyOff = items.filter(
 			(item) => item.currency && header.currency && item.currency.toUpperCase() !== header.currency.toUpperCase()
 		).length;
-		const sumFinal = round2(items.reduce((sum, item) => sum + (item.final_price ?? 0), 0));
 
 		push('items_without_product', 'error', 'Ítems sin producto del catálogo: elígelo antes de firmar', withoutProduct);
 		push('items_without_start', 'error', 'Ítems sin fecha de inicio', withoutStart);
-		push(
-			'items_end_date_off',
-			'warning',
-			'Ítems con fin distinto de inicio + plazo − 1 día (heredado de Salesforce); se corrige al editar',
-			endOff
-		);
 		push('items_currency_mismatch', 'warning', 'Ítems en una moneda distinta de la cotización', currencyOff);
 		if (header.payment_terms && !header.payment_terms_json) {
 			push(
@@ -405,16 +402,6 @@ export class QuotesService {
 		else if (header.valid_until && ['draft', 'sent'].includes(header.status) && header.valid_until <= addDays(today, 7)) {
 			push('expiring_soon', 'info', `Vence el ${header.valid_until}`);
 		}
-		if (items.length && Math.abs(sumFinal - header.total_amount) > 0.01) {
-			push(
-				'total_mismatch',
-				'info',
-				`El total guardado (${header.total_amount}) no coincide con la suma de los ítems (${sumFinal}); se alinea al guardar`
-			);
-		}
-		if (header.status === 'signed' && !header.contract)
-			push('signed_without_contract', 'info', 'Firmada sin contrato: crea el contrato o aplícala a uno existente');
-
 		return alerts;
 	}
 

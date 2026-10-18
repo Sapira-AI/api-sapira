@@ -204,6 +204,15 @@ al MRR. Lo que está mal hoy es el doble conteo (≈16 mil USD en ago-2026, igua
   activación"** (a ese MRR legacy no se le crea contrato); el motivo es un comentario y no cambia el cálculo del MRR; esa historia cuenta mientras tiene filas y, cuando termina sin contrato, es una baja más (ver waterfall). Los
   duplicados de datos se corrigen fuera de este desarrollo (L2).
 - Origen visible: `source = contract | subscription | legacy` (chip "Legacy" y filtro), igual que suscripciones (D4).
+- **13-10 (onboarding, `mrr-historico.ts`)**: la etiqueta visible pasa a "MRR histórico" (el código `legacy` no cambia) y la regla de qué filas
+  cuentan es una sola para Métricas, Dashboard, Clientes y Cliente 360: recurrente + corte U14 + **no quitada** (duplicado o error). Ver
+  [`mapa-v2-onboarding.md`](./mapa-v2-onboarding.md).
+- **18-10 (Domi): el "No aplica" viejo es "No activado", sin interpretar el texto libre.** Motivo efectivo = `skip_reason_code` o, si está
+  vacío, `churn` (cuenta hasta su último mes, como dice la decisión del 01-10 de arriba). Solo deja de contar una fila quitada desde el módulo
+  `onboarding` con código explícito `duplicate` | `error`. Se retiró la lectura de "duplic"/"error" en el texto: las 58 filas de SimpliRoute
+  con "duplicado" en el motivo vuelven a contar (62.275,98 USD en total entre dic-2024 y jul-2026; máximo 8.600,91 USD en may-2026). El corte
+  U14 no cambia; solo se reporta distinto: el mes de empalme (mismo mes que el primer mes del contrato) se corta en silencio y el histórico en
+  meses posteriores es un error de datos visible en Datos históricos.
 - Waterfall ✅ Domi 01-10: el legacy se trata por línea `(cliente, producto, moneda)`.
   - **Legacy que pasa a su contrato** (`migrated_to_contract_id`, el contrato arranca y el legacy termina el mes anterior): **no es
     movimiento**, es el mismo MRR que cambia de origen. Se compara en **moneda de sistema**, como todo Métricas

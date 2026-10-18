@@ -25,6 +25,7 @@ export interface IClientEntity {
 	tax_id?: string;
 	country?: string;
 	legal_address?: string;
+	commune?: string | null;
 	email?: string;
 	phone?: string;
 	holding_id: string;

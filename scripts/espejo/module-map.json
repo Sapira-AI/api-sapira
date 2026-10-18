@@ -106,7 +106,8 @@
   "invoices_legacy",
   "invoice_items_legacy",
   "invoice_items_legacy_match",
-  "mrr_legacy"
+  "mrr_legacy",
+  "onboarding_events"
  ],
  "conciliacion": [
   "bank_movements",
@@ -163,7 +164,8 @@
   "app_notification_recipients",
   "notification_role_subscriptions",
   "email_sender_addresses",
-  "holding_email_sender_settings"
+  "holding_email_sender_settings",
+  "holding_inbound_email_domains"
  ],
  "suscripciones": [
   "subscriptions",

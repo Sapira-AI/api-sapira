@@ -1,5 +1,5 @@
 /**
- * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-10-06 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
+ * Snapshot de prod (`hklompkypzqtglprfobu`, schema public) tomado el 2026-10-15 vía MCP de Supabase (`list_tables verbose` + `execute_sql` de solo lectura sobre pg_catalog).
  * Solo las tablas espejadas (sin entity previa). Generado por scripts/espejo/generate-espejo.py — el spec compara la metadata TypeORM contra él sin conectarse.
  */
 export interface ProdTableSnapshot {
@@ -130,6 +130,7 @@ export const BASE_TENANCY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 			quote_number_prefix: false,
 			quote_number_include_year: false,
 			quote_number_width: false,
+			metrics_history_start: true,
 		},
 		primary: ['holding_id'],
 		foreignKeys: {
@@ -142,6 +143,7 @@ export const BASE_TENANCY_PROD_SNAPSHOT: Record<string, ProdTableSnapshot> = {
 		checks: [
 			'holding_settings_auto_renewal_notice_days_check',
 			'holding_settings_fx_system_policy_check',
+			'holding_settings_metrics_history_start_check',
 			'holding_settings_quote_number_prefix_check',
 			'holding_settings_quote_number_width_check',
 			'holding_settings_quote_numbering_mode_check',

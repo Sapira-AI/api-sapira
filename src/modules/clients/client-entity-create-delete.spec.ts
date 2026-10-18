@@ -84,6 +84,43 @@ describe('insertClientEntity (camino único de alta)', () => {
 		]);
 		expect(call('SET is_primary = true')).toBeDefined();
 	});
+
+	it('guarda la comuna aparte de la dirección cuando viene', async () => {
+		const query = jest.fn(
+			async (...args: [string, unknown[]?]): Promise<any> =>
+				args[0].includes('INSERT INTO client_entities')
+					? [{ id: 'e-new' }]
+					: args[0].includes('FROM countries')
+						? [{ code: 'CL', name_es: 'Chile', name_en: 'Chile' }]
+						: [{ id: 'link-1' }]
+		);
+		const call = (text: string) => query.mock.calls.find((entry) => String(entry[0]).includes(text)) as [string, unknown[]];
+
+		await insertClientEntity({ query } as never, 'h-1', {
+			client_id: 'c-1',
+			legal_name: 'N',
+			tax_id: '1-9',
+			country: 'Chile',
+			address: 'Av. Apoquindo 4501',
+			email: null,
+			payment_terms: null,
+			commune: 'Las Condes',
+		});
+
+		expect(call('INSERT INTO client_entities')[0]).toContain('legal_address, email, payment_terms, commune)');
+		expect(call('INSERT INTO client_entities')[1]).toEqual([
+			'h-1',
+			'c-1',
+			'N',
+			'1-9',
+			'Chile',
+			'CL',
+			'Av. Apoquindo 4501',
+			null,
+			null,
+			'Las Condes',
+		]);
+	});
 });
 
 describe('ClientDirectoryService · crear razón social', () => {

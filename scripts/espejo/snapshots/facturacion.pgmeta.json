@@ -228,7 +228,7 @@
  "invoice_adjustments": {
   "name": "public.invoice_adjustments",
   "rls_enabled": true,
-  "rows": 0,
+  "rows": 1,
   "columns": [
    {
     "name": "id",
@@ -728,7 +728,7 @@
  "invoice_items": {
   "name": "public.invoice_items",
   "rls_enabled": true,
-  "rows": 11955,
+  "rows": 11988,
   "columns": [
    {
     "name": "id",
@@ -1945,7 +1945,7 @@
  "invoices": {
   "name": "public.invoices",
   "rls_enabled": true,
-  "rows": 9905,
+  "rows": 9961,
   "columns": [
    {
     "name": "id",

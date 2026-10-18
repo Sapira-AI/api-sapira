@@ -109,6 +109,27 @@ export async function loadHoldingPreferences(db: Queryable, holdingId: string): 
 	return preferencesFromRow(settings);
 }
 
+/** `YYYY-MM` desde una fecha de Postgres (`date` llega como texto `YYYY-MM-DD` o, en `to_jsonb`, igual); inválida → null. */
+export function monthOfDate(value: unknown): string | null {
+	if (value === null || value === undefined || value === '') return null;
+	const text = value instanceof Date ? value.toISOString().slice(0, 10) : String(value);
+
+	return /^\d{4}-(0[1-9]|1[0-2])/.test(text) ? text.slice(0, 7) : null;
+}
+
+/**
+ * Inicio de la historia en Métricas (`holding_settings.metrics_history_start`, onboarding §3.4): primer mes `YYYY-MM` que muestran
+ * Métricas, o `null` (sin tope: el mínimo de los datos). Tolerante a que la migración `1791900000000-OnboardingDatosHistoricos` aún no
+ * esté aplicada (columna ausente → `null`), igual que `loadHoldingPreferences`.
+ */
+export async function loadMetricsHistoryStart(db: Queryable, holdingId: string): Promise<string | null> {
+	const rows = (await db.query(`SELECT to_jsonb(hs) ->> 'metrics_history_start' AS start FROM holding_settings hs WHERE hs.holding_id = $1`, [
+		holdingId,
+	])) as Array<{ start?: unknown }> | null;
+
+	return monthOfDate(rows?.[0]?.start);
+}
+
 /** Zona horaria IANA del holding (default `America/Santiago`): el "hoy" del holding es `todayFor(await holdingTimezone(...))`. */
 export async function holdingTimezone(db: Queryable, holdingId: string | null | undefined): Promise<string> {
 	if (!holdingId) return DEFAULT_TIMEZONE;

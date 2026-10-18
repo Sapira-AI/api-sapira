@@ -16,6 +16,7 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/$1',
     '^@types/(.*)$': '<rootDir>/../types/$1.d.ts',
   },
-  roots: ['<rootDir>'],
+  // scripts/ci: el bump de versión de GitHub Actions vive fuera de src/ (docs/reglas-desarrollo/versionado.md).
+  roots: ['<rootDir>', '<rootDir>/../scripts/ci'],
   preset: 'ts-jest',
 };

@@ -166,6 +166,13 @@ export class UpdateClientEntityDto {
 	@IsOptional()
 	legal_address?: string;
 
+	/** Comuna de la dirección legal (`CmnaRecep` del DTE chileno: hasta 20 caracteres). */
+	@ApiPropertyOptional({ example: 'Las Condes' })
+	@IsString()
+	@MaxLength(20)
+	@IsOptional()
+	commune?: string;
+
 	@ApiPropertyOptional()
 	@IsString()
 	@MaxLength(200)
@@ -242,6 +249,13 @@ export class CreateClientEntityDto {
 	@MaxLength(300)
 	@IsOptional()
 	legal_address?: string;
+
+	/** Comuna de la dirección legal (`CmnaRecep` del DTE chileno: hasta 20 caracteres). */
+	@ApiPropertyOptional({ example: 'Las Condes' })
+	@IsString()
+	@MaxLength(20)
+	@IsOptional()
+	commune?: string;
 
 	@ApiPropertyOptional()
 	@IsString()

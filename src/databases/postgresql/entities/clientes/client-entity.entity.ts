@@ -53,6 +53,13 @@ export class ClientEntity {
 	@Column({ type: 'text', nullable: true })
 	legal_address?: string;
 
+	@Column({
+		type: 'text',
+		nullable: true,
+		comment: 'Comuna de la dirección legal (CmnaRecep del DTE chileno, hasta 20 caracteres). NULL = sin comuna',
+	})
+	commune?: string | null;
+
 	@Column({ type: 'text', nullable: true })
 	email?: string;
 

@@ -120,6 +120,11 @@
   "file": "src/databases/postgresql/entities/fx/generic-export-vat.entity.ts",
   "import": "@/databases/postgresql/entities/fx/generic-export-vat.entity"
  },
+ "holding_inbound_email_domains": {
+  "class": "HoldingInboundEmailDomain",
+  "file": "src/databases/postgresql/entities/automatizaciones-ia/holding-inbound-email-domain.entity.ts",
+  "import": "@/databases/postgresql/entities/automatizaciones-ia/holding-inbound-email-domain.entity"
+ },
  "holding_integration_settings": {
   "class": "HoldingIntegrationSettings",
   "file": "src/databases/postgresql/entities/base-tenancy/holding-integration-settings.entity.ts",
@@ -194,6 +199,11 @@
   "class": "OdooProductMapping",
   "file": "src/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity.ts",
   "import": "@/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity"
+ },
+ "onboarding_events": {
+  "class": "OnboardingEvent",
+  "file": "src/databases/postgresql/entities/legacy/onboarding-event.entity.ts",
+  "import": "@/databases/postgresql/entities/legacy/onboarding-event.entity"
  },
  "prices": {
   "class": "Price",

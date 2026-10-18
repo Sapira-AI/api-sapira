@@ -428,7 +428,7 @@ del header: cada id se filtra por holding (404 si no es suyo). Las rutas viejas 
 | PATCH | `/settings/communications/domains/:id` | EDIT | `{ display_name?, is_default?, is_active? }` → `Domain`. Marcar por defecto desmarca el resto |
 | DELETE | `/settings/communications/domains/:id` | EDIT | 204. Lo quita de SendGrid (si falla, se registra y sigue) y borra sus remitentes |
 | POST | `/settings/communications/domains/:id/verify` | EDIT | Pide a SendGrid validar los DNS ahora → `{ "status": "verified|pending", "domain": Domain, "results": [{ "record": "mail_cname|dkim1|dkim2", "valid": true, "reason": null }] }` |
-| POST | `/settings/communications/domains/:id/check-status` | EDIT | Lee el estado actual en SendGrid sin pedir validación y refresca el estado guardado → `{ "status", "domain": Domain }` |
+| POST | `/settings/communications/domains/:id/check-status` | EDIT | Lee el estado actual en SendGrid y refresca el estado guardado → `{ "status", "domain": Domain }`. SendGrid a veces responde `valid: false` en una consulta suelta aunque el dominio esté validado: en ese caso pide una validación y vale su resultado (antes, un dominio verificado volvía a pendiente). El TXT de DMARC, que SendGrid no valida, se revisa en el DNS (también al verificar) |
 | GET | `/settings/communications/senders?domain_id=` | VIEW | `[Sender]` de los dominios del holding (o de uno) |
 | POST | `/settings/communications/senders` | EDIT | `{ domain_id, from_name 1–100, from_email, reply_to_email?, purpose? ≤ 50, is_default? }` → `Sender` (201) |
 | PATCH | `/settings/communications/senders/:id` | EDIT | `{ from_name?, from_email?, reply_to_email?, purpose?, is_default?, is_active? }` → `Sender` |
@@ -447,6 +447,34 @@ Errores:
   sesión o de un miembro activo del holding, sin distinguir mayúsculas); 409 `El dominio aún no está verificado: configura los registros DNS
   y verifica`; 409 `El remitente está desactivado`; 404 `No hay un dominio por defecto con remitente: configúralo primero`.
 - 404 `Dominio no encontrado`, `Remitente no encontrado`.
+
+#### Dominio de recepción de documentos tributarios · `/settings/communications/inbound-domain`
+
+Un subdominio por holding (tabla `holding_inbound_email_domains`, migración `1792000000000-CreateHoldingInboundEmailDomains`) donde llegan
+los DTE que envían el SII y los proveedores (intercambio). Su MX apunta a SendGrid (Inbound Parse) y está autenticado en SendGrid para
+responder desde sus casillas. Las casillas de intercambio de las compañías (`siiContactEmail`, en api-factura) son de este dominio.
+
+`InboundDomain`:
+```json
+{ "id": "uuid", "inbound_domain": "dte.empresa.cl", "status": "pending|verified",
+  "dns_records": [{ "type": "MX", "name": "dte.empresa.cl", "value": "mx.sendgrid.net", "priority": 10, "status": "pending|verified" },
+                  { "type": "CNAME", "name": "em123.dte.empresa.cl", "value": "u123.wl.sendgrid.net", "status": "pending|verified" }],
+  "mx_verified_at": "…|null", "verified_at": "…|null", "inbound_parse_configured_at": "…|null", "created_at": "…" }
+```
+
+| Método | Ruta | Permiso | Body / respuesta |
+|---|---|---|---|
+| GET | `/settings/communications/inbound-domain` | VIEW | `InboundDomain` o `null` |
+| POST | `/settings/communications/inbound-domain` | EDIT | `{ inbound_domain }` → `InboundDomain` (201). Debe ser subdominio (un MX en el dominio raíz se llevaría todo el correo del holding). Lo autentica en SendGrid (`/whitelabel/domains`) y guarda el MX y los CNAME a publicar |
+| POST | `/settings/communications/inbound-domain/verify` | EDIT | Revisa el MX (`dns.resolveMx`) y los CNAME (SendGrid). Con todo puesto: registra la `SENDGRID_API_KEY` de Sapira como canal de correo en api-factura (`PUT /integrators/me/mail-channel`, `FacturaClientService.registrarCanalCorreo`) y crea (o actualiza) el Inbound Parse del dominio hacia la `inboundUrl` que responde api-factura → `InboundDomain` |
+| DELETE | `/settings/communications/inbound-domain` | EDIT | 204. Borra el Inbound Parse y el dominio en SendGrid (best effort) y la fila |
+
+Errores: 400 `Usa un subdominio, por ejemplo dte.miempresa.cl…`; 409 `El holding ya tiene un dominio de recepción: elimínalo para cambiarlo`;
+409 `Ese dominio ya está en uso`; 404 `El holding no tiene dominio de recepción`; 400 `SendGrid rechazó la operación: <motivo>`;
+503 `No se pudo conectar con el servicio de correo: vuelve a intentarlo`.
+
+⚠️ Despliegue: la migración `1792000000000-CreateHoldingInboundEmailDomains` (y el asset `rls/holding_access_holding_inbound_email_domains.sql`)
+va antes de usar este bloque. Al ser una tabla aparte, el resto de Comunicaciones funciona aunque todavía no esté aplicada.
 
 ### 8.3 Tipos de cambio sincronizados (detalle) · `/settings/holding/fx-sync/*`
 
@@ -581,6 +609,14 @@ Body (todo opcional, upsert; `quote_numbering` se mezcla con lo guardado):
 - `quote_numbering.include_year`: booleano (solo `prefixed`). `quote_numbering.width`: entero 1–8 → `El ancho del correlativo debe estar entre 1 y 8`
   (se usa en `prefixed` y `sequential`).
 Sin 409 nuevos: estas preferencias se pueden cambiar con contratos (rigen hacia adelante; nada histórico se recalcula).
+
+### 9.2b Inicio de la historia en Métricas (onboarding §3.4, 13-10)
+
+`GET` agrega `"metrics_history_start": "2025-01" | null` y `PATCH` acepta `metrics_history_start` (`AAAA-MM` o `null`; 400 `El inicio de la
+historia debe ser un mes (AAAA-MM)`). Se guarda como día 1 en `holding_settings.metrics_history_start` (migración
+`1791900000000-OnboardingDatosHistoricos`) con una sentencia aparte, solo si viene en el body: el resto de las preferencias se guarda aunque la
+migración no esté aplicada, y la lectura es tolerante (columna ausente → `null`). Métricas (clientes y cohortes) arranca en el mayor entre el
+primer dato y este mes. Sin bloqueo por contratos.
 
 ### 9.3 Numeración de cotizaciones (Cotizaciones, autorizado)
 

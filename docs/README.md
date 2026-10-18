@@ -11,7 +11,7 @@ Esta guia define donde documentar cambios backend y como mantener la base de pru
 | [`v2-rediseno/`](./v2-rediseno/) | Todo el material del rediseño: specs, estudios, matriz de scope de migración e inventario rpc | Por spec o sesión de planificación |
 | [`cambios/`](./cambios/) | Documentación funcional de cambios puntuales de backend | Con cada cambio (regla de abajo) |
 | [`guards/`](./guards/) | Referencia técnica de guards transversales | Al tocar el guard |
-| [`reglas-desarrollo/`](./reglas-desarrollo/) | Reglas de desarrollo transversales: [lógica en la API, triggers solo invariantes](./reglas-desarrollo/logica-en-api-triggers.md) | Al cambiar una convención |
+| [`reglas-desarrollo/`](./reglas-desarrollo/) | Reglas de desarrollo transversales: [lógica en la API, triggers solo invariantes](./reglas-desarrollo/logica-en-api-triggers.md), [versionado por GitHub Actions](./reglas-desarrollo/versionado.md) | Al cambiar una convención |
 | [`archivo/`](./archivo/) | Bitácoras de sesiones terminadas, por semestre, con índice | Solo se agrega, nunca se edita |
 
 La documentación canónica del esquema **no está acá**: vive en `src/databases/postgresql/`
@@ -80,3 +80,9 @@ El proyecto ya cuenta con `jest`, `ts-jest`, `@types/jest` y `@nestjs/testing` e
 No se cierra una tarea funcional sin verificar los tres puntos: documentacion funcional,
 documentacion tecnica y tests unitarios. Si alguno no aplica, la justificacion va explicita en la
 entrega. La regla operativa para agentes vive en `AGENTS.md` y en `.cursor/rules/documentacion-y-tests.mdc`.
+
+Desde el 13-10-2026 rige además el **análisis de impacto antes de corregir** (ley de Domi): ninguna
+corrección sobre código en producción se commitea sin su párrafo de impacto (quién más lo usa, cuántos
+registros reales toca, qué lo verifica, qué doc cambia). Texto en `AGENTS.md` y
+`.cursor/rules/analisis-de-impacto.mdc`; versión ampliada en
+`front-sapira/docs/reglas-desarrollo/analisis-de-impacto.md`.

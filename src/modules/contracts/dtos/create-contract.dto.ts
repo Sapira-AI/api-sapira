@@ -53,6 +53,12 @@ export const PRICE_ENTRY_MODES = ['monthly', 'annual'] as const;
 /** Día de ciclo del ítem (spec modificaciones §9.3.9): el del contrato o el propio (día de su inicio, `contract_items.billing_anchor_day`). */
 export const BILLING_CYCLES = ['contract', 'own'] as const;
 export type BillingCycle = (typeof BILLING_CYCLES)[number];
+/**
+ * Categorías que un ítem de borrador admite de forma explícita (`items[].category`): las de alta del CHECK `contract_items_categoria_check`.
+ * CHURN y DOWNSELL quedan fuera: son espejos de baja que solo escribe una modificación (`contract-changes.ts`).
+ */
+export const DRAFT_ITEM_CATEGORIES = ['NEW', 'REACTIVATION', 'UPSELL', 'CROSS-SELL', 'RENEWAL'] as const;
+export type DraftItemCategory = (typeof DRAFT_ITEM_CATEGORIES)[number];
 
 const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const CURRENCY = /^[A-Z]{2,4}$/;
@@ -398,6 +404,15 @@ export class CreateContractItemDto {
 	@IsIn(BILLING_CYCLES, { message: 'billing_cycle: contract u own' })
 	@IsOptional()
 	billing_cycle?: BillingCycle;
+
+	@ApiPropertyOptional({
+		enum: DRAFT_ITEM_CATEGORIES,
+		description:
+			'Categoría explícita del ítem (Domi 14-10: el alta desde el MRR histórico y el arranque rápido mandan RENEWAL). Sin ella, la de siempre: NEW / REACTIVATION / UPSELL / CROSS-SELL por historial del cliente',
+	})
+	@IsIn(DRAFT_ITEM_CATEGORIES, { message: `Categoría inválida: usa ${DRAFT_ITEM_CATEGORIES.join(', ')}` })
+	@IsOptional()
+	category?: DraftItemCategory;
 }
 
 /** Body de `POST /contracts` y `POST /contracts/preview`. El holding sale de `HoldingScopeGuard`, nunca del body. */

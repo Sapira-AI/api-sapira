@@ -138,6 +138,7 @@ export { InvoiceItemsLegacyMatch } from '@/databases/postgresql/entities/legacy/
 export { InvoiceItemsLegacy } from '@/databases/postgresql/entities/legacy/invoice-items-legacy.entity';
 export { InvoicesLegacy } from '@/databases/postgresql/entities/legacy/invoices-legacy.entity';
 export { MrrLegacy } from '@/databases/postgresql/entities/legacy/mrr-legacy.entity';
+export { OnboardingEvent } from '@/databases/postgresql/entities/legacy/onboarding-event.entity';
 export { AccountingPeriodCutoff } from '@/databases/postgresql/entities/revenue/accounting-period-cutoff.entity';
 export { AccountingPeriodEvent } from '@/databases/postgresql/entities/revenue/accounting-period-event.entity';
 export { BudgetLine } from '@/databases/postgresql/entities/revenue/budget-line.entity';
@@ -148,3 +149,4 @@ export { RevenueScheduleMonthly } from '@/databases/postgresql/entities/revenue/
 export { SiiCaf, SiiCertificate, SiiConfiguration } from '@/databases/postgresql/entities/sii/sii.entity';
 export { SubscriptionItem } from '@/databases/postgresql/entities/suscripciones/subscription-item.entity';
 export { Subscription } from '@/databases/postgresql/entities/suscripciones/subscription.entity';
+export { HoldingInboundEmailDomain } from '@/databases/postgresql/entities/automatizaciones-ia/holding-inbound-email-domain.entity';
