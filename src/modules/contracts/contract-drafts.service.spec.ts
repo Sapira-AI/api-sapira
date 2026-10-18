@@ -312,7 +312,10 @@ describe('ContractDraftsService', () => {
 			expect(itemSql).toContain(itemCategoriaSql(1, 3, 19));
 			expect(itemSql).toContain('p.deleted_at IS NULL');
 			expect(itemParams.slice(8, 11)).toEqual([100, 1200, 'monthly']);
-			expect(itemParams.slice(-5, -2)).toEqual([2400, 180, 180]);
+			// Precios derivados antes de anchor, custom_fields y la categoría explícita (null = la regla por historial del cliente).
+			expect(itemParams.slice(-6, -3)).toEqual([2400, 180, 180]);
+			expect(itemParams[itemParams.length - 1]).toBeNull();
+			expect(itemSql).toContain(`COALESCE($33::text, ${itemCategoriaSql(1, 3, 19)})`);
 			const termIndex = runner.query.mock.calls.findIndex(([sql]) => (sql as string).includes('UPDATE contracts c SET term'));
 
 			expect(termIndex).toBeGreaterThan(runner.query.mock.calls.findIndex(([sql]) => (sql as string).includes('INSERT INTO contract_items')));
@@ -1849,9 +1852,10 @@ describe('ContractDraftsService · editar borrador (GET :id/form y PUT :id)', ()
 			);
 
 			// La categoría se recalcula con el cliente y el producto guardados (sin contar borradores borrados).
-			expect(updateSql).toContain(`categoria = ${itemCategoriaSql(2, 4, 20)}`);
+			expect(updateSql).toContain(`categoria = COALESCE($33::text, ${itemCategoriaSql(2, 4, 20)})`);
 			expect(updateParams.slice(0, 3)).toEqual([ITEM_A, 'contract-1', 'h-1']);
-			expect(updateParams).toHaveLength(32);
+			expect(updateParams).toHaveLength(33);
+			expect(updateParams[32]).toBeNull();
 			expect(updateParams).toEqual(expect.arrayContaining([PRODUCT, 'Licencia Pro', 3, 100, 'Porcentaje', 10, 3600, 3240, 'CLP']));
 			const [[, insertParams]] = calls(runner.query, 'INSERT INTO contract_items');
 
@@ -2308,5 +2312,46 @@ describe('ContractDraftsService · bloque B2 (ciclo propio §9.3.9 y pactos al c
 			)
 		).rejects.toMatchObject({ response: { errors: [expect.objectContaining({ field: 'scheduled_changes.0.contract_item_id' })] } });
 		expect(calls(bad.runner.query, 'INSERT INTO contracts')).toHaveLength(0);
+	});
+});
+
+describe('ContractDraftsService · categoría explícita del ítem (Domi 14-10, alta desde el MRR histórico)', () => {
+	it('items[].category se respeta tal cual al crear; sin ella queda la regla por historial del cliente', async () => {
+		const { service, runner } = build();
+		const dto = baseDto();
+
+		await service.create(
+			{
+				...dto,
+				items: [
+					{ ...dto.items[0], category: 'RENEWAL' },
+					{ ...dto.items[0], key: 'k2' },
+				],
+			},
+			'h-1',
+			'auth-1',
+			NOW
+		);
+		const items = calls(runner.query, 'INSERT INTO contract_items');
+
+		expect(items[0][0]).toContain(`COALESCE($33::text, ${itemCategoriaSql(1, 3, 19)})`);
+		expect(items[0][1][32]).toBe('RENEWAL');
+		expect(items[1][1][32]).toBeNull();
+	});
+
+	it('valida contra las categorías de alta: CHURN / DOWNSELL (espejos de baja) o un texto libre → 400 con el campo', async () => {
+		const item = baseDto().items[0];
+		const errorsOf = async (category: unknown) =>
+			flattenValidationErrors(
+				await validate(plainToInstance(CreateContractDto, { ...baseDto(), items: [{ ...item, category }] }), {
+					whitelist: true,
+					forbidNonWhitelisted: true,
+				})
+			);
+
+		expect(await errorsOf('RENEWAL')).toEqual([]);
+		expect(await errorsOf('CROSS-SELL')).toEqual([]);
+		expect((await errorsOf('CHURN')).map((error) => error.field)).toEqual(['items.0.category']);
+		expect(await errorsOf('renovación')).toHaveLength(1);
 	});
 });

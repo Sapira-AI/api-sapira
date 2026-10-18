@@ -467,7 +467,9 @@ export const CANCELLED_STATUS = 'Cancelado';
  * - sin anteriores → `NEW`;
  * - todos los anteriores cancelados con el churn ya vigente (`status = Cancelado` y `churn_date` ≤ inicio del ítem o nulo) → `REACTIVATION`;
  * - si alguno sigue vigente → `UPSELL` si el producto estaba en alguno de los anteriores, `CROSS-SELL` si no.
- * NULL sin producto. Sin override manual. Espejo TS: `classifyClientItem`.
+ * NULL sin producto. Sin override manual desde la pantalla; la única excepción es `items[].category` explícito del alta de borrador (Domi 14-10:
+ * el alta desde el MRR histórico y el arranque rápido mandan RENEWAL; `ContractDraftsService` hace `COALESCE(explícita, esta regla)`).
+ * Espejo TS: `classifyClientItem`.
  */
 export const itemCategoriaSql = (contractParam: number, productParam: number, startParam: number) => {
 	const previous = `FROM contracts k JOIN contracts p ON p.client_id = k.client_id AND p.id <> k.id AND p.created_at < k.created_at
