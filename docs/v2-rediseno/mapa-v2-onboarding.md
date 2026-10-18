@@ -391,7 +391,7 @@ quitado y el traspaso histórico → contrato. Lectura
 Query: `currency` (`system` por defecto | `contract` | `invoice`), `companyId` (compañía emisora, `mrr_legacy.company_id`), `clientId` (cliente
 comercial), `entityId` (razón social receptora: la de la factura de origen, `invoices_legacy.client_entity_id`), `country` (ISO-2 de esa razón
 social, `client_entities.country_code`), `from`, `to` (`AAAA-MM`), `groupBy` (`none` por defecto | `client` | `entity` | `product` | `company`),
-`top` (1–50, por defecto 15) y `concept` (opcional: `linked` | `not_activated` | `pending`; sin él, los tres). Por defecto `from` = el mayor entre
+`top` (1–1000, por defecto 15; 1000 = todas, para desplegar "Otros") y `concept` (opcional: `linked` | `not_activated` | `pending`; sin él, los tres). Por defecto `from` = el mayor entre
 `metrics_history_start` del holding y el primer mes con datos del filtro (como
 Métricas); `to` = el último mes con datos del filtro (en SimpliRoute, 2027-02 por facturas multi mes: el front puede pedir `to` = mes en curso).
 `to < from` o más de 120 meses → 400.

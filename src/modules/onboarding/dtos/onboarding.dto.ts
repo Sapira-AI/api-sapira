@@ -186,11 +186,16 @@ export class HistorySeriesQueryDto {
 	@IsOptional()
 	concept?: HistorySeriesConcept;
 
-	@ApiPropertyOptional({ default: 15, minimum: 1, maximum: 50, description: 'Filas por dimensión (el resto va en "Otros")' })
+	@ApiPropertyOptional({
+		default: 15,
+		minimum: 1,
+		maximum: 1000,
+		description: 'Filas por dimensión (el resto va en "Otros"; 1000 = todas, para desplegar "Otros")',
+	})
 	@Type(() => Number)
-	@IsInt({ message: 'top debe ser un entero entre 1 y 50' })
-	@Min(1, { message: 'top debe ser un entero entre 1 y 50' })
-	@Max(50, { message: 'top debe ser un entero entre 1 y 50' })
+	@IsInt({ message: 'top debe ser un entero entre 1 y 1000' })
+	@Min(1, { message: 'top debe ser un entero entre 1 y 1000' })
+	@Max(1000, { message: 'top debe ser un entero entre 1 y 1000' })
 	@IsOptional()
 	top?: number;
 
