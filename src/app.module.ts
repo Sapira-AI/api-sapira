@@ -39,6 +39,7 @@ import { FacturaModule } from './modules/factura/factura.module';
 import { HoldingsModule } from './modules/holdings/holdings.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
+import { KameModule } from './modules/kame/kame.module';
 import { MeModule } from './modules/me/me.module';
 import { NotificationJobsModule } from './modules/notification-jobs/notification-jobs.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -105,6 +106,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
 		HoldingsModule,
 		InvoicesModule,
 		IntegrationsModule,
+		KameModule,
 		NotificationsModule,
 		TasksModule,
 		NotificationJobsModule,

@@ -68,6 +68,9 @@ export const TECH_ADMIN_ROLE = 'Admin Técnico';
  * integración**: `auto_enabled` (fila ausente = habilitado; apaga solo la corrida automática, el disparo manual sigue) y `settings` (reglas
  * del tipo y de exclusión) en la misma fila. `stripe` entra a su CHECK con `1791000000000-IntegrationsV2`.
  */
+/** Segundo sistema del tipo `erp` (Kame, por compañía): se ofrece junto a Odoo en `available_systems`. */
+export const KAME_SYSTEM = { key: 'kame', label: 'Kame' };
+
 export const AUTO_SYNC_INTEGRATION: Record<FullTipo, HoldingIntegration> = { erp: 'odoo', crm: 'salesforce', datos: 'bigquery', stripe: 'stripe' };
 
 export interface RecordsQuery {
@@ -187,7 +190,8 @@ export class IntegrationsService {
 			description: info.description,
 			system: connection.connected ? info.system : null,
 			system_label: connection.connected ? info.system_label : null,
-			available_systems: [{ key: info.system, label: info.system_label }],
+			available_systems:
+				tipo === 'erp' ? [{ key: info.system, label: info.system_label }, KAME_SYSTEM] : [{ key: info.system, label: info.system_label }],
 			connected: connection.connected,
 			active: connection.active,
 			direction: info.direction,
@@ -220,6 +224,7 @@ export class IntegrationsService {
 			pending_import: kpis?.ready ?? 0,
 			next_scheduled_at: connection.connected && connection.active ? schedule.next_at : null,
 			href: integrationHref(tipo),
+			...(tipo === 'erp' ? { kame: await safe(() => this.kameSummary(holdingId), { companies: 0, connected: false }) } : {}),
 			...(tipo === 'stripe'
 				? {
 						accounts: (await this.stripe.listConnections(holdingId)).data.map((account) => ({
@@ -231,6 +236,16 @@ export class IntegrationsService {
 					}
 				: {}),
 		};
+	}
+
+	/** ERP › Kame: compañías con la conexión a Kame activa (Kame es por compañía; su detalle va por `/integrations/erp/kame`). */
+	private async kameSummary(holdingId: string): Promise<{ companies: number; connected: boolean }> {
+		const [row] = await this.dataSource.query(`SELECT COUNT(*)::int AS n FROM kame_company_settings WHERE holding_id = $1 AND enabled`, [
+			holdingId,
+		]);
+		const companies = Number(row?.n ?? 0);
+
+		return { companies, connected: companies > 0 };
 	}
 
 	/** Registros con error del período del resumen cuyo error ya se vio en otra corrida (una consulta + una lectura del historial). */

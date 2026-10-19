@@ -103,6 +103,8 @@ export interface DteSourceLine {
 	unit_of_measure: string | null;
 	/** Subtotal neto de la línea en moneda de factura (CLP), ya valorizado; en NC viene negativo. */
 	subtotal_invoice_currency: number;
+	/** Subtotal en la moneda del contrato (p. ej. UF) cuando se convierte a pesos; null si es la misma moneda. Va en la nota de la línea. */
+	contract_amount?: number | null;
 }
 
 export interface DteLineAmount {
@@ -112,6 +114,7 @@ export interface DteLineAmount {
 	unit_of_measure: string | null;
 	/** Neto de la línea en pesos enteros, siempre positivo (el DTE no admite montos negativos: la NC los lleva en positivo). */
 	monto: number;
+	contract_amount?: number | null;
 }
 
 export interface DteAmounts {
@@ -151,6 +154,7 @@ export function dteAmounts(lines: DteSourceLine[], taxRate: number, exempt: bool
 			quantity: Math.abs(line.quantity) || 1,
 			unit_of_measure: line.unit_of_measure,
 			monto: montos[index],
+			contract_amount: line.contract_amount === null || line.contract_amount === undefined ? null : Math.abs(line.contract_amount),
 		})),
 		neto: exempt ? 0 : base,
 		exento: exempt ? base : 0,
@@ -205,6 +209,32 @@ const unit = (value: string | null) => cut(value, 4);
  * ni folio (lo asigna api-factura). La glosa va en `NmbItem` (80) y lo que sobra en `DscItem`. Cantidad y precio solo si reproducen el
  * monto de la línea al peso, como lo verifica api-factura; si no, la línea lleva solo su monto.
  */
+/** Tipo de cambio con que se pasó la factura a pesos: la nota de cada línea lo muestra al cliente. */
+export interface DteFxNote {
+	rate: number;
+	/** Moneda del contrato (`CLF`, `USD`…). */
+	currency: string;
+	/** Día de la tasa oficial usada; null si es la tasa fija de la factura. */
+	date: string | null;
+}
+
+/** Nombre corto de la moneda en la nota: la UF (`CLF`) se escribe «UF». */
+const currencyLabel = (currency: string) => (currency.toUpperCase() === 'CLF' ? 'UF' : currency.toUpperCase());
+
+/**
+ * Nota de la línea con el valor en la moneda del contrato y la tasa: «Valor: 20 UF × $41.178,64 (UF del 18-10-2026)». Así el cliente ve
+ * de dónde sale el monto en pesos. Con la tasa fija de la factura: «(tipo de cambio de la factura)».
+ */
+export function fxLineNote(amount: number, fx: DteFxNote): string {
+	const label = currencyLabel(fx.currency);
+	const quantity = amount.toLocaleString('es-CL', { maximumFractionDigits: 4 });
+	const rate = fx.rate.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+	const [year, month, day] = (fx.date ?? '').slice(0, 10).split('-');
+	const source = fx.date && day ? `${label} del ${day}-${month}-${year}` : 'tipo de cambio de la factura';
+
+	return `Valor: ${quantity} ${label} × $${rate} (${source})`;
+}
+
 export function mapInvoiceToDteBody(input: {
 	tipo: DteTipo;
 	issue_date: string;
@@ -212,6 +242,8 @@ export function mapInvoiceToDteBody(input: {
 	receptor: DteReceptor;
 	amounts: DteAmounts;
 	references: DteReference[];
+	/** Con conversión (contrato en UF u otra moneda): cada línea lleva en su descripción el valor en esa moneda y la tasa. */
+	fx?: DteFxNote | null;
 }): Record<string, unknown> {
 	const { tipo, amounts, receptor } = input;
 	const exempt = tipo === DTE_TYPES.exempt_invoice;
@@ -222,11 +254,19 @@ export function mapInvoiceToDteBody(input: {
 		const text = (line.description ?? '').replace(/\s+/g, ' ').trim() || `Línea ${index + 1}`;
 		const price = Math.round((line.monto / line.quantity) * 1e6) / 1e6;
 		const reproducible = roundClp(line.quantity * price) === line.monto;
+		// Descripción adicional: el texto que no cabe en el nombre (80) y la nota del tipo de cambio, si la factura se convirtió.
+		const description = [
+			text.length > DTE_LIMITS.nombre_item ? text : null,
+			input.fx && line.contract_amount ? fxLineNote(line.contract_amount, input.fx) : null,
+		]
+			.filter(Boolean)
+			.join(' · ')
+			.slice(0, DTE_LIMITS.descripcion_item);
 
 		return {
 			NroLinDet: index + 1,
 			NmbItem: text.slice(0, DTE_LIMITS.nombre_item),
-			...(text.length > DTE_LIMITS.nombre_item ? { DscItem: text.slice(0, DTE_LIMITS.descripcion_item) } : {}),
+			...(description ? { DscItem: description } : {}),
 			...(exempt ? { IndExe: 1 } : {}),
 			...(reproducible ? { QtyItem: line.quantity, PrcItem: price } : {}),
 			...(reproducible && unit(line.unit_of_measure) ? { UnmdItem: unit(line.unit_of_measure) } : {}),
@@ -335,6 +375,8 @@ export interface EmitDtePlan {
 	tipo: DteTipo | null;
 	/** Ya tiene DTE creado (un intento anterior que no llegó al SII): se reintenta con el mismo documento y folio. */
 	retry: boolean;
+	/** El SII rechazó su DTE: se reemite como documento nuevo, con otro folio y la fecha de hoy. */
+	reissue: boolean;
 }
 
 const blocker = (code: string, message: string, next_step: string | null): InvoiceBlocker => ({ code, message, next_step });
@@ -367,6 +409,7 @@ export function planEmitDte(
 	context: DteContext,
 	input: { receptor: DteReceptor | null; base_blockers: InvoiceBlocker[]; original?: DteOriginal | null; pending_note?: boolean }
 ): EmitDtePlan {
+	const reissue = isDteRejected(invoice);
 	const blockers: InvoiceBlocker[] = [...input.base_blockers];
 	const warnings: InvoiceWarning[] = [];
 	const tipo = dteTipoFor(invoice, context.contract_document_code);
@@ -399,7 +442,7 @@ export function planEmitDte(
 		);
 	}
 	if (invoice.lines_count === 0) blockers.push(blocker('no_lines', 'La factura no tiene líneas', null));
-	if (note && !input.pending_note) {
+	if (note && !input.pending_note && !reissue) {
 		blockers.push(blocker('note_not_pending', 'La nota ya está emitida o no está pendiente de emisión', null));
 	}
 	if (note) {
@@ -421,7 +464,7 @@ export function planEmitDte(
 			);
 		}
 	}
-	if (invoice.dte_status && invoice.dte_status !== 'creado') {
+	if (invoice.dte_status && invoice.dte_status !== 'creado' && !reissue) {
 		blockers.push(blocker('dte_already_issued', `Ya se emitió como documento tributario (estado: ${invoice.dte_status})`, null));
 	}
 	blockers.push(...receptorDteBlockers(input.receptor));
@@ -441,7 +484,29 @@ export function planEmitDte(
 		});
 	}
 
-	return { blockers, warnings, can_apply: blockers.length === 0, tipo, retry: !!invoice.dte_id && invoice.dte_status === 'creado' };
+	if (reissue) {
+		warnings.push({
+			code: 'dte_reissue',
+			message: `El SII rechazó el documento${invoice.invoice_number ? ` N° ${invoice.invoice_number}` : ''}: se emite uno nuevo, con otro folio y fecha de hoy`,
+		});
+	}
+
+	return { blockers, warnings, can_apply: blockers.length === 0, tipo, retry: !!invoice.dte_id && invoice.dte_status === 'creado', reissue };
+}
+
+/** Su DTE fue rechazado por el SII: se puede reemitir (documento nuevo, otro folio). */
+export const isDteRejected = (invoice: { dte_id?: string | null; dte_status?: string | null }) =>
+	!!invoice.dte_id && invoice.dte_status === 'rechazado';
+
+/**
+ * Cómo queda la factura para planear una reemisión: el folio rechazado no vale y una factura vuelve a estar Por Emitir (las notas
+ * conservan su estado). Así le aplican las mismas reglas que a una primera emisión.
+ */
+export function asReissued<T extends { document_type?: string | null; status?: string | null; invoice_number?: string | null }>(
+	invoice: T,
+	note: boolean
+): T {
+	return { ...invoice, invoice_number: null, status: note ? invoice.status : 'Por Emitir' };
 }
 
 /** Estado guardado del DTE desde el resultado de la consulta al SII. */

@@ -134,6 +134,9 @@ export { StripeInvoicesStg } from '@/databases/postgresql/entities/integraciones
 export { StripeProductMapping } from '@/databases/postgresql/entities/integraciones/stripe/stripe-product-mapping.entity';
 export { StripeSubscriptionsStg } from '@/databases/postgresql/entities/integraciones/stripe/stripe-subscriptions-stg.entity';
 export { StripeSyncJob } from '@/databases/postgresql/entities/integraciones/stripe/stripe-sync-job.entity';
+export { ErpExport } from '@/databases/postgresql/entities/integraciones/kame/erp-export.entity';
+export { KameCompanySettings } from '@/databases/postgresql/entities/integraciones/kame/kame-company-settings.entity';
+export { KameConnection } from '@/databases/postgresql/entities/integraciones/kame/kame-connection.entity';
 export { InvoiceItemsLegacyMatch } from '@/databases/postgresql/entities/legacy/invoice-items-legacy-match.entity';
 export { InvoiceItemsLegacy } from '@/databases/postgresql/entities/legacy/invoice-items-legacy.entity';
 export { InvoicesLegacy } from '@/databases/postgresql/entities/legacy/invoices-legacy.entity';

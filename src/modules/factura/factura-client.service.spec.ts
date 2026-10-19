@@ -93,7 +93,7 @@ describe('FacturaClientService', () => {
 
 		afterEach(() => jest.restoreAllMocks());
 
-		it('crea el DTE con la referencia externa, el token de DTE y la compañía en X-Factura-Company-Id', async () => {
+		it('crea el DTE con la referencia externa, solo en producción, con el token de DTE y la compañía en X-Factura-Company-Id', async () => {
 			const { service, oauth } = build();
 			const post = jest.spyOn(axios, 'post').mockResolvedValue({
 				data: { data: { id: { toString: () => 'dte-1' }, folio: 15, tipoDte: 33, ambiente: 'produccion', existente: false } },
@@ -108,10 +108,17 @@ describe('FacturaClientService', () => {
 			});
 			expect(post).toHaveBeenCalledWith(
 				'http://localhost:9005/dte/createDte',
-				{ Encabezado: {}, externalRef: 'invoice-1' },
+				{ Encabezado: {}, externalRef: 'invoice-1', ambienteRequerido: 'produccion' },
 				expect.objectContaining({ headers: { Authorization: 'Bearer dte-token', 'X-Factura-Company-Id': COMPANY } })
 			);
 			expect(oauth.getAccessToken).not.toHaveBeenCalled();
+
+			await service.crearDte(COMPANY, { Encabezado: {} }, 'invoice-1', { reemitirRechazado: true });
+			expect(post).toHaveBeenLastCalledWith(
+				'http://localhost:9005/dte/createDte',
+				{ Encabezado: {}, externalRef: 'invoice-1', ambienteRequerido: 'produccion', reemitirRechazado: true },
+				expect.anything()
+			);
 		});
 
 		it('envía al SII, consulta el estado y entrega al receptor', async () => {
@@ -183,6 +190,23 @@ describe('FacturaClientService', () => {
 				status: 409,
 				message: 'No hay folios disponibles para el tipo 33',
 			});
+		});
+
+		it('si api-factura no da el token de DTE (cliente OAuth sin los alcances) llega un 502 que dice qué falta, no un 500', async () => {
+			const { service, oauth } = build();
+			const post = jest.spyOn(axios, 'post');
+			oauth.getDteAccessToken.mockRejectedValueOnce(
+				Object.assign(new Error('Request failed with status code 401'), {
+					isAxiosError: true,
+					response: { status: 401, data: { message: 'invalid_scope' } },
+				})
+			);
+
+			await expect(service.crearDte(COMPANY, {}, 'invoice-1')).rejects.toMatchObject({
+				status: 502,
+				message: expect.stringContaining('factura:dte:read y factura:dte:write'),
+			});
+			expect(post).not.toHaveBeenCalled();
 		});
 	});
 });
