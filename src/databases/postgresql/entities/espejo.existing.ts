@@ -46,6 +46,8 @@ export { CompanyAccountMapping } from '@/databases/postgresql/entities/clientes/
 export { CompanyBankAccount } from '@/databases/postgresql/entities/clientes/company-bank-account.entity';
 export { CompanyLegalDocument } from '@/databases/postgresql/entities/clientes/company-legal-document.entity';
 export { ContactPreference } from '@/databases/postgresql/entities/clientes/contact-preference.entity';
+export { ImportBatchRow } from '@/databases/postgresql/entities/clientes/import-batch-row.entity';
+export { ImportBatch } from '@/databases/postgresql/entities/clientes/import-batch.entity';
 export { Seller } from '@/databases/postgresql/entities/clientes/seller.entity';
 export { BankColumnMapping } from '@/databases/postgresql/entities/conciliacion/bank-column-mapping.entity';
 export { BankMovement } from '@/databases/postgresql/entities/conciliacion/bank-movement.entity';
