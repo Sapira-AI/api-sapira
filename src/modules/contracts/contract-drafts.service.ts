@@ -1540,7 +1540,8 @@ export class ContractDraftsService {
 
 	/**
 	 * INSERT de un ítem con todo explícito: precios, fin, `auto_renew` y la categoría (NEW / UPSELL / CROSS-SELL por historial
-	 * del cliente, `itemCategoriaSql`: la regla de `trg_set_contract_item_categoria` sin contar borradores borrados). Devuelve el id.
+	 * del cliente, `itemCategoriaSql`: la regla de `trg_set_contract_item_categoria` sin contar borradores borrados). Una categoría
+	 * explícita (`items[].category`, p. ej. RENEWAL desde el MRR histórico) se respeta tal cual. Devuelve el id.
 	 */
 	private async insertItem(
 		runner: QueryRunner,
@@ -1563,9 +1564,15 @@ export class ContractDraftsService {
 				$14, $15, $16, $17, $18, $19, $20, $21,
 				$22, $23, $24, $25, $26, $27,
 				$28, $29, $30, $31, $32::jsonb,
-				${itemCategoriaSql(1, 3, 19)}
+				COALESCE($33::text, ${itemCategoriaSql(1, 3, 19)})
 			) RETURNING id`,
-			[contractId, holdingId, ...ContractDraftsService.itemValues(item, quoteItem, bookingDate), JSON.stringify(quoteItem?.custom_fields ?? {})]
+			[
+				contractId,
+				holdingId,
+				...ContractDraftsService.itemValues(item, quoteItem, bookingDate),
+				JSON.stringify(quoteItem?.custom_fields ?? {}),
+				item.dto.category ?? null,
+			]
 		)) as Row[];
 
 		return String(row.id);
@@ -1648,7 +1655,8 @@ export class ContractDraftsService {
 	/**
 	 * UPDATE de un ítem existente del borrador con los valores del formulario, todo explícito (costura): fin, precios derivados
 	 * y la categoría recalculada (`itemCategoriaSql`, con el cliente y el producto ya guardados: cambiar cualquiera de los dos
-	 * en el borrador la actualiza); `contracts.term` lo refresca `update` al final con `syncContractTerm`.
+	 * en el borrador la actualiza) salvo que el ítem traiga una explícita (`items[].category`); `contracts.term` lo refresca
+	 * `update` al final con `syncContractTerm`.
 	 */
 	private async updateItem(
 		runner: QueryRunner,
@@ -1666,9 +1674,9 @@ export class ContractDraftsService {
 				price = $15, final_price = $16, currency = $17, billing_frequency = $18, billing_method = $19, start_date = $20, end_date = $21,
 				term_months = $22, is_recurring = $23, quote_item_id = $24, quote_item_number = $25, auto_renew = $26,
 				auto_renew_term_months = $27, booking_date = $28, annual_price = $29, monthly_price = $30, billing_period_price = $31,
-				billing_anchor_day = $32, categoria = ${itemCategoriaSql(2, 4, 20)}
+				billing_anchor_day = $32, categoria = COALESCE($33::text, ${itemCategoriaSql(2, 4, 20)})
 			WHERE id = $1 AND contract_id = $2 AND holding_id = $3`,
-			[itemId, contractId, holdingId, ...ContractDraftsService.itemValues(item, quoteItem, bookingDate)]
+			[itemId, contractId, holdingId, ...ContractDraftsService.itemValues(item, quoteItem, bookingDate), item.dto.category ?? null]
 		);
 	}
 

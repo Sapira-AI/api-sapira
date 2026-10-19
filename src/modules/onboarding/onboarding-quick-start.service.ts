@@ -7,6 +7,7 @@ import type { CreateContractDto } from '@/modules/contracts/dtos/create-contract
 import { type Month, monthRange, monthsBetween } from '@/modules/metrics/metrics-period';
 
 import {
+	HISTORY_ITEM_CATEGORY,
 	insertOnboardingEvent,
 	isoDate,
 	monthOf,
@@ -21,7 +22,7 @@ import {
 	type Row,
 	str,
 } from './onboarding-common';
-import { OnboardingRegisterService } from './onboarding-register.service';
+import { OnboardingRegisterService, type RegisterError, type RegisterWarning } from './onboarding-register.service';
 
 import type { QuickStartApplyDto, QuickStartPreviewDto, QuickStartProposalDto } from './dtos/onboarding.dto';
 
@@ -33,7 +34,8 @@ export type QuickStartFlag = 'no_client' | 'no_product' | 'already_has_contract'
  * nombre calza exacto con la línea). Al aplicar, la usuaria manda por cliente lo de "Registrar histórico" (§3.2b: período, monto en
  * moneda de contrato, productos) más frecuencia y método: se crea el contrato En revisión con el generador común
  * (`ContractDraftsService.create`, un ítem por producto) y, en una segunda transacción, las filas de MRR histórico de esa factura ya
- * empalmadas al contrato (`OnboardingRegisterService.registerInTx`). Si el registro falla, el borrador recién creado se elimina.
+ * empalmadas al contrato (`OnboardingRegisterService.registerInTx`: un registro —`batch_id`— nuevo por cliente × moneda, Domi 18-10). Si el
+ * registro falla, el borrador recién creado se elimina.
  */
 @Injectable()
 export class OnboardingQuickStartService {
@@ -76,6 +78,21 @@ export class OnboardingQuickStartService {
 	async preview(holdingId: string, dto: QuickStartPreviewDto) {
 		const invoices = await this.lastInvoices(this.dataSource, holdingId, dto.as_of, dto.entity_ids, dto.history_months ?? 0);
 		const ids = invoices.map((row) => String(row.id));
+		// Lo que la usuaria ya completó (opcional): mismo motor que al aplicar, para mostrar tipo de cambio, avisos y errores.
+		const completed = new Map((dto.proposals ?? []).map((proposal) => [proposal.entity_id, proposal]));
+		const withInput = invoices.filter((invoice) => completed.has(String(invoice.client_entity_id)));
+		const plans = withInput.length
+			? await this.register.plan(
+					this.dataSource,
+					holdingId,
+					withInput.map((invoice) => this.registerInput(completed.get(String(invoice.client_entity_id))!, String(invoice.id)))
+				)
+			: [];
+		const planByInvoice = new Map(plans.map((plan) => [plan.invoice_id, plan]));
+		// Registros pendientes del cliente en la moneda completada (Domi 18-10): el arranque crea un registro nuevo por cliente × moneda; esto
+		// avisa que ya hay historia pendiente de ese cliente. Solo con lo completado por la usuaria.
+		const records = await this.register.recordsOf(this.dataSource, holdingId, plans);
+		const recordsByInvoice = new Map(plans.map((plan, index) => [plan.invoice_id, records.rows[index].existing_records]));
 		const [items, products] = await Promise.all([
 			ids.length
 				? (this.dataSource.query(
@@ -111,6 +128,7 @@ export class OnboardingQuickStartService {
 			if (invoice.already_has_contract === true) flags.push('already_has_contract');
 			if (num(invoice.currencies) > 1) flags.push('multi_currency');
 			const month = monthOf(invoice.issue_date)!;
+			const plan = planByInvoice.get(String(invoice.id));
 
 			return {
 				entity: { id: String(invoice.client_entity_id), legal_name: str(invoice.legal_name) },
@@ -133,6 +151,13 @@ export class OnboardingQuickStartService {
 				},
 				history_months_found: num(invoice.history_months_found),
 				flags,
+				// Tipo de cambio visible (Domi 14-10). Sin lo completado por la usuaria, la propuesta es en la moneda de la factura (fx 1).
+				invoice_currency: str(invoice.invoice_currency),
+				amount_invoice_currency: num(invoice.amount_invoice_currency),
+				fx_contract_to_invoice: plan ? plan.fx_contract_to_invoice : 1,
+				existing_records: recordsByInvoice.get(String(invoice.id)) ?? [],
+				warnings: (plan?.warnings ?? []) as RegisterWarning[],
+				errors: (plan?.errors ?? []) as RegisterError[],
 			};
 		});
 		const byCurrency = new Map<string, { currency: string; count: number; total: number }>();
@@ -159,12 +184,20 @@ export class OnboardingQuickStartService {
 					multi_currency: flagged('multi_currency'),
 				},
 				by_currency: [...byCurrency.values()],
+				// Un registro nuevo (`batch_id`) por propuesta aplicable (cliente × moneda).
+				records_to_create: records.to_create,
 			},
 		};
 	}
 
 	async apply(holdingId: string, dto: QuickStartApplyDto, actor: OnboardingActor) {
-		const created: Array<{ entity_id: string; contract: { id: string; contract_number: string | null }; history_rows: number }> = [];
+		const created: Array<{
+			entity_id: string;
+			contract: { id: string; contract_number: string | null };
+			history_rows: number;
+			/** Registro relacionado nuevo (su `batch_id` × cliente × moneda × contrato creado). */
+			record_key: string | null;
+		}> = [];
 		const skipped: Array<{ entity_id: string; reason: string; message?: string }> = [];
 		const invoices = await this.lastInvoices(
 			this.dataSource,
@@ -226,7 +259,7 @@ export class OnboardingQuickStartService {
 							invoice_id: String(invoice.id),
 							contract_id: contractId,
 							contract_number: str(contract.contract_number),
-							batch_id: registered.batch_id,
+							batch_id: registered.batch_ids[0] ?? null,
 							history_rows: registered.created_rows,
 						},
 					});
@@ -238,6 +271,7 @@ export class OnboardingQuickStartService {
 					entity_id: proposal.entity_id,
 					contract: { id: contractId, contract_number: str(contract.contract_number) },
 					history_rows: result.created_rows,
+					record_key: result.records_touched[0] ?? null,
 				});
 			} catch (error) {
 				await this.contractDrafts.remove(contractId, holdingId, actor.authId).catch(() => undefined);
@@ -291,6 +325,8 @@ export class OnboardingQuickStartService {
 					start_date: nextMonthStart(lastCovered),
 					term_months: proposal.term_months ?? 12,
 					is_recurring: true,
+					// Viene de algo que ya existía (Domi 14-10).
+					category: HISTORY_ITEM_CATEGORY,
 				};
 			}),
 		} as CreateContractDto;

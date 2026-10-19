@@ -5,10 +5,12 @@ import { User } from '@/databases/postgresql/entities/base-tenancy/user.entity';
 
 /**
  * `onboarding_events` — registro de cambios del módulo `onboarding` (`docs/v2-rediseno/spec-onboarding-y-mrr-historico-v2.md` §3.5):
- * editar meses, empalmar, desvincular, cerrar, quitar, reabrir y crear contrato desde una línea de MRR histórico; importar y revertir
+ * editar línea, empalmar, desvincular, no activar, reabrir, unificar y crear contrato desde un registro de MRR histórico; importar y revertir
  * facturas previas; arranque rápido. La escribe solo la API (`src/modules/onboarding`), en la misma transacción que el cambio.
  *
- * - `line_key`: clave de la línea de MRR histórico sin codificar (`client_id|product_name|contract_currency`), si el evento es de una línea.
+ * - `line_key`: raíz del registro de MRR histórico sin codificar (`batch_id|client_id|contract_currency`, Domi 18-10; el comentario de la
+ *   columna en la base todavía dice `client_id|product_name|contract_currency`: cambiarlo es una migración y no afecta datos), si el evento es
+ *   de un registro. Al unificar registros, los eventos de las raíces fusionadas se re-clavan a la raíz resultante.
  * - `entity_type` / `entity_id`: el registro afectado (`invoice_batch` = lote de importación, `client_entity`, `contract`, `invoice_legacy`).
  * - `type` sin CHECK a propósito: los tipos los define la API (`ONBOARDING_EVENT_TYPES`) y la entrega 2 agrega importadores.
  *
