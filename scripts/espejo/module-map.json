@@ -37,7 +37,9 @@
   "client_entity_tax_id_normalization_conflicts",
   "company_bank_accounts",
   "company_account_mappings",
-  "sellers"
+  "sellers",
+  "import_batches",
+  "import_batch_rows"
  ],
  "cotizaciones-catalogo": [
   "quotes",

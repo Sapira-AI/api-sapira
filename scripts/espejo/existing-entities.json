@@ -135,6 +135,16 @@
   "file": "src/databases/postgresql/entities/base-tenancy/holding-integration-settings.entity.ts",
   "import": "@/databases/postgresql/entities/base-tenancy/holding-integration-settings.entity"
  },
+ "import_batch_rows": {
+  "class": "ImportBatchRow",
+  "file": "src/databases/postgresql/entities/clientes/import-batch-row.entity.ts",
+  "import": "@/databases/postgresql/entities/clientes/import-batch-row.entity"
+ },
+ "import_batches": {
+  "class": "ImportBatch",
+  "file": "src/databases/postgresql/entities/clientes/import-batch.entity.ts",
+  "import": "@/databases/postgresql/entities/clientes/import-batch.entity"
+ },
  "indicadores_economicos": {
   "class": "IndicadorEconomicoEntity",
   "file": "src/databases/postgresql/entities/fx/indicador-economico.entity.ts",

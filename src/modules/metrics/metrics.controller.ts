@@ -81,7 +81,10 @@ export class MetricsController {
 	}
 
 	@Get('mrr/by-dimension')
-	@ApiOperation({ summary: 'MRR por dimensión', description: 'Matriz dimensión × mes, top N + Otros, pendiente de renovar aparte' })
+	@ApiOperation({
+		summary: 'MRR por dimensión',
+		description: 'Matriz dimensión × mes, top N (hasta 1000; con el máximo, todas las filas) + Otros, pendiente de renovar aparte',
+	})
 	async mrrByDimension(@Query() query: MrrDimensionDto, @HoldingId() holdingId: string) {
 		return await this.mrr.byDimension(holdingId, query);
 	}
