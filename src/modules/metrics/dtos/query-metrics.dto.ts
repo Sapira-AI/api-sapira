@@ -137,7 +137,7 @@ export class MrrOverviewDto extends MetricsFiltersDto {
 	asOf?: string;
 }
 
-class PageDto extends MetricsFiltersDto {
+export class PageDto extends MetricsFiltersDto {
 	@ApiPropertyOptional({ default: 1 })
 	@Type(() => Number)
 	@IsInt()
@@ -283,3 +283,14 @@ export class RevenueJournalDto extends MetricsFiltersDto {
 }
 
 export class ExceptionsDto extends PageDto {}
+
+/** Vendedores (Domi 19-10): funnel por vendedor y período; `sellerId` acota a uno o varios vendedores. */
+export class SellersDto extends MetricsFiltersDto {
+	@ApiPropertyOptional({ description: 'Uno o varios vendedores (uuid separados por coma)' })
+	@Matches(UUID_LIST, { message: 'sellerId debe ser uno o varios UUID separados por coma' })
+	@IsOptional()
+	sellerId?: string;
+}
+
+/** Detalle de un vendedor (o `none` = contratos sin vendedor): sus negocios del período, paginados. */
+export class SellerDealsDto extends PageDto {}

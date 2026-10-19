@@ -1,5 +1,5 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiHeader, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { HoldingId } from '@/decorators/holding-id.decorator';
@@ -20,10 +20,13 @@ import {
 	RevenueForwardDto,
 	RevenueJournalDto,
 	RevenueScheduleDto,
+	SellerDealsDto,
+	SellersDto,
 } from './dtos/query-metrics.dto';
 import { MetricsDataService } from './metrics-data.service';
 import { MrrMetricsService } from './mrr-metrics.service';
 import { RevenueMetricsService } from './revenue-metrics.service';
+import { SellersMetricsService } from './sellers-metrics.service';
 
 /**
  * Revenue y Métricas v2 (`docs/v2-rediseno/spec-revenue-y-metricas.md` §3): solo lectura sobre el devengo (RSM) y el MRR legacy.
@@ -43,6 +46,7 @@ export class MetricsController {
 	constructor(
 		private readonly mrr: MrrMetricsService,
 		private readonly revenue: RevenueMetricsService,
+		private readonly sellers: SellersMetricsService,
 		private readonly data: MetricsDataService
 	) {}
 
@@ -120,6 +124,31 @@ export class MetricsController {
 	@ApiOperation({ summary: 'Bookings (TCV)', description: 'Valor total de contratos por mes de booking, compañía o cliente, en moneda de sistema' })
 	async bookings(@Query() query: BookingsDto, @HoldingId() holdingId: string) {
 		return await this.mrr.bookings(holdingId, query);
+	}
+
+	@Get('sellers')
+	@ApiOperation({
+		summary: 'Vendedores: funnel por vendedor y período',
+		description:
+			'Cotizaciones creadas → cerradas (etapa firmada/contrato creado o con contrato vinculado) → con contrato → facturado y cobrado, en moneda de sistema. `{ currency, from, to, team{…, sellers_with_sales}, rows[{ seller_id, seller_name, is_active, created, closed, lost, with_contract, conversion, tcv, mrr, billed, collected, cycle_days, days_to_first_invoice }], no_seller{ contracts, tcv, mrr, billed, collected } }`. `companyId` acota a negocios con contrato en esas compañías; `sellerId` a esos vendedores',
+	})
+	async sellersFunnel(@Query() query: SellersDto, @HoldingId() holdingId: string) {
+		return await this.sellers.funnel(holdingId, query);
+	}
+
+	@Get('sellers/:sellerId/deals')
+	@ApiParam({ name: 'sellerId', description: 'uuid del vendedor o `none` (contratos sin vendedor)' })
+	@ApiOperation({
+		summary: 'Vendedores: negocios de un vendedor en el período',
+		description:
+			'Paginado `{ currency, data, total, currentPage, pages, limit }`. Vendedor: cotizaciones creadas o cerradas en el período con etapa, cliente, fechas, monto, contrato vinculado (id y número), tcv, mrr, facturado y cobrado; los cerrados en el período primero. `none`: contratos del período sin cotización con vendedor',
+	})
+	async sellerDeals(@Param('sellerId') sellerId: string, @Query() query: SellerDealsDto, @HoldingId() holdingId: string) {
+		if (sellerId !== 'none' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sellerId)) {
+			throw new BadRequestException({ message: 'Vendedor inválido', errors: [{ field: 'sellerId', message: 'uuid o none' }] });
+		}
+
+		return await this.sellers.sellerDeals(holdingId, sellerId, query);
 	}
 
 	@Get('revenue/summary')
