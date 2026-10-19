@@ -50,9 +50,12 @@ Orden de trabajo del carril Domi + Claude a partir de la semana del 19-10. Lo ta
 el detalle de cada spec.
 
 1. **Mejoras útiles y cortas** (una sesión cada una, intercaladas con soporte):
-   - **Export e import**: exportar *todo* en Métricas › MRR por dimensión y en Ingresos › Desglose (hoy top 15 + Otros);
-     export de Planes y precios; **"Importar para actualizar" clientes** (endpoint con coincidencia por número de cliente,
-     vista previa y lote; hoy deshabilitado en el front). Contratos por Excel y el motor único de import: después.
+   - ~~**Export e import**: exportar *todo* en Métricas › MRR por dimensión y en Ingresos › Desglose; export de Planes y precios;
+     **"Importar para actualizar" clientes**~~ ✅ construido 19-10 en `domi` (API: `top` ≤ 1000 por dimensión; `clients/import`
+     con vista previa, lote reversible y mapeo de columnas, tablas `import_batches`/`import_batch_rows` **con migración sin
+     aplicar**; front: tres exports y el modo Actualizar del diálogo). Pendiente: PRs, migración en QA y prod, prueba con
+     SimpliRoute. Sin campos personalizados ni razones sociales (decisión 19-10). Contratos por Excel y el motor único de import:
+     después.
    - **Panel de vendedores** (pedido SimpliRoute 28-07): endpoint de funnel por vendedor y período (cotizaciones →
      firmadas → contrato → facturado y cobrado, conversión, MRR, ciclo) + sección con enlace al contrato. Decidir ubicación
      (pestaña en Cotizaciones como el front anterior, o sección en Métricas) y qué pasa con contratos sin cotización.
