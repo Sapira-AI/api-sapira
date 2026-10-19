@@ -236,6 +236,18 @@ describe('MRR por dimensión: parte de MRR histórico (legacy) por celda', () =>
 		expect(none.rows[0]).not.toHaveProperty('legacy_values');
 		expect(none).not.toHaveProperty('legacy_totals');
 	});
+
+	it('con top en el máximo (export completo) trae todas las filas, sin "Otros", ordenadas por el último mes', async () => {
+		const result = await byDimension(
+			Array.from({ length: 120 }, (_, i) => line(`i:${i}`, 'contract', `c${i}`, [1, i + 1])),
+			1000
+		);
+
+		expect(result.rows).toHaveLength(120);
+		expect(result.others).toBeNull();
+		expect(result.rows[0].key).toBe('c119');
+		expect(result.totals).toEqual([120, (120 * 121) / 2]);
+	});
 });
 
 describe('Detalle mensual por contrato (D-CTR-2: 360 › Devengo lee este endpoint)', () => {

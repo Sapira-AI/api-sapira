@@ -18,6 +18,8 @@ import { ClientDocumentsService } from './client-documents.service';
 import { ClientEntitiesController } from './client-entities.controller';
 import { ClientEntityErpService } from './client-entity-erp.service';
 import { ClientEntityMetricsService } from './client-entity-metrics.service';
+import { ClientImportController } from './client-import.controller';
+import { ClientImportService } from './client-import.service';
 import { ClientMetricsService } from './client-metrics.service';
 import { ClientQuotesService } from './client-quotes.service';
 import { ClientsController } from './clients.controller';
@@ -35,9 +37,18 @@ import { StripeClientsService } from './stripe-clients.service';
 		NotificationsModule,
 		OdooModule,
 	],
-	controllers: [ClientsController, ClientEntitiesController, ClientContactsController, StripeClientsController, ClientDocumentsController],
+	// `ClientImportController` va antes que `ClientsController`: `clients/import/*` no debe caer en `clients/:id`.
+	controllers: [
+		ClientImportController,
+		ClientsController,
+		ClientEntitiesController,
+		ClientContactsController,
+		StripeClientsController,
+		ClientDocumentsController,
+	],
 	providers: [
 		ClientsService,
+		ClientImportService,
 		ClientMetricsService,
 		ClientQuotesService,
 		ClientActivityService,

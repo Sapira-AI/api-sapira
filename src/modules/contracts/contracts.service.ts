@@ -77,8 +77,36 @@ export const electronicEmissionOf = (row: Record<string, unknown>) => {
 		sent_to_odoo_at: (row.sent_to_odoo_at as string | Date | null | undefined) ?? null,
 	});
 
-	return { electronic_emission_pending: pending, electronic_emission_label: pending ? 'Pendiente de emisión electrónica' : null };
+	return {
+		electronic_emission_pending: pending,
+		electronic_emission_label: pending ? 'Pendiente de emisión electrónica' : null,
+		dte: dteSummaryOf(row),
+	};
 };
+
+/** Documento tributario emitido desde Sapira (`invoices.dte_*`, servicio de facturación electrónica); null si la factura no lo tiene. */
+export const dteSummaryOf = (row: Record<string, unknown>) => {
+	if (!row.dte_id) return null;
+	const iso = (value: unknown) => (value instanceof Date ? value.toISOString() : toTextOrNull(value));
+
+	return {
+		id: String(row.dte_id),
+		tipo: row.dte_tipo === null || row.dte_tipo === undefined ? null : Number(row.dte_tipo),
+		folio: row.dte_folio === null || row.dte_folio === undefined ? null : Number(row.dte_folio),
+		track_id: toTextOrNull(row.dte_track_id),
+		environment: toTextOrNull(row.dte_environment),
+		status: toTextOrNull(row.dte_status),
+		status_detail: toTextOrNull(row.dte_status_detail),
+		status_at: iso(row.dte_status_at),
+		receptor_email: toTextOrNull(row.dte_receptor_email),
+		receptor_sent_at: iso(row.dte_receptor_sent_at),
+		receptor_error: toTextOrNull(row.dte_receptor_error),
+	};
+};
+
+/** Columnas del DTE de la factura (alias `i`), para `dteSummaryOf`. */
+export const DTE_COLUMNS_SQL = `i.dte_id, i.dte_tipo, i.dte_folio, i.dte_track_id, i.dte_environment, i.dte_status, i.dte_status_detail, i.dte_status_at,
+	i.dte_receptor_email, i.dte_receptor_sent_at, i.dte_receptor_error`;
 
 const toTextOrNull = (value: unknown) => (value === null || value === undefined ? null : String(value));
 
@@ -668,6 +696,7 @@ export class ContractsService {
 					ce.id AS entity_id, ce.legal_name AS entity_legal_name, ce.tax_id AS entity_tax_id, ce.country AS entity_country,
 					co.id AS company_id, co.legal_name AS company_legal_name, co.country AS company_country, co.tax_rate AS company_tax_rate,
 					co.odoo_integration_id AS company_odoo_integration_id,
+					EXISTS (SELECT 1 FROM sii_configurations s WHERE s.company_id = co.id AND s.holding_id = c.holding_id AND s.is_enabled = true) AS company_electronic_invoicing,
 					c.contract_currency, c.invoice_currency, c.system_currency, c.company_currency, c.fx_invoice_policy, c.fx_company_policy,
 					c.total_value, c.total_value_system_currency, c.booking_date::text AS booking_date,
 					cd.start_date::text AS start_date, COALESCE(cd.end_date, c.contract_end_date)::text AS end_date,
@@ -741,6 +770,8 @@ export class ContractsService {
 						tax_rate: toNullableNumber(row.company_tax_rate),
 						/** La compañía puede enviar facturas al ERP (mismo criterio del scheduler y del alta: `odoo_integration_id` asignado). */
 						erp_integration_enabled: row.company_odoo_integration_id !== null && row.company_odoo_integration_id !== undefined,
+						/** Facturación electrónica propia activa (`sii_configurations.is_enabled`): sin ERP, la compañía emite sus DTE desde Sapira. */
+						electronic_invoicing_enabled: row.company_electronic_invoicing === true,
 					}
 				: null,
 			contract_currency: toText(row.contract_currency),
@@ -1095,7 +1126,7 @@ export class ContractsService {
 					lines.billing_period_start::text AS billing_period_start, lines.billing_period_end::text AS billing_period_end,
 					i.contract_currency, i.invoice_currency, i.amount_contract_currency, i.amount_invoice_currency, i.vat,
 					i.total_invoice_currency, i.total_system_currency, i.fx_contract_to_invoice, i.is_active,
-					i.odoo_invoice_id, i.sent_to_odoo_at, COALESCE(lines.lines_count, 0) AS lines_count,
+					i.odoo_invoice_id, i.sent_to_odoo_at, ${DTE_COLUMNS_SQL}, COALESCE(lines.lines_count, 0) AS lines_count,
 					ce.legal_name, i.related_invoice_id, i.original_issue_date::text AS original_issue_date,
 					EXISTS (SELECT 1 FROM contract_lifecycle_events e WHERE e.contract_id = i.contract_id AND e.holding_id = i.holding_id
 						AND e.event_type = 'INVOICE_ISSUED_EXTERNALLY' AND e.metadata->>'invoice_id' = i.id::text) AS issued_externally,
@@ -1229,7 +1260,9 @@ export class ContractsService {
 					lines.billing_period_start::text AS billing_period_start, lines.billing_period_end::text AS billing_period_end,
 					i.contract_currency, i.invoice_currency, i.system_currency, i.amount_contract_currency, i.amount_invoice_currency, i.vat,
 					i.total_invoice_currency, i.total_system_currency, i.fx_contract_to_invoice, i.tax_rate, i.payment_method, i.is_active,
-					i.odoo_invoice_id, i.sent_to_odoo_at, i.sent_at, i.notes, i.pdf_url, i.invoice_terms_and_conditions,
+					i.odoo_invoice_id, i.sent_to_odoo_at, ${DTE_COLUMNS_SQL}, i.sent_at, i.notes, i.pdf_url, i.invoice_terms_and_conditions,
+					(co.odoo_integration_id IS NULL AND EXISTS (SELECT 1 FROM sii_configurations s WHERE s.company_id = i.company_id AND s.holding_id = i.holding_id
+						AND s.is_enabled = true)) AS dte_issuer,
 					i.requires_references_for_billing, i.related_invoice_id, i.consolidated_into_invoice_id, i.split_from_invoice_id, i.split_reason,
 					-- Proforma / documento: emisor y receptor como los guarda la factura, con la compañía y la razón social como respaldo.
 					COALESCE(i.issuer_legal_name, co.legal_name) AS issuer_legal_name, COALESCE(i.issuer_tax_id, co.tax_id) AS issuer_tax_id,
@@ -1404,6 +1437,8 @@ export class ContractsService {
 			issued_externally: header.issued_externally === true,
 			erp_sync_state: erpSyncStateOf(header),
 			...electronicEmissionOf(header),
+			// La compañía emite sus documentos tributarios desde Sapira (facturación electrónica activa y sin ERP): «Emitir» en vez del ERP.
+			dte_issuer: header.dte_issuer === true,
 			// "Restablecer borrador del ERP" disponible (Por Emitir activa vinculada al ERP, no NC/unificada).
 			erp_reset_available: ContractsService.erpResetAvailable(
 				{ ...header, doc_type: header.document_type },

@@ -1238,12 +1238,47 @@ describe('electronicEmissionOf (NC creadas por la API, decisión 01-10)', () => 
 		).toEqual({
 			electronic_emission_pending: true,
 			electronic_emission_label: 'Pendiente de emisión electrónica',
+			dte: null,
 		});
 		expect(electronicEmissionOf({ document_type: 'NC', status: 'Emitida', invoice_number: 'NC-1', odoo_invoice_id: 5 })).toEqual({
 			electronic_emission_pending: false,
 			electronic_emission_label: null,
+			dte: null,
 		});
 		expect(electronicEmissionOf({ document_type: 'FACTURA', status: 'Por Emitir' }).electronic_emission_pending).toBe(false);
+	});
+
+	it('expone el documento tributario emitido desde Sapira (dte_*), con su estado en el SII y la entrega al cliente', () => {
+		expect(
+			electronicEmissionOf({
+				document_type: 'FACTURA',
+				status: 'Emitida',
+				invoice_number: '15',
+				dte_id: '6ad1d917cc70f4f79ba0b8d3',
+				dte_tipo: 33,
+				dte_folio: '15',
+				dte_track_id: '262713382',
+				dte_environment: 'produccion',
+				dte_status: 'aceptado',
+				dte_status_detail: 'EPR: Envio Procesado',
+				dte_status_at: new Date('2026-10-18T12:00:00.000Z'),
+				dte_receptor_email: 'dte@cliente.cl',
+				dte_receptor_sent_at: null,
+				dte_receptor_error: null,
+			}).dte
+		).toEqual({
+			id: '6ad1d917cc70f4f79ba0b8d3',
+			tipo: 33,
+			folio: 15,
+			track_id: '262713382',
+			environment: 'produccion',
+			status: 'aceptado',
+			status_detail: 'EPR: Envio Procesado',
+			status_at: '2026-10-18T12:00:00.000Z',
+			receptor_email: 'dte@cliente.cl',
+			receptor_sent_at: null,
+			receptor_error: null,
+		});
 	});
 });
 

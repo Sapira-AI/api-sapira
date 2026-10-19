@@ -60,6 +60,117 @@ export class FacturaClientService {
 			throw facturaHttpError(error);
 		}
 	}
+
+	// ---------------------------------------------------------------- documentos tributarios (DTE)
+	// La compañía va en `X-Factura-Company-Id` con su UUID de Sapira (api-factura la resuelve por el vínculo del integrador).
+
+	/**
+	 * Crea (timbra y firma) el DTE. `externalRef` (el id de la factura) lo hace idempotente: si ya existe, api-factura devuelve el mismo
+	 * documento y no gasta otro folio. Sin `Emisor`, api-factura usa los datos del emisor de la compañía.
+	 */
+	async crearDte(companyId: string, body: Record<string, unknown>, externalRef: string): Promise<DteCreado> {
+		const { data } = await this.dteRequest<{ data: DteCreado & { id: unknown } }>(companyId, 'post', '/dte/createDte', { ...body, externalRef });
+
+		return { ...data.data, id: String(data.data.id) };
+	}
+
+	/** Envía el DTE al SII; devuelve el TrackId. */
+	async enviarDte(companyId: string, dteId: string): Promise<{ trackId: string }> {
+		const { data } = await this.dteRequest<{ data: { trackId: unknown } }>(companyId, 'post', '/dte/sendDte', { dteIds: [dteId] });
+
+		return { trackId: String(data.data.trackId) };
+	}
+
+	/** Consulta en el SII el envío del DTE y devuelve su resultado (`en_proceso`, `aceptado`, `reparos`, `rechazado`). */
+	async estadoDte(companyId: string, dteId: string): Promise<DteEstado> {
+		const { data } = await this.dteRequest<{ data: DteEstado }>(companyId, 'get', `/dte/${encodeURIComponent(dteId)}/estado`);
+
+		return data.data;
+	}
+
+	/** Envía el DTE aceptado a su receptor por correo (EnvioDTE + muestra impresa), desde la casilla de intercambio de la compañía. */
+	async enviarReceptor(companyId: string, dteId: string, para: string): Promise<{ para: string; messageId?: string }> {
+		const { data } = await this.dteRequest<{ data: { para: string; messageId?: string } }>(
+			companyId,
+			'post',
+			`/dte/${encodeURIComponent(dteId)}/enviar-receptor`,
+			{ para }
+		);
+
+		return data.data;
+	}
+
+	/** PDF en borrador del documento antes de emitirlo (mismo cuerpo que `crearDte`): sin folio ni timbre; no gasta folio. */
+	async previewPdfDte(companyId: string, body: Record<string, unknown>): Promise<DteDocumento> {
+		const respuesta = await this.dteRequest<ArrayBuffer>(companyId, 'post', '/dte/preview-pdf', body, 'arraybuffer');
+
+		return { contenido: Buffer.from(respuesta.data), contentType: 'application/pdf', fileName: 'Borrador.pdf' };
+	}
+
+	/** PDF (ejemplar tributario o cedible) o XML firmado del DTE. */
+	async documentoDte(
+		companyId: string,
+		dteId: string,
+		formato: 'pdf' | 'xml',
+		copia: 'tributaria' | 'cedible' = 'tributaria'
+	): Promise<DteDocumento> {
+		const path = formato === 'pdf' ? `/dte/${encodeURIComponent(dteId)}/pdf?copia=${copia}` : `/dte/${encodeURIComponent(dteId)}/xml`;
+		const respuesta = await this.dteRequest<ArrayBuffer>(companyId, 'get', path, undefined, 'arraybuffer');
+		const disposition = String(respuesta.headers?.['content-disposition'] ?? '');
+		const fileName = disposition.match(/filename="?([^";]+)"?/)?.[1] ?? `DTE-${dteId}.${formato}`;
+
+		return {
+			contenido: Buffer.from(respuesta.data),
+			contentType: String(respuesta.headers?.['content-type'] ?? (formato === 'pdf' ? 'application/pdf' : 'application/xml')),
+			fileName,
+		};
+	}
+
+	private async dteRequest<T>(
+		companyId: string,
+		method: 'get' | 'post',
+		path: string,
+		body?: unknown,
+		responseType?: 'arraybuffer'
+	): Promise<{ data: T; headers?: Record<string, unknown> }> {
+		const baseUrl = this.config.get<string>('FACTURA_API_URL');
+		if (!baseUrl) throw new Error('FACTURA_API_URL no está configurada');
+		const token = await this.oauth.getDteAccessToken();
+		const headers = { Authorization: `Bearer ${token}`, 'X-Factura-Company-Id': companyId };
+		const url = `${baseUrl.replace(/\/$/, '')}${path}`;
+		// Timbrar, firmar y subir al SII puede tardar: más que el timeout por defecto de axios (sin límite) pero acotado.
+		const options = { headers, timeout: 120_000, ...(responseType ? { responseType } : {}) };
+		try {
+			const respuesta = method === 'get' ? await axios.get<T>(url, options) : await axios.post<T>(url, body, options);
+
+			return { data: respuesta.data, headers: respuesta.headers as Record<string, unknown> };
+		} catch (error) {
+			throw facturaHttpError(error);
+		}
+	}
+}
+
+/** DTE creado (o ya existente con esa referencia) en api-factura. */
+export interface DteCreado {
+	id: string;
+	folio: number;
+	tipoDte: number;
+	ambiente: 'certificacion' | 'produccion';
+	existente: boolean;
+}
+
+/** Resultado de consultar el envío de un DTE en el SII. */
+export interface DteEstado {
+	resultado: 'en_proceso' | 'aceptado' | 'reparos' | 'rechazado';
+	estado: string;
+	glosaEstado: string;
+	trackId: string;
+}
+
+export interface DteDocumento {
+	contenido: Buffer;
+	contentType: string;
+	fileName: string;
 }
 
 /** Errores del usuario que api-factura detecta en los datos (RUT, vínculo, validación): se devuelven con su estado. */
