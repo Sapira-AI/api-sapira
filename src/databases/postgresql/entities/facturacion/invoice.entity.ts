@@ -17,6 +17,11 @@ import { Subscription } from '@/databases/postgresql/entities/suscripciones/subs
 	'invoices_document_type_check',
 	`((document_type = ANY (ARRAY['FACTURA'::text, 'NC'::text, 'ND'::text, 'FACTURA_EXPORTACION'::text, 'Invoice'::text])))`
 )
+@Check(
+	'invoices_dte_status_check',
+	`((dte_status IS NULL) OR (dte_status = ANY (ARRAY['creado'::text, 'enviado'::text, 'aceptado'::text, 'reparos'::text, 'rechazado'::text])))`
+)
+@Check('invoices_dte_environment_check', `((dte_environment IS NULL) OR (dte_environment = ANY (ARRAY['certificacion'::text, 'produccion'::text])))`)
 @Check('invoices_export_type_check', `((export_type = ANY (ARRAY[0, 1])))`)
 @Check(
 	'invoices_invoice_type_check',
@@ -35,6 +40,7 @@ import { Subscription } from '@/databases/postgresql/entities/suscripciones/subs
 )
 @Index('idx_invoices_active_contract_period', ['contract_id', 'scheduled_at', 'is_active'], { where: `(is_active = true)` })
 @Index('idx_invoices_auto_invoice', ['auto_invoice', 'status'], { where: `(auto_invoice = true)` })
+@Index('idx_invoices_dte_status_enviado', ['holding_id'], { where: `(dte_status = 'enviado'::text)` })
 @Index('idx_invoices_consolidated_into', ['consolidated_into_invoice_id'], { where: `(consolidated_into_invoice_id IS NOT NULL)` })
 @Index('idx_invoices_group_id', ['invoice_group_id'], { where: `(invoice_group_id IS NOT NULL)` })
 @Index('idx_invoices_holding_id', ['holding_id'])
@@ -245,6 +251,44 @@ export class Invoice {
 
 	@Column({ type: 'timestamp with time zone', nullable: true, comment: 'Timestamp cuando se envió la factura a Odoo' })
 	sent_to_odoo_at?: Date;
+
+	// Vínculo con el DTE emitido por el servicio de facturación electrónica (api-factura), migración InvoiceDteLink1792100000000.
+	@Column({
+		type: 'text',
+		nullable: true,
+		comment: 'Id del DTE en el servicio de facturación electrónica (api-factura). NULL = la factura no se emitió como DTE desde Sapira',
+	})
+	dte_id?: string | null;
+
+	@Column({ type: 'integer', nullable: true, comment: 'Tipo SII del DTE emitido (33, 34, 56, 61)' })
+	dte_tipo?: number | null;
+
+	@Column({ type: 'integer', nullable: true, comment: 'Folio del DTE asignado por el SII (CAF); se copia a invoice_number' })
+	dte_folio?: number | null;
+
+	@Column({ type: 'text', nullable: true, comment: 'TrackId del envío del DTE al SII' })
+	dte_track_id?: string | null;
+
+	@Column({ type: 'text', nullable: true, comment: 'Ambiente SII en que se emitió el DTE: certificacion | produccion' })
+	dte_environment?: string | null;
+
+	@Column({ type: 'text', nullable: true, comment: 'Estado del DTE: creado (sin enviar al SII) | enviado | aceptado | reparos | rechazado' })
+	dte_status?: string | null;
+
+	@Column({ type: 'text', nullable: true, comment: 'Glosa del SII de la última consulta de estado' })
+	dte_status_detail?: string | null;
+
+	@Column({ type: 'timestamp with time zone', nullable: true, comment: 'Fecha de la última consulta o cambio de estado del DTE' })
+	dte_status_at?: Date | null;
+
+	@Column({ type: 'text', nullable: true, comment: 'Correo de intercambio al que se envió el DTE (receptor)' })
+	dte_receptor_email?: string | null;
+
+	@Column({ type: 'timestamp with time zone', nullable: true, comment: 'Fecha del envío del DTE al receptor' })
+	dte_receptor_sent_at?: Date | null;
+
+	@Column({ type: 'text', nullable: true, comment: 'Último error al enviar el DTE al receptor (NULL si se envió o no se intentó)' })
+	dte_receptor_error?: string | null;
 
 	@Column({
 		type: 'uuid',

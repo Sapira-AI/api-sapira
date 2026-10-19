@@ -91,6 +91,26 @@ describe('estados derivados (spec §3)', () => {
 		expect(erpStateOf(issued())).toBe('none');
 	});
 
+	it('electronic_state: emitida como documento tributario desde Sapira (DTE enviado al SII); un DTE solo creado no cuenta', () => {
+		expect(electronicStateOf(issued({ dte_id: 'dte-1', dte_status: 'enviado' }), TODAY)).toBe('issued_dte');
+		expect(electronicStateOf(issued({ dte_id: 'dte-1', dte_status: 'aceptado' }), TODAY)).toBe('issued_dte');
+		expect(
+			electronicStateOf(
+				issued({
+					document_type: 'NC',
+					status: 'Cancelada',
+					credit_type: 'cancellation',
+					due_date: null,
+					dte_id: 'dte-2',
+					dte_status: 'aceptado',
+				}),
+				TODAY
+			)
+		).toBe('issued_dte');
+		expect(electronicStateOf(issued({ status: 'Por Emitir', dte_id: 'dte-1', dte_status: 'creado' }), TODAY)).toBe('not_issued');
+		expect(electronicStateOf(issued({ voided: true, dte_id: 'dte-1', dte_status: 'aceptado' }), TODAY)).toBe('voided');
+	});
+
 	it('electronic_state: NC pendiente, emitida vía ERP o externa, PE automática atrasada, anulada y sin cobro', () => {
 		expect(electronicStateOf(issued({ document_type: 'NC', invoice_number: null }), TODAY)).toBe('pending_emission');
 		expect(electronicStateOf(issued({ document_type: 'NC', odoo_invoice_id: 5 }), TODAY)).toBe('issued_erp');

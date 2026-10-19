@@ -17,7 +17,7 @@ export const INVOICE_STATUSES = ['Por Emitir', 'Emitida', 'Enviada', 'Pagada', '
 export const RECEIVABLE_STATUSES = ['Emitida', 'Enviada', 'Vencida', 'Pagada'] as const;
 export const DOCUMENT_KINDS = ['invoice', 'credit_note', 'debit_note'] as const;
 export const ERP_STATES = ['none', 'draft', 'sent', 'not_applicable'] as const;
-export const ELECTRONIC_STATES = ['pending_emission', 'issued_erp', 'issued_external', 'not_issued', 'voided'] as const;
+export const ELECTRONIC_STATES = ['pending_emission', 'issued_erp', 'issued_dte', 'issued_external', 'not_issued', 'voided'] as const;
 export const PAYMENT_STATES = ['unpaid', 'partial', 'paid', 'overdue', 'not_applicable'] as const;
 export const TO_ISSUE_GROUPS = ['ready', 'blocked', 'late', 'erp_draft'] as const;
 export const CREDIT_TYPES = ['cancellation', 'discount'] as const;
@@ -79,6 +79,9 @@ export interface DerivedInput {
 	sent_to_odoo_at: string | null;
 	auto_invoice?: boolean;
 	issued_externally?: boolean;
+	/** DTE emitido desde Sapira con el servicio de facturación electrónica (`invoices.dte_id` / `dte_status`). */
+	dte_id?: string | null;
+	dte_status?: string | null;
 	voided?: boolean;
 	no_charge?: boolean;
 	has_erp_integration?: boolean;
@@ -99,9 +102,13 @@ export function erpStateOf(row: DerivedInput): ErpState {
 	return 'none';
 }
 
-/** Emisión legal (§3): sin estados SII/SUNAT/CFDI propios hasta el vínculo invoice ↔ DTE (Leon). */
+/**
+ * Emisión legal (§3). `issued_dte`: emitida como documento tributario desde Sapira (vínculo invoice ↔ DTE, compañías sin ERP); un DTE
+ * `creado` aún no llegó al SII y no cuenta como emitido.
+ */
 export function electronicStateOf(row: DerivedInput, today: string): ElectronicState {
 	if (row.voided) return 'voided';
+	if (row.dte_id && row.dte_status && row.dte_status !== 'creado') return 'issued_dte';
 	// NC de anulación de la API: nace Cancelada con su factura (12-10); su emisión sigue el folio, no el estado (misma regla que billing-sql).
 	if (
 		documentKindOf(row.document_type) !== 'invoice' &&
