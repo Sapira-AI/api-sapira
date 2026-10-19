@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 
 import { PostgreSQLDatabaseModule } from '@/databases/postgresql/database.module';
+import { BancoCentralModule } from '@/modules/banco-central/banco-central.module';
+import { FacturaModule } from '@/modules/factura/factura.module';
 import { InvoicesModule } from '@/modules/invoices/invoices.module';
 import { MetricsModule } from '@/modules/metrics/metrics.module';
 import { NotificationsModule } from '@/modules/notifications/notifications.module';
@@ -16,6 +18,9 @@ import { ContractChangesService } from './contract-changes.service';
 import { ContractDraftsService } from './contract-drafts.service';
 import { ContractInvoiceConsolidationService } from './contract-invoice-consolidation.service';
 import { ContractInvoiceDescriptionsService } from './contract-invoice-descriptions.service';
+import { ContractInvoiceDteController } from './contract-invoice-dte.controller';
+import { ContractInvoiceDteScheduler } from './contract-invoice-dte.scheduler';
+import { ContractInvoiceDteService } from './contract-invoice-dte.service';
 import { ContractInvoiceEditService } from './contract-invoice-edit.service';
 import { ContractInvoicePartialPoService } from './contract-invoice-partial-po.service';
 import { ContractInvoiceReorganizeService } from './contract-invoice-reorganize.service';
@@ -35,8 +40,15 @@ import { ContractDocumentsStorageService } from './storage/contract-documents-st
 
 /** Contratos v2: lectura (§2a), creación de borradores con vista previa (C1, §3), activación (C2), borrado lógico (C5), configuración masiva, Pricing v2 (métricas facturables, precios inline, catálogo de precios versionado, consumos) y modificaciones con vista previa (`spec-modificaciones-contrato-v2.md` §4); facturas del contrato (`spec-facturas-en-contrato-360.md` §3.1–3.3: enviar al ERP ahora, emisión externa, reprogramar, tipo de cambio por factura; §3.6–3.7a: constructor de descripción y referencias OC/HES; §3.4: editar una Por Emitir con conciliador de desvíos y restablecer el borrador del ERP; §3.5: reorganizar el cronograma; §3.7b–3.8: facturar por OC, anular con NC espejo y reemitir, NC de descuento; consolidación opcional entre contratos, `spec-multimoneda-contrato.md` §7; `InvoicesModule` aporta el envío del scheduler). Jobs diarios `contracts-auto-renewal` y `contracts-scheduled-changes` (`ContractsScheduler`, §9.3.5–§9.3.6; `NotificationsModule` aporta las notificaciones). Ver `docs/v2-rediseno/mapa-v2-contratos.md` y `spec-pricing-v2.md`. */
 @Module({
-	imports: [PostgreSQLDatabaseModule, MetricsModule, InvoicesModule, NotificationsModule],
-	controllers: [ContractsController, BillableMetricsController, ConsumptionController, PricesController, InvoiceConsolidationRulesController],
+	imports: [PostgreSQLDatabaseModule, MetricsModule, InvoicesModule, NotificationsModule, FacturaModule, BancoCentralModule],
+	controllers: [
+		ContractsController,
+		ContractInvoiceDteController,
+		BillableMetricsController,
+		ConsumptionController,
+		PricesController,
+		InvoiceConsolidationRulesController,
+	],
 	providers: [
 		ContractsService,
 		ContractDraftsService,
@@ -46,6 +58,8 @@ import { ContractDocumentsStorageService } from './storage/contract-documents-st
 		ContractActivationService,
 		ContractChangesService,
 		ContractInvoicesService,
+		ContractInvoiceDteService,
+		ContractInvoiceDteScheduler,
 		ContractInvoiceDescriptionsService,
 		ContractInvoiceEditService,
 		ContractInvoiceReorganizeService,

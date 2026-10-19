@@ -132,6 +132,7 @@ const ERP_LABELS: Record<string, string> = { none: 'Sin enviar', draft: 'Borrado
 const ELECTRONIC_LABELS: Record<string, string> = {
 	pending_emission: 'Pendiente de emisión',
 	issued_erp: 'Emitida vía ERP',
+	issued_dte: 'Emitida como documento tributario (SII)',
 	issued_external: 'Emitida fuera de Sapira',
 	not_issued: 'Sin emitir',
 	voided: 'Anulada',

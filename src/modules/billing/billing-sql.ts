@@ -237,7 +237,7 @@ export function invoicesCte(
 			i.amount_contract_currency, i.amount_invoice_currency, i.vat, i.total_invoice_currency, i.total_system_currency, i.amount_system_currency,
 			i.related_invoice_id, ri.invoice_number AS related_invoice_number, ri.status AS related_invoice_status,
 			ri.issue_date::text AS related_invoice_issue_date, ri.is_active AS related_invoice_active, i.is_active, COALESCE(i.is_legacy, false) AS is_legacy, COALESCE(i.auto_invoice, false) AS auto_invoice,
-			i.odoo_invoice_id, i.sent_to_odoo_at, i.consolidated_into_invoice_id, i.created_at, i.subscription_id, i.stripe_id,
+			i.odoo_invoice_id, i.sent_to_odoo_at, i.dte_id, i.dte_status, i.consolidated_into_invoice_id, i.created_at, i.subscription_id, i.stripe_id,
 			${subscriptionSql('i')} AS is_subscription,
 			COALESCE(i.total_invoice_currency, i.amount_invoice_currency) AS total_due,
 			(co.odoo_integration_id IS NOT NULL) AS has_erp_integration, (ce.odoo_partner_id IS NOT NULL) AS has_erp_partner,
@@ -281,6 +281,8 @@ export function invoicesCte(
 				WHEN b.document_kind <> 'invoice' OR NOT b.has_erp_integration OR NOT b.has_erp_partner THEN 'not_applicable'
 				ELSE 'none' END AS erp_state,
 			CASE WHEN b.voided THEN 'voided'
+				-- Emitida como documento tributario desde Sapira (un DTE «creado» aún no llegó al SII: no cuenta como emitida).
+				WHEN b.dte_id IS NOT NULL AND b.dte_status IS NOT NULL AND b.dte_status <> 'creado' THEN 'issued_dte'
 				-- NC de anulación de la API (nace Cancelada con su factura, sin vencimiento; 12-10): su emisión sigue el folio, no el estado.
 				WHEN b.document_kind <> 'invoice' AND b.status = '${CANCELLED_STATUS}' AND b.credit_type = 'cancellation' AND b.due_date IS NULL THEN (CASE
 					WHEN NOT ${linked} AND COALESCE(TRIM(b.invoice_number), '') = '' THEN 'pending_emission'

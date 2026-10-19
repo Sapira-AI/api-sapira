@@ -60,6 +60,11 @@ export const INVOICE_EVENT_TYPES = {
 	credit_note: 'INVOICE_CREDIT_NOTE_CREATED',
 	// Folio de una NC emitida a mano (sin ERP o emitida en el ERP sin vínculo; Domi 12-10).
 	credit_note_folio: 'INVOICE_CREDIT_NOTE_FOLIO_REGISTERED',
+	// Emisión como documento tributario electrónico (DTE) con el servicio de facturación electrónica, compañías sin ERP (`invoice-dte.ts`).
+	dte_issued: 'INVOICE_ISSUED_DTE',
+	dte_status: 'INVOICE_DTE_STATUS_CHANGED',
+	dte_receptor: 'INVOICE_DTE_SENT_TO_RECEPTOR',
+	debit_note: 'INVOICE_DEBIT_NOTE_CREATED',
 	partial_billing: 'INVOICE_PARTIAL_BILLING',
 	// Multimoneda §7: consolidación opcional entre contratos (uno por contrato) y deshacerla.
 	consolidated: CONSOLIDATION_EVENT_TYPES.consolidated,
@@ -117,6 +122,10 @@ export interface ContractInvoiceRow {
 	issued_externally: boolean;
 	odoo_invoice_id: number | null;
 	sent_to_odoo_at: string | null;
+	/** DTE del servicio de facturación electrónica (`invoices.dte_id`), su estado y folio; null si no se emitió como DTE desde Sapira. */
+	dte_id?: string | null;
+	dte_status?: string | null;
+	dte_folio?: number | null;
 	/** `invoices.sent_at` (lo limpia "Restablecer borrador del ERP", igual que la función vieja). */
 	sent_at: string | null;
 	/** Cancelada "sin cobro" (todas sus líneas en 0, evento INVOICE_NO_CHARGE): se puede reactivar. Derivado de eventos. */
@@ -252,9 +261,20 @@ export function commonBlockers(invoice: ContractInvoiceRow): InvoiceBlocker[] {
 	if (invoice.is_legacy) {
 		blockers.push({ code: 'legacy_invoice', message: 'Es una factura importada (legacy): no se opera desde el contrato', next_step: null });
 	}
+	// El documento tributario ya tiene folio pero no llegó al SII: cambiarla dejaría el DTE distinto de la factura.
+	if (invoice.dte_id && invoice.status === PENDING_STATUS) {
+		blockers.push({
+			code: DTE_IN_PROGRESS_CODE,
+			message: `Tiene un documento tributario creado (folio ${invoice.dte_folio ?? 'sin folio'}) que no se alcanzó a enviar al SII`,
+			next_step: 'Usa «Emitir» de nuevo para terminar de enviarlo',
+		});
+	}
 
 	return blockers;
 }
+
+/** Bloqueo común de una Por Emitir con DTE creado y sin enviar (`commonBlockers`); «Emitir» lo ignora porque es justo lo que termina. */
+export const DTE_IN_PROGRESS_CODE = 'dte_in_progress';
 
 /**
  * ¿Es una unificada **v2** Por Emitir activa (Domi 07-10, caso Brightcell)? Esa sale como cualquier factura: Enviar al ERP ahora, Reprogramar,

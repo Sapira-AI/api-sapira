@@ -552,12 +552,42 @@ crea (no es un desvío: sin fila en `invoice_adjustments`, solo el evento).
   relation: credit_note | reissue | original }]` (ambos sentidos por `related_invoice_id`; el detalle agrega consolidada y dividida) y
   `split_reason`; el detalle, `credit_reason`.
 
+### 3.9 Emitir como documento tributario electrónico (DTE) — compañías sin ERP (18-10)
+
+Puente con el servicio de facturación electrónica (api-factura) para las compañías chilenas con facturación electrónica activa
+(`sii_configurations.is_enabled`) y **sin ERP**: un emisor por compañía; con ERP siguen «Enviar al ERP ahora» y Odoo. Diseño:
+`front-lenosoft/app/docs/content/api-factura/proyecto/diseno-facturacion-sapira.md`. Código: `invoice-dte.ts` (lógica pura),
+`contract-invoice-dte.service.ts`, `contract-invoice-dte.controller.ts`, job `contract-invoice-dte.scheduler.ts`.
+
+- **Qué se emite:** facturas Por Emitir (33, o 34 sin IVA) y las notas pendientes de emisión (NC 61 de Anular, NC de descuento,
+  modificaciones y consumo; ND 56 nueva). Exportación (110) queda fuera.
+- **Montos:** las líneas que viajarían al ERP (`itemsSentToErp`) en pesos **enteros**. En spot se valoriza con la tasa oficial del día de
+  emisión (`getExchangeRateWithFallback`, la misma del envío al ERP); el residuo de redondear va a la línea mayor; IVA =
+  redondeo(neto × tasa) y total = neto + IVA, como lo verifica api-factura antes de gastar el folio. La factura queda con esos mismos montos
+  (líneas y encabezado) y fecha de emisión = hoy.
+- **Receptor:** RUT (con su dígito verificador válido, módulo 11), razón social, giro (se corta a 40), dirección y comuna de la razón social son obligatorios; el documento se entrega
+  al «Correo (DTE)» de la razón social (`client_entities.email`).
+- **Flujo:** `createDte` con `externalRef = invoice.id` (idempotente: un reintento no gasta otro folio) → se guarda el vínculo
+  (`invoices.dte_*`, `dte_status = creado`) → `sendDte` → Emitida con el folio en `invoice_number` (las notas solo guardan folio y fecha,
+  como «Registrar folio») y evento `INVOICE_ISSUED_DTE`. Si el envío falla: 409 `dte_not_sent`, la factura queda Por Emitir con su DTE
+  creado (bloqueo común `dte_in_progress` para editarla) y «Emitir» lo termina.
+- **Estado SII:** `POST …/dte-status` y el job horario (`DTE_STATUS_JOB_ENABLED`) guardan `aceptado | reparos | rechazado`; aceptado o
+  con reparos, se entrega al cliente (`enviar-receptor` de api-factura, EnvioDTE + PDF por correo) y queda `dte_receptor_*`. Estado
+  electrónico derivado: `issued_dte`.
+- **Notas:** la referencia a la factura original sale de `invoice_references` con el folio actual de la original y su tipo SII; si la
+  original se emitió como DTE debe estar aceptada (`original_not_accepted`). Nota de débito: `POST …/debit-note[/preview]`
+  `{ amount, reason }` (neto en moneda de factura, IVA de la factura, `CodRef` 3, nace Emitida y pendiente; no toca el devengo).
+
 ## 4. API propuesta (módulo `contracts`, tras `SupabaseAuthGuard` + `HoldingScopeGuard` + `@HoldingId()`; BFF `app/api/contratos/[id]/facturas/...` con Zod espejo)
 
 | Método y ruta | § | Cuerpo / efecto |
 |---|---|---|
 | `POST /contracts/:id/invoices/:invoiceId/send` | 3.1 | `{ dry_run?: false }` → reutiliza `InvoiceSchedulerService.sendInvoiceToOdoo` para una factura; responde `{ odoo_invoice_id, warnings }` o 409 con bloqueos. El payload a Odoo lleva solo las líneas visibles (`quantity <> 0 AND visible_line_id IS NULL`; una línea visible en OC parcial) y re-renderiza las descripciones con los valores finales |
 | `POST /contracts/:id/invoices/:invoiceId/mark-issued` | 3.1 | `{ issue_date, invoice_number (≤100), fx_rate?, notes? }` (folio y fecha **obligatorios**, Decisión 6) → Emitida sin ERP (reemplaza `emit_invoice_manually`, sin división); solo registra (valoriza solo si estaba en spot; `fx_mismatch` si la tasa difiere); mismo permiso que editar el contrato |
+| `POST /contracts/:id/invoices/:invoiceId/emit-dte[/preview]` | 3.9 | Sin cuerpo → DTE 33/34/61/56 con el servicio de facturación electrónica; 409 `blocked` o `dte_not_sent` |
+| `POST /contracts/:id/invoices/:invoiceId/emit-dte/preview-pdf` | 3.9 | PDF en borrador del documento (diseño de la compañía, sin folio ni timbre) en base64; no gasta folio |
+| `POST /contracts/:id/invoices/:invoiceId/dte-status` · `dte-send-receptor` · `GET …/dte-document?format&copy` | 3.9 | Estado en el SII, entrega al cliente `{ email? }`, PDF/XML en base64 |
+| `POST /contracts/:id/invoices/:invoiceId/debit-note[/preview]` | 3.9 | `{ amount, reason }` → ND pendiente de emisión |
 | `POST /contracts/:id/invoices/:invoiceId/erp-withdraw` | 3.1 | **Gated** (Decisión 2): existe cuando Odoo cancele el borrador por API; hasta entonces no se expone en BFF ni UI (reemplaza `reset_invoice_odoo_draft`) |
 | `PATCH /contracts/:id/invoices/fx` (+ `/fx/preview`) | 3.2 | `{ invoice_ids[], fx_policy, fx_rate?, target_net_amount?, reason? }` (reemplaza `apply_fixed_fx_to_contract` por factura) |
 | `POST /contracts/:id/invoices/:invoiceId/reschedule` · `POST /contracts/:id/invoices/reschedule` | 3.3 | `{ issue_date, due_date?, reason }` · masivo `{ invoice_ids[], shift \| issue_date, reason }` |

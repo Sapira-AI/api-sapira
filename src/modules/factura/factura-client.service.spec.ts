@@ -78,4 +78,111 @@ describe('FacturaClientService', () => {
 			expect(facturaHttpError(new Error('otro')).getStatus()).toBe(502);
 		});
 	});
+
+	describe('documentos tributarios (DTE)', () => {
+		const build = () => {
+			const oauth = {
+				getAccessToken: jest.fn().mockResolvedValue('provision-token'),
+				getDteAccessToken: jest.fn().mockResolvedValue('dte-token'),
+			};
+			const config = { get: jest.fn().mockReturnValue('http://localhost:9005/') };
+
+			return { service: new FacturaClientService(config as any, oauth as any), oauth };
+		};
+		const COMPANY = '1bdded45-cda6-4148-a425-fa0086e27ce8';
+
+		afterEach(() => jest.restoreAllMocks());
+
+		it('crea el DTE con la referencia externa, el token de DTE y la compañía en X-Factura-Company-Id', async () => {
+			const { service, oauth } = build();
+			const post = jest.spyOn(axios, 'post').mockResolvedValue({
+				data: { data: { id: { toString: () => 'dte-1' }, folio: 15, tipoDte: 33, ambiente: 'produccion', existente: false } },
+			});
+
+			await expect(service.crearDte(COMPANY, { Encabezado: {} }, 'invoice-1')).resolves.toEqual({
+				id: 'dte-1',
+				folio: 15,
+				tipoDte: 33,
+				ambiente: 'produccion',
+				existente: false,
+			});
+			expect(post).toHaveBeenCalledWith(
+				'http://localhost:9005/dte/createDte',
+				{ Encabezado: {}, externalRef: 'invoice-1' },
+				expect.objectContaining({ headers: { Authorization: 'Bearer dte-token', 'X-Factura-Company-Id': COMPANY } })
+			);
+			expect(oauth.getAccessToken).not.toHaveBeenCalled();
+		});
+
+		it('envía al SII, consulta el estado y entrega al receptor', async () => {
+			const { service } = build();
+			const post = jest
+				.spyOn(axios, 'post')
+				.mockResolvedValueOnce({ data: { data: { trackId: 262800001 } } })
+				.mockResolvedValueOnce({ data: { data: { para: 'dte@cliente.cl', messageId: 'msg-1' } } });
+			const get = jest.spyOn(axios, 'get').mockResolvedValue({
+				data: { data: { resultado: 'aceptado', estado: 'EPR', glosaEstado: 'Envio Procesado', trackId: '262800001' } },
+			});
+
+			await expect(service.enviarDte(COMPANY, 'dte-1')).resolves.toEqual({ trackId: '262800001' });
+			expect(post.mock.calls[0].slice(0, 2)).toEqual(['http://localhost:9005/dte/sendDte', { dteIds: ['dte-1'] }]);
+			await expect(service.estadoDte(COMPANY, 'dte-1')).resolves.toMatchObject({ resultado: 'aceptado' });
+			expect(get.mock.calls[0][0]).toBe('http://localhost:9005/dte/dte-1/estado');
+			await expect(service.enviarReceptor(COMPANY, 'dte-1', 'dte@cliente.cl')).resolves.toEqual({ para: 'dte@cliente.cl', messageId: 'msg-1' });
+			expect(post.mock.calls[1].slice(0, 2)).toEqual(['http://localhost:9005/dte/dte-1/enviar-receptor', { para: 'dte@cliente.cl' }]);
+		});
+
+		it('descarga el PDF cedible con su nombre de archivo', async () => {
+			const { service } = build();
+			const get = jest.spyOn(axios, 'get').mockResolvedValue({
+				data: Buffer.from('%PDF'),
+				headers: { 'content-type': 'application/pdf', 'content-disposition': 'attachment; filename="DTE-33-15-cedible.pdf"' },
+			});
+
+			await expect(service.documentoDte(COMPANY, 'dte-1', 'pdf', 'cedible')).resolves.toEqual({
+				contenido: Buffer.from('%PDF'),
+				contentType: 'application/pdf',
+				fileName: 'DTE-33-15-cedible.pdf',
+			});
+			expect(get).toHaveBeenCalledWith(
+				'http://localhost:9005/dte/dte-1/pdf?copia=cedible',
+				expect.objectContaining({ responseType: 'arraybuffer' })
+			);
+		});
+
+		it('pide el PDF en borrador con el cuerpo del DTE', async () => {
+			const { service } = build();
+			const post = jest
+				.spyOn(axios, 'post')
+				.mockResolvedValue({ data: Buffer.from('%PDF-borrador'), headers: { 'content-type': 'application/pdf' } });
+
+			await expect(service.previewPdfDte(COMPANY, { Encabezado: {} })).resolves.toMatchObject({
+				contentType: 'application/pdf',
+				fileName: 'Borrador.pdf',
+			});
+			expect(post).toHaveBeenCalledWith(
+				'http://localhost:9005/dte/preview-pdf',
+				{ Encabezado: {} },
+				expect.objectContaining({
+					responseType: 'arraybuffer',
+					headers: { Authorization: 'Bearer dte-token', 'X-Factura-Company-Id': COMPANY },
+				})
+			);
+		});
+
+		it('un rechazo de datos de api-factura (422) llega con su mensaje', async () => {
+			const { service } = build();
+			jest.spyOn(axios, 'post').mockRejectedValueOnce(
+				Object.assign(new Error('Request failed'), {
+					isAxiosError: true,
+					response: { status: 409, data: { message: 'No hay folios disponibles para el tipo 33' } },
+				})
+			);
+
+			await expect(service.crearDte(COMPANY, {}, 'invoice-1')).rejects.toMatchObject({
+				status: 409,
+				message: 'No hay folios disponibles para el tipo 33',
+			});
+		});
+	});
 });

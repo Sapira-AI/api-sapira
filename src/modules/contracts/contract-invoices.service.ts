@@ -73,7 +73,7 @@ export const CONTRACT_INVOICE_SELECT = `SELECT i.id, i.contract_id, i.invoice_nu
 		EXISTS (SELECT 1 FROM contract_lifecycle_events e
 			WHERE e.contract_id = i.contract_id AND e.holding_id = i.holding_id AND e.event_type = 'INVOICE_ISSUED_EXTERNALLY' AND e.metadata->>'invoice_id' = i.id::text) AS issued_externally,
 		${noChargeSql('i')} AS no_charge, (i.invoice_type = 'Unificada' AND ${unifiedV2Sql('i')}) AS unified_v2,
-		i.odoo_invoice_id, i.sent_to_odoo_at, i.sent_at, i.auto_invoice, i.requires_references_for_billing, i.consolidated_into_invoice_id,
+		i.odoo_invoice_id, i.sent_to_odoo_at, i.dte_id, i.dte_status, i.dte_folio, i.sent_at, i.auto_invoice, i.requires_references_for_billing, i.consolidated_into_invoice_id,
 		i.client_entity_id, i.company_id, ce.legal_name,
 		l.period_start::text AS period_start, l.period_end::text AS period_end,
 		COALESCE(l.lines_count, 0) AS lines_count, COALESCE(l.lines_without_product, 0) AS lines_without_product, COALESCE(l.priced_base, 0) AS priced_base,
@@ -147,6 +147,9 @@ export function contractInvoiceRowOf(row: Row): ContractInvoiceRow {
 		issued_externally: row.issued_externally === true,
 		odoo_invoice_id: toNullableNumber(row.odoo_invoice_id),
 		sent_to_odoo_at: toIso(row.sent_to_odoo_at),
+		dte_id: toText(row.dte_id),
+		dte_status: toText(row.dte_status),
+		dte_folio: toNullableNumber(row.dte_folio),
 		sent_at: toIso(row.sent_at),
 		no_charge: row.no_charge === true,
 		auto_invoice: row.auto_invoice === true,
