@@ -29,6 +29,7 @@ import {
 import { ContractInvoicesService } from './contract-invoices.service';
 import { ContractsService } from './contracts.service';
 import {
+	asReissued,
 	type DebitNoteOriginal,
 	type DebitNotePlan,
 	distributeTax,
@@ -45,6 +46,7 @@ import {
 	dteStatusFromResultado,
 	type DteTipo,
 	type EmitDtePlan,
+	isDteRejected,
 	mapInvoiceToDteBody,
 	planDebitNote,
 	planEmitDte,
@@ -91,6 +93,8 @@ interface DtePreparation {
 	fx: number | null;
 	/** La tasa se escribe en la factura y sus líneas (estaba en spot). */
 	valuate: boolean;
+	/** Día de la tasa oficial usada (spot); null con la tasa fija de la factura o sin conversión. */
+	fxDate: string | null;
 	amounts: DteAmounts | null;
 	body: Record<string, unknown> | null;
 	issue_date: string;
@@ -138,12 +142,21 @@ export class ContractInvoiceDteService {
 		const companyId = prepared.invoice.company_id!;
 
 		// (2) Crear el DTE: idempotente por la factura (un reintento devuelve el mismo documento y folio).
-		const created = await this.factura.crearDte(companyId, prepared.body, prepared.invoice.id);
+		// Reemisión: api-factura archiva el rechazado y emite uno nuevo con otro folio (sin la opción devolvería el rechazado).
+		const reissue = prepared.plan.reissue;
+		const created = await this.factura.crearDte(companyId, prepared.body, prepared.invoice.id, { reemitirRechazado: reissue });
 
 		await this.transaction(contract.id, holdingId, async (runner) => {
+			// En una reemisión la factura vuelve a Por Emitir sin el folio rechazado (las notas conservan su estado) y se limpia lo del DTE
+			// anterior: si el envío falla, queda como cualquier emisión a medio terminar y «Terminar emisión» la completa.
 			await runner.query(
-				`UPDATE invoices SET dte_id = $3, dte_tipo = $4, dte_folio = $5, dte_environment = $6, dte_status = 'creado', dte_status_at = now()
-				WHERE id = $1 AND holding_id = $2 AND (dte_id IS NULL OR dte_id = $3)`,
+				`UPDATE invoices SET dte_id = $3, dte_tipo = $4, dte_folio = $5, dte_environment = $6, dte_status = 'creado', dte_status_at = now()${
+					reissue
+						? `, invoice_number = NULL, dte_track_id = NULL, dte_status_detail = NULL, dte_receptor_email = NULL, dte_receptor_sent_at = NULL,
+					dte_receptor_error = NULL${prepared.note ? '' : `, status = '${PENDING_STATUS}'`}`
+						: ''
+				}
+				WHERE id = $1 AND holding_id = $2 AND (dte_id IS NULL OR dte_id = $3${reissue ? ` OR dte_status = 'rechazado'` : ''})`,
 				[prepared.invoice.id, holdingId, created.id, created.tipoDte, created.folio, created.ambiente]
 			);
 		});
@@ -169,8 +182,12 @@ export class ContractInvoiceDteService {
 
 			return this.insertEvent(runner, contract.id, holdingId, userId, {
 				type: INVOICE_EVENT_TYPES.dte_issued,
-				title: `${DTE_TYPE_LABELS[created.tipoDte] ?? 'Documento tributario'} N° ${created.folio} emitida`,
-				description: `Emitida como documento tributario electrónico (folio ${created.folio}, TrackId ${trackId}) el ${prepared.issue_date}${
+				title: `${DTE_TYPE_LABELS[created.tipoDte] ?? 'Documento tributario'} N° ${created.folio} ${reissue ? 'reemitida' : 'emitida'}`,
+				description: `${
+					reissue
+						? `Reemitida porque el SII rechazó el documento N° ${prepared.invoice.invoice_number ?? prepared.invoice.dte_folio ?? '—'}. `
+						: ''
+				}Emitida como documento tributario electrónico (folio ${created.folio}, TrackId ${trackId}) el ${prepared.issue_date}${
 					prepared.amounts ? ` por $${prepared.amounts.total.toLocaleString('es-CL')}` : ''
 				}`,
 				effective_date: prepared.issue_date,
@@ -182,6 +199,7 @@ export class ContractInvoiceDteService {
 					track_id: trackId,
 					ambiente: created.ambiente,
 					retry: prepared.plan.retry || created.existente,
+					reissue: reissue ? { rejected_dte_id: prepared.invoice.dte_id, rejected_folio: prepared.invoice.dte_folio ?? null } : null,
 					before: {
 						status: prepared.invoice.status,
 						invoice_number: prepared.invoice.invoice_number,
@@ -686,22 +704,24 @@ export class ContractInvoiceDteService {
 			today,
 		};
 		const note = invoice.document_type === 'ND' || /^NC/i.test(invoice.document_type ?? '');
+		// Reemisión de un DTE rechazado: se planea como si la factura volviera a estar Por Emitir y sin folio (el rechazado no vale).
+		const planned = isDteRejected(invoice) ? asReissued(invoice, note) : invoice;
 		const original = note && extra?.related_invoice_id ? await this.loadOriginal(db, String(extra.related_invoice_id), holdingId) : null;
 		const pendingNote =
 			note &&
 			creditNotePendingEmission({
 				document_type: invoice.document_type,
-				status: invoice.status,
+				status: planned.status,
 				credit_type: toText(extra?.credit_type),
 				due_date: toText(extra?.due_date),
 				odoo_invoice_id: invoice.odoo_invoice_id,
 				sent_to_odoo_at: invoice.sent_to_odoo_at,
-				invoice_number: invoice.invoice_number,
+				invoice_number: planned.invoice_number,
 			});
 		// Base: las de toda operación sobre una Por Emitir (sin el DTE a medio emitir, que «Emitir» termina). Las notas tienen sus propias.
 		const base: InvoiceBlocker[] = note
 			? []
-			: [...commonBlockers(invoice), erpDraftBlocker(invoice), partialBillingBlocker(invoice)]
+			: [...commonBlockers(planned), erpDraftBlocker(invoice), partialBillingBlocker(invoice)]
 					.filter((blocker): blocker is InvoiceBlocker => !!blocker)
 					.filter((blocker) => blocker.code !== DTE_IN_PROGRESS_CODE)
 					.map((blocker) =>
@@ -751,6 +771,11 @@ export class ContractInvoiceDteService {
 				},
 				amounts,
 				references: await this.loadReferences(db, invoice.id, holdingId, original, note),
+				// Nota del tipo de cambio en cada línea (contrato en UF u otra moneda); las notas de crédito y débito no la llevan.
+				fx:
+					!note && isMultiCurrency(invoice) && valuation.fx
+						? { rate: valuation.fx, currency: invoice.contract_currency!, date: valuation.fxDate ?? null }
+						: null,
 			});
 			if (amounts.total <= 0) plan.blockers.push({ code: 'dte_zero_total', message: 'El documento tiene total 0', next_step: null });
 			plan.can_apply = plan.blockers.length === 0;
@@ -765,6 +790,7 @@ export class ContractInvoiceDteService {
 			lines,
 			fx: valuation.fx,
 			valuate: valuation.valuate,
+			fxDate: valuation.fxDate ?? null,
 			amounts,
 			body,
 			issue_date: issueDate,
@@ -780,7 +806,7 @@ export class ContractInvoiceDteService {
 		invoice: ContractInvoiceRow,
 		lines: DteLineRow[],
 		today: string
-	): Promise<{ fx: number | null; valuate: boolean; blocker: InvoiceBlocker | null }> {
+	): Promise<{ fx: number | null; valuate: boolean; blocker: InvoiceBlocker | null; fxDate?: string | null }> {
 		if (!isMultiCurrency(invoice)) return { fx: null, valuate: false, blocker: null };
 		const valued = invoice.amount_invoice_currency !== null && lines.every((line) => line.subtotal_invoice_currency !== null);
 
@@ -788,8 +814,11 @@ export class ContractInvoiceDteService {
 		if (invoice.fx_contract_to_invoice !== null) return { fx: invoice.fx_contract_to_invoice, valuate: true, blocker: null };
 		try {
 			const rate = await this.exchangeRates.getExchangeRateWithFallback(invoice.contract_currency!, invoice.invoice_currency!, today);
+			// Día de la tasa usada (si no había del día de emisión, la última anterior): va en la nota de cada línea.
+			const rateDate =
+				rate?.rate_date instanceof Date ? isoDate(rate.rate_date) : rate?.rate_date ? String(rate.rate_date).slice(0, 10) : today;
 
-			if (rate?.rate > 0) return { fx: round6(rate.rate), valuate: true, blocker: null };
+			if (rate?.rate > 0) return { fx: round6(rate.rate), valuate: true, blocker: null, fxDate: rateDate };
 		} catch (error) {
 			this.logger.warn(`Sin tasa ${invoice.contract_currency}→${invoice.invoice_currency} al ${today}: ${errorText(error)}`);
 		}
@@ -814,6 +843,7 @@ export class ContractInvoiceDteService {
 			description: line.description,
 			quantity: line.quantity,
 			unit_of_measure: line.unit_of_measure,
+			contract_amount: isMultiCurrency(invoice) ? line.subtotal_contract_currency : null,
 			subtotal_invoice_currency: valued
 				? (valued[index].after.subtotal_invoice_currency ?? 0)
 				: (line.subtotal_invoice_currency ??

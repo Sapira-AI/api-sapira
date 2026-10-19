@@ -555,8 +555,10 @@ crea (no es un desvío: sin fila en `invoice_adjustments`, solo el evento).
 ### 3.9 Emitir como documento tributario electrónico (DTE) — compañías sin ERP (18-10)
 
 Puente con el servicio de facturación electrónica (api-factura) para las compañías chilenas con facturación electrónica activa
-(`sii_configurations.is_enabled`) y **sin ERP**: un emisor por compañía; con ERP siguen «Enviar al ERP ahora» y Odoo. Diseño:
-`front-lenosoft/app/docs/content/api-factura/proyecto/diseno-facturacion-sapira.md`. Código: `invoice-dte.ts` (lógica pura),
+(`sii_configurations.is_enabled`), **sin ERP** y **en producción** en api-factura (`createDte` va con `ambienteRequerido: 'produccion'`:
+en certificación api-factura responde 409 sin gastar folio); con ERP siguen «Enviar al ERP ahora» y Odoo. Un DTE **rechazado** se reemite con el mismo `emit-dte` (`plan.reissue`, aviso `dte_reissue`): documento nuevo con otro folio y fecha de hoy
+(`reemitirRechazado`). Documentación canónica (arquitectura, configuración, operación y errores):
+`front-sapira/docs/integracion-sii/emision-desde-contratos.md`. Código: `invoice-dte.ts` (lógica pura),
 `contract-invoice-dte.service.ts`, `contract-invoice-dte.controller.ts`, job `contract-invoice-dte.scheduler.ts`.
 
 - **Qué se emite:** facturas Por Emitir (33, o 34 sin IVA) y las notas pendientes de emisión (NC 61 de Anular, NC de descuento,
@@ -564,7 +566,8 @@ Puente con el servicio de facturación electrónica (api-factura) para las compa
 - **Montos:** las líneas que viajarían al ERP (`itemsSentToErp`) en pesos **enteros**. En spot se valoriza con la tasa oficial del día de
   emisión (`getExchangeRateWithFallback`, la misma del envío al ERP); el residuo de redondear va a la línea mayor; IVA =
   redondeo(neto × tasa) y total = neto + IVA, como lo verifica api-factura antes de gastar el folio. La factura queda con esos mismos montos
-  (líneas y encabezado) y fecha de emisión = hoy.
+  (líneas y encabezado) y fecha de emisión = hoy. Con conversión, cada línea lleva en `DscItem` el valor en la moneda del contrato y
+  la tasa con su día: «Valor: 20 UF × $41.178,64 (UF del 18-10-2026)» (`fxLineNote`), que se ve en el PDF.
 - **Receptor:** RUT (con su dígito verificador válido, módulo 11), razón social, giro (se corta a 40), dirección y comuna de la razón social son obligatorios; el documento se entrega
   al «Correo (DTE)» de la razón social (`client_entities.email`).
 - **Flujo:** `createDte` con `externalRef = invoice.id` (idempotente: un reintento no gasta otro folio) → se guarda el vínculo

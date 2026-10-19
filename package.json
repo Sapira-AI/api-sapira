@@ -20,6 +20,7 @@
 		"test:e2e": "jest --config ./test/jest-e2e.json",
 		"postgres:assets": "ts-node -r tsconfig-paths/register scripts/apply-postgresql-assets.ts",
 		"audit": "yarn audit --level moderate",
+		"kame:sondeo": "ts-node -r dotenv/config -r tsconfig-paths/register scripts/kame/sondeo.ts",
 		"schema:log": "ts-node -r tsconfig-paths/register scripts/schema-log.ts",
 		"schema:status": "ts-node -r tsconfig-paths/register scripts/schema-status.ts",
 		"schema:snapshot": "bash scripts/espejo/refresh-snapshots.sh",

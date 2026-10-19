@@ -880,6 +880,8 @@ export interface SummaryRow {
 	href: string | null;
 	/** Solo Stripe: cuentas del holding. */
 	accounts?: Array<{ id: string | null; name: string | null; active: boolean; mode: unknown }>;
+	/** Solo ERP: compañías conectadas a Kame (conexión por compañía, detalle en `/integrations/erp/kame/companies`). */
+	kame?: { companies: number; connected: boolean };
 }
 
 // ── Reglas de exclusión (ajuste de Domi) ────────────────────────────────────────────────────────────────────────────────────

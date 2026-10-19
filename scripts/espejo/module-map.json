@@ -153,6 +153,11 @@
   "integration_configs",
   "integration_record_discards"
  ],
+ "integraciones/kame": [
+  "kame_connections",
+  "kame_company_settings",
+  "erp_exports"
+ ],
  "automatizaciones-ia": [
   "ai_agents",
   "ai_agent_configs",
