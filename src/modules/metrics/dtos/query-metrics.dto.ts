@@ -176,17 +176,24 @@ export class MovementDetailDto extends PageDto {
 	groupBy?: MovementGroup;
 }
 
+/** Tope de `top` en las matrices por dimensión (MRR y Revenue): el export completo del front pide este valor (mismo tope que la serie de Datos históricos). */
+export const MAX_DIMENSION_TOP = 1000;
+
 export class MrrDimensionDto extends MrrBasisDto {
 	@ApiPropertyOptional({ enum: MRR_DIMENSIONS, default: 'client' })
 	@IsIn(MRR_DIMENSIONS)
 	@IsOptional()
 	dimension?: MrrDimension;
 
-	@ApiPropertyOptional({ default: 15, maximum: 100 })
+	@ApiPropertyOptional({
+		default: 15,
+		maximum: MAX_DIMENSION_TOP,
+		description: 'Filas antes de agrupar el resto en "Otros"; con el máximo, el export trae todas las filas',
+	})
 	@Type(() => Number)
 	@IsInt()
 	@Min(1)
-	@Max(100)
+	@Max(MAX_DIMENSION_TOP)
 	@IsOptional()
 	top?: number;
 }
@@ -230,11 +237,15 @@ export class RevenueDimensionDto extends MetricsFiltersDto {
 	@IsOptional()
 	measure?: 'recognized' | 'billed';
 
-	@ApiPropertyOptional({ default: 10, maximum: 100 })
+	@ApiPropertyOptional({
+		default: 10,
+		maximum: MAX_DIMENSION_TOP,
+		description: 'Filas antes de agrupar el resto en "Otros"; con el máximo, el export trae todas las filas',
+	})
 	@Type(() => Number)
 	@IsInt()
 	@Min(1)
-	@Max(100)
+	@Max(MAX_DIMENSION_TOP)
 	@IsOptional()
 	top?: number;
 }
