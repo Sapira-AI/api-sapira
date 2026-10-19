@@ -37,12 +37,54 @@ este repo ([GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md)).
    `batch_id` × cliente × moneda (tres estados, unificar registros, un ítem por producto al crear contrato), **Adoptar como
    factura del contrato** (reconciliar una factura previa con Por Emitir), serie "MRR histórico por mes" por concepto (con
    contrato · No activado · pendiente, filtro `concept`) y por dimensión (cliente, razón social, producto, compañía), corte
-   U14 en dos casos (mes de empalme silencioso vs histórico después del contrato). API sin commit en `domi`, sin migración
-   nueva. **Pendiente**: publicación fuera del lab (en curso en el front, Administración › Datos históricos) · Leon: la
-   sincronización del ERP no debe crear facturas previas de facturas que ya existen en Sapira, y propagar el estado de pago
-   a las facturas adoptadas · sugerencias de empalme (idea 18-10: proponer el contrato activo a una factura previa o a un
-   registro pendiente cuando calcen —mismo cliente, producto y moneda— y cierren un hueco justo antes del primer mes del
-   contrato; con solape, con aviso de ajustar el contrato; spec §8.4) · "conservar Renovación al editar borrador".
+   U14 en dos casos (mes de empalme silencioso vs histórico después del contrato). **Publicado el 18-10** (API v0.0.147,
+   front en `main`): vive en **Plataforma › Datos históricos** (`/datos-historicos`, permisos de Administración), con centro
+   de ayuda. **Pendiente**: propagar el estado de pago del ERP a las facturas adoptadas · sugerencias de empalme (idea
+   18-10: proponer el contrato activo a una factura previa o a un registro pendiente cuando calcen —mismo cliente, producto
+   y moneda— y cierren un hueco justo antes del primer mes del contrato; con solape, con aviso de ajustar el contrato; spec
+   §8.4) · "conservar Renovación al editar borrador" (va en las mejoras cortas de abajo).
+
+## 🧭 Prioridades vigentes (acordadas con Domi el 18 y 19-10-2026)
+
+Orden de trabajo del carril Domi + Claude a partir de la semana del 19-10. Lo tachado va saliendo; una sola lista, sin duplicar
+el detalle de cada spec.
+
+1. **Mejoras útiles y cortas** (una sesión cada una, intercaladas con soporte):
+   - ~~**Export e import**: exportar *todo* en Métricas › MRR por dimensión y en Ingresos › Desglose; export de Planes y precios;
+     **"Importar para actualizar" clientes**~~ ✅ construido 19-10 en `domi` (API: `top` ≤ 1000 por dimensión; `clients/import`
+     con vista previa, lote reversible y mapeo de columnas, tablas `import_batches`/`import_batch_rows` **con migración sin
+     aplicar**; front: tres exports y el modo Actualizar del diálogo). Pendiente: PRs, migración en QA y prod, prueba con
+     SimpliRoute. Sin campos personalizados ni razones sociales (decisión 19-10). Contratos por Excel y el motor único de import:
+     después.
+   - **Panel de vendedores** (pedido SimpliRoute 28-07): endpoint de funnel por vendedor y período (cotizaciones →
+     firmadas → contrato → facturado y cobrado, conversión, MRR, ciclo) + sección con enlace al contrato. Decidir ubicación
+     (pestaña en Cotizaciones como el front anterior, o sección en Métricas) y qué pasa con contratos sin cotización.
+   - **Correlativo de contratos** (ya hay números duplicados en prod: "ctr-2026-218" vs CTR-2026-218), **alerta de RUT
+     duplicado al crear razón social + eliminar razón social sin referencias** (Carelis 15-09) y **conservar Renovación al
+     editar un borrador de contrato**.
+   - OK pendientes de Domi para la **línea única "producto + ajuste"** en la factura (cambio de integración: avisar a Leon).
+2. **Automatizaciones fuera del lab + Slack y Teams** (complementan los correos), con benchmark de competencia antes de
+   cerrar alcance. Arranque inmediato tras 1.
+3. **Agentes**: setup copilot (PDF de contrato → contrato en Sapira), billing wizard y contract brain, con benchmark. Es el
+   diferenciador comercial ("facilitar tareas en menos tiempo, con una IA capacitada en nuestro dominio que guía y actúa").
+   Incluye el **seguimiento personalizado por cliente** que hoy se hace a mano (caso TiMining 19-10: facturas Por Emitir
+   atrasadas o bloqueadas por referencia, productos vencidos sin decisión de renovación): mensual por Slack, Teams, correo o
+   WhatsApp según el holding, y más seguido como aviso notorio al entrar; siempre con el camino en el sistema o la acción a
+   confirmar, que el agente ejecuta tras la confirmación.
+4. **MCP de Sapira**, apenas terminen los agentes; la **API key de Sapira** (tabla de claves por holding con alcances,
+   guard, UI en Administración) es su primer paso.
+5. **Preonboarding** con documentos y aceptaciones en plataforma.
+6. **Integración KAME** (la avanza el carril Domi; Leon sigue en facturación electrónica nativa) + configuraciones de
+   integración más rápidas y preparadas para nuevas.
+7. Después: **reglas de reconocimiento de ingresos** (L: nadie lo pide aún; antes, sesión de decisiones: granularidad,
+   no recurrentes, NC por defecto, variables al cierre, diferido), pasarelas de pago y bancos, resto del estratégico.
+
+**Transversales:** banco de escenarios con base real + invariantes en solo lectura + CI mínima (hoy ningún repo corre tests
+en GitHub Actions); pasada quincenal al [roadmap operativo](docs/ROADMAP-OPERATIVO.md) para cerrar o borrar lo que nadie
+reclama. **Carril Leon:** facturación electrónica TIMining (últimas pruebas) → facturación electrónica nativa Chile →
+seguridad (Swagger público en prod, rutas `@Public()` del analizador de base de datos, lista del 13-10) → backend por partes.
+**Fuera de este roadmap** (lo lleva Domi): datos de holdings, empresa demo en prod, modelos de pricing de SimpliRoute.
+**Línea estratégica nueva (nov-2026):** ERP + FP&A "AI first" para Latam; spec pendiente.
 
 ## 📋 Las fases (los 7 pasos del plan del 21-08, tachados según avance)
 
