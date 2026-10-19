@@ -38,6 +38,7 @@ Esta carpeta reúne TODO el material del rediseño (antes repartido en 3 repos; 
 | [`revision-seguridad-api.md`](./revision-seguridad-api.md) | Revisión de seguridad de la API: hallazgos numerados y urgentes para el bloque de seguridad (Domi + Leon) |
 | [`glosario.md`](./glosario.md) | Vocabulario oficial del modelo |
 | [`documentacion-publicable-y-mcp.md`](./documentacion-publicable-y-mcp.md) | Convención de docu publicable por módulo (docs públicas, OpenAPI, MCP de una sola fuente) |
+| [`spec-api-key-y-mcp.md`](./spec-api-key-y-mcp.md) | API key de Sapira (cuenta de servicio por holding con alcances, allowlist, Administración › API y conexiones) y MCP de Sapira (remoto en `/mcp`, key + OAuth de Supabase, catálogo de tools, escrituras con switch y confirmación); decisiones 1–8 del 19-10 |
 
 ## Análisis e insumos (cerrados 21-08)
 

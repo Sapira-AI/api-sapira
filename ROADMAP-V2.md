@@ -63,6 +63,9 @@ el detalle de cada spec.
      duplicado al crear razón social + eliminar razón social sin referencias** (Carelis 15-09) y **conservar Renovación al
      editar un borrador de contrato**.
    - OK pendientes de Domi para la **línea única "producto + ajuste"** en la factura (cambio de integración: avisar a Leon).
+   - **API key de Sapira** (adelantada el 19-10, decisión 6 de
+     [`spec-api-key-y-mcp.md`](docs/v2-rediseno/spec-api-key-y-mcp.md)): cuenta de servicio por holding con alcances del
+     catálogo de permisos, allowlist de módulos v2, pestaña Administración › API y conexiones. 1 sesión API + 1 front.
 2. **Automatizaciones fuera del lab + Slack y Teams** (complementan los correos), con benchmark de competencia antes de
    cerrar alcance. Arranque inmediato tras 1.
 3. **Agentes**: setup copilot (PDF de contrato → contrato en Sapira), billing wizard y contract brain, con benchmark. Es el
@@ -71,8 +74,9 @@ el detalle de cada spec.
    atrasadas o bloqueadas por referencia, productos vencidos sin decisión de renovación): mensual por Slack, Teams, correo o
    WhatsApp según el holding, y más seguido como aviso notorio al entrar; siempre con el camino en el sistema o la acción a
    confirmar, que el agente ejecuta tras la confirmación.
-4. **MCP de Sapira**, apenas terminen los agentes; la **API key de Sapira** (tabla de claves por holding con alcances,
-   guard, UI en Administración) es su primer paso.
+4. **MCP de Sapira**, apenas terminen los agentes (el catálogo único de acciones nace con ellos): remoto en `/mcp` dentro
+   de api-sapira, SDK oficial v2, API key + OAuth de Supabase, lectura primero y escrituras con switch por holding y
+   confirmación → [`spec-api-key-y-mcp.md`](docs/v2-rediseno/spec-api-key-y-mcp.md) (decisiones 1–8 tomadas el 19-10).
 5. **Preonboarding** con documentos y aceptaciones en plataforma.
 6. **Integración KAME** (la avanza el carril Domi; Leon sigue en facturación electrónica nativa) + configuraciones de
    integración más rápidas y preparadas para nuevas.
