@@ -1052,7 +1052,7 @@
 		{
 			"name": "public.app_notification_recipients",
 			"rls_enabled": true,
-			"rows": 401,
+			"rows": 405,
 			"columns": [
 				{
 					"name": "id",
@@ -3749,6 +3749,17 @@
 						"updatable"
 					],
 					"comment": "País ISO 3166-1 alfa-2 (FK countries). La API escribe también client_entities.country con el nombre en español"
+				},
+				{
+					"name": "commune",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Comuna de la dirección legal (CmnaRecep del DTE chileno, hasta 20 caracteres). NULL = sin comuna"
 				}
 			],
 			"primary_keys": [
@@ -5956,6 +5967,17 @@
 					]
 				},
 				{
+					"name": "holding_inbound_email_domains_holding_id_fkey",
+					"source_table": "public.holding_inbound_email_domains",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
 					"name": "holding_integration_settings_holding_id_fkey",
 					"source_table": "public.holding_integration_settings",
 					"source_columns": [
@@ -5969,6 +5991,28 @@
 				{
 					"name": "holding_settings_holding_id_fkey",
 					"source_table": "public.holding_settings",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "import_batch_rows_holding_id_fkey",
+					"source_table": "public.import_batch_rows",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "import_batches_holding_id_fkey",
+					"source_table": "public.import_batches",
 					"source_columns": [
 						"holding_id"
 					],
@@ -11885,7 +11929,7 @@
 		{
 			"name": "public.email_sender_addresses",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 1,
 			"columns": [
 				{
 					"name": "id",
@@ -12730,7 +12774,7 @@
 		{
 			"name": "public.holding_email_sender_settings",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 1,
 			"columns": [
 				{
 					"name": "id",
@@ -13046,6 +13090,163 @@
 			]
 		},
 		{
+			"name": "public.holding_inbound_email_domains",
+			"rls_enabled": true,
+			"rows": 0,
+			"columns": [
+				{
+					"name": "id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					],
+					"default_value": "gen_random_uuid()"
+				},
+				{
+					"name": "holding_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "inbound_domain",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"comment": "Subdominio de recepción, en minúsculas (ej: dte.miempresa.cl)"
+				},
+				{
+					"name": "sendgrid_domain_id",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "ID del dominio autenticado en SendGrid (para responder desde las casillas)"
+				},
+				{
+					"name": "domain_status",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'pending'::text",
+					"comment": "pending o verified: verified cuando el MX y los CNAME de autenticación están puestos"
+				},
+				{
+					"name": "dns_records",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Registros DNS a publicar: MX hacia SendGrid y los CNAME de autenticación, con su estado"
+				},
+				{
+					"name": "mx_verified_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "domain_verified_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "inbound_parse_configured_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Cuándo se creó el Inbound Parse en SendGrid (apunta al webhook de api-factura)"
+				},
+				{
+					"name": "created_by",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "created_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				},
+				{
+					"name": "updated_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				}
+			],
+			"primary_keys": [
+				"id"
+			],
+			"foreign_key_constraints": [
+				{
+					"name": "holding_inbound_email_domains_created_by_fkey",
+					"source_table": "public.holding_inbound_email_domains",
+					"source_columns": [
+						"created_by"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "holding_inbound_email_domains_holding_id_fkey",
+					"source_table": "public.holding_inbound_email_domains",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				}
+			]
+		},
+		{
 			"name": "public.holding_integration_settings",
 			"rls_enabled": true,
 			"rows": 0,
@@ -13316,6 +13517,376 @@
 						"holding_id"
 					],
 					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				}
+			]
+		},
+		{
+			"name": "public.import_batch_rows",
+			"rls_enabled": true,
+			"rows": 0,
+			"columns": [
+				{
+					"name": "id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					],
+					"default_value": "gen_random_uuid()"
+				},
+				{
+					"name": "batch_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "holding_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "row",
+					"data_type": "integer",
+					"format": "int4",
+					"type": "integer",
+					"options": [
+						"updatable"
+					],
+					"comment": "Fila en la planilla (la 1 son los encabezados)"
+				},
+				{
+					"name": "key_value",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"comment": "Valor de la clave en la planilla (N° cliente o RUT)"
+				},
+				{
+					"name": "entity_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Registro encontrado (clients.id); NULL si no se encontró o fue ambiguo"
+				},
+				{
+					"name": "status",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"comment": "updated | unchanged | not_found | ambiguous | failed"
+				},
+				{
+					"name": "before",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'{}'::jsonb",
+					"comment": "Valor anterior de cada campo cambiado"
+				},
+				{
+					"name": "after",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'{}'::jsonb",
+					"comment": "Valor nuevo de cada campo cambiado"
+				},
+				{
+					"name": "message",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Motivo (error de validación, ambigua, no encontrada)"
+				},
+				{
+					"name": "reverted_fields",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Al revertir: campos restaurados"
+				},
+				{
+					"name": "kept_fields",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Al revertir: campos que no se tocaron porque alguien los editó después"
+				}
+			],
+			"primary_keys": [
+				"id"
+			],
+			"foreign_key_constraints": [
+				{
+					"name": "import_batch_rows_batch_id_fkey",
+					"source_table": "public.import_batch_rows",
+					"source_columns": [
+						"batch_id"
+					],
+					"target_table": "public.import_batches",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "import_batch_rows_holding_id_fkey",
+					"source_table": "public.import_batch_rows",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				}
+			]
+		},
+		{
+			"name": "public.import_batches",
+			"rls_enabled": true,
+			"rows": 0,
+			"columns": [
+				{
+					"name": "id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					],
+					"default_value": "gen_random_uuid()"
+				},
+				{
+					"name": "holding_id",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"updatable"
+					]
+				},
+				{
+					"name": "entity_type",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"comment": "Entidad actualizada: client (clientes comerciales)"
+				},
+				{
+					"name": "label",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Nombre del lote (por defecto, el archivo subido)"
+				},
+				{
+					"name": "key_field",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"updatable"
+					],
+					"comment": "Con qué se buscó cada fila: client_number | tax_id"
+				},
+				{
+					"name": "fields",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"updatable"
+					],
+					"default_value": "'[]'::jsonb",
+					"comment": "Campos mapeados en la planilla (los únicos que se actualizan)"
+				},
+				{
+					"name": "rows_total",
+					"data_type": "integer",
+					"format": "int4",
+					"type": "integer",
+					"options": [
+						"updatable"
+					],
+					"default_value": "0"
+				},
+				{
+					"name": "updated_count",
+					"data_type": "integer",
+					"format": "int4",
+					"type": "integer",
+					"options": [
+						"updatable"
+					],
+					"default_value": "0",
+					"comment": "Filas que cambiaron al menos un campo"
+				},
+				{
+					"name": "skipped_count",
+					"data_type": "integer",
+					"format": "int4",
+					"type": "integer",
+					"options": [
+						"updatable"
+					],
+					"default_value": "0",
+					"comment": "Filas sin cambios, no encontradas o ambiguas"
+				},
+				{
+					"name": "failed_count",
+					"data_type": "integer",
+					"format": "int4",
+					"type": "integer",
+					"options": [
+						"updatable"
+					],
+					"default_value": "0",
+					"comment": "Filas con error de validación"
+				},
+				{
+					"name": "created_by",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "created_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"updatable"
+					],
+					"default_value": "now()"
+				},
+				{
+					"name": "reverted_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Cuándo se revirtió el lote (NULL = vigente)"
+				},
+				{
+					"name": "reverted_by",
+					"data_type": "uuid",
+					"format": "uuid",
+					"type": "uuid",
+					"options": [
+						"nullable",
+						"updatable"
+					]
+				},
+				{
+					"name": "reverted_summary",
+					"data_type": "jsonb",
+					"format": "jsonb",
+					"type": "jsonb",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Resumen de la reversión: { restored_rows, kept_rows, kept_fields }"
+				}
+			],
+			"primary_keys": [
+				"id"
+			],
+			"foreign_key_constraints": [
+				{
+					"name": "import_batch_rows_batch_id_fkey",
+					"source_table": "public.import_batch_rows",
+					"source_columns": [
+						"batch_id"
+					],
+					"target_table": "public.import_batches",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "import_batches_created_by_fkey",
+					"source_table": "public.import_batches",
+					"source_columns": [
+						"created_by"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "import_batches_holding_id_fkey",
+					"source_table": "public.import_batches",
+					"source_columns": [
+						"holding_id"
+					],
+					"target_table": "public.company_holdings",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "import_batches_reverted_by_fkey",
+					"source_table": "public.import_batches",
+					"source_columns": [
+						"reverted_by"
+					],
+					"target_table": "public.users",
 					"target_columns": [
 						"id"
 					]
@@ -13633,7 +14204,7 @@
 		{
 			"name": "public.invoice_adjustments",
 			"rls_enabled": true,
-			"rows": 1,
+			"rows": 2,
 			"columns": [
 				{
 					"name": "id",
@@ -16019,7 +16590,7 @@
 		{
 			"name": "public.invoices",
 			"rls_enabled": true,
-			"rows": 9961,
+			"rows": 10044,
 			"columns": [
 				{
 					"name": "id",
@@ -16657,6 +17228,127 @@
 						"updatable"
 					],
 					"comment": "Devengo del descuento en RSM (impact_month = mes de emisión; defer_forward = meses restantes del ítem; service_period = meses del período de servicio de la línea). NC discount y facturas con descuento puntual (sublínea one_off del pricing_breakdown). NULL en el resto."
+				},
+				{
+					"name": "dte_id",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Id del DTE en el servicio de facturación electrónica (api-factura). NULL = la factura no se emitió como DTE desde Sapira"
+				},
+				{
+					"name": "dte_tipo",
+					"data_type": "integer",
+					"format": "int4",
+					"type": "integer",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Tipo SII del DTE emitido (33, 34, 56, 61)"
+				},
+				{
+					"name": "dte_folio",
+					"data_type": "integer",
+					"format": "int4",
+					"type": "integer",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Folio del DTE asignado por el SII (CAF); se copia a invoice_number"
+				},
+				{
+					"name": "dte_track_id",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "TrackId del envío del DTE al SII"
+				},
+				{
+					"name": "dte_environment",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Ambiente SII en que se emitió el DTE: certificacion | produccion"
+				},
+				{
+					"name": "dte_status",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Estado del DTE: creado (sin enviar al SII) | enviado | aceptado | reparos | rechazado"
+				},
+				{
+					"name": "dte_status_detail",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Glosa del SII de la última consulta de estado"
+				},
+				{
+					"name": "dte_status_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Fecha de la última consulta o cambio de estado del DTE"
+				},
+				{
+					"name": "dte_receptor_email",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Correo de intercambio al que se envió el DTE (receptor)"
+				},
+				{
+					"name": "dte_receptor_sent_at",
+					"data_type": "timestamp with time zone",
+					"format": "timestamptz",
+					"type": "timestamp with time zone",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Fecha del envío del DTE al receptor"
+				},
+				{
+					"name": "dte_receptor_error",
+					"data_type": "text",
+					"format": "text",
+					"type": "text",
+					"options": [
+						"nullable",
+						"updatable"
+					],
+					"comment": "Último error al enviar el DTE al receptor (NULL si se envió o no se intentó)"
 				}
 			],
 			"primary_keys": [
@@ -17600,7 +18292,7 @@
 		{
 			"name": "public.mrr_legacy",
 			"rls_enabled": true,
-			"rows": 11836,
+			"rows": 11848,
 			"columns": [
 				{
 					"name": "id",
@@ -20881,7 +21573,7 @@
 		{
 			"name": "public.quote_events",
 			"rls_enabled": true,
-			"rows": 10,
+			"rows": 17,
 			"columns": [
 				{
 					"name": "id",
@@ -22334,7 +23026,7 @@
 		{
 			"name": "public.revenue_schedule_monthly",
 			"rls_enabled": true,
-			"rows": 21188,
+			"rows": 21214,
 			"columns": [
 				{
 					"name": "id",
@@ -23198,7 +23890,7 @@
 		{
 			"name": "public.salesforce_accounts_stg",
 			"rls_enabled": true,
-			"rows": 130,
+			"rows": 132,
 			"columns": [
 				{
 					"name": "id",
@@ -23749,7 +24441,7 @@
 		{
 			"name": "public.salesforce_line_items_stg",
 			"rls_enabled": true,
-			"rows": 196,
+			"rows": 199,
 			"columns": [
 				{
 					"name": "id",
@@ -24348,7 +25040,7 @@
 		{
 			"name": "public.salesforce_opportunities_stg",
 			"rls_enabled": true,
-			"rows": 179,
+			"rows": 182,
 			"columns": [
 				{
 					"name": "id",
@@ -26321,7 +27013,7 @@
 		{
 			"name": "public.stripe_customers_bigquery",
 			"rls_enabled": true,
-			"rows": 27677,
+			"rows": 27678,
 			"columns": [
 				{
 					"name": "id",
@@ -26449,7 +27141,7 @@
 		{
 			"name": "public.stripe_customers_stg",
 			"rls_enabled": true,
-			"rows": 422,
+			"rows": 423,
 			"columns": [
 				{
 					"name": "id",
@@ -26848,7 +27540,7 @@
 		{
 			"name": "public.stripe_subscriptions_stg",
 			"rls_enabled": true,
-			"rows": 491,
+			"rows": 492,
 			"columns": [
 				{
 					"name": "id",
@@ -26990,7 +27682,7 @@
 		{
 			"name": "public.stripe_sync_jobs",
 			"rls_enabled": true,
-			"rows": 224,
+			"rows": 233,
 			"columns": [
 				{
 					"name": "id",
@@ -27104,7 +27796,7 @@
 		{
 			"name": "public.subscription_items",
 			"rls_enabled": true,
-			"rows": 461,
+			"rows": 462,
 			"columns": [
 				{
 					"name": "id",
@@ -28934,6 +29626,39 @@
 					"source_table": "public.holding_fx_period_rates",
 					"source_columns": [
 						"created_by"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "holding_inbound_email_domains_created_by_fkey",
+					"source_table": "public.holding_inbound_email_domains",
+					"source_columns": [
+						"created_by"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "import_batches_created_by_fkey",
+					"source_table": "public.import_batches",
+					"source_columns": [
+						"created_by"
+					],
+					"target_table": "public.users",
+					"target_columns": [
+						"id"
+					]
+				},
+				{
+					"name": "import_batches_reverted_by_fkey",
+					"source_table": "public.import_batches",
+					"source_columns": [
+						"reverted_by"
 					],
 					"target_table": "public.users",
 					"target_columns": [

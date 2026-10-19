@@ -136,7 +136,7 @@
  "stripe_customers_stg": {
   "name": "public.stripe_customers_stg",
   "rls_enabled": true,
-  "rows": 422,
+  "rows": 423,
   "columns": [
    {
     "name": "id",
@@ -420,7 +420,7 @@
  "stripe_subscriptions_stg": {
   "name": "public.stripe_subscriptions_stg",
   "rls_enabled": true,
-  "rows": 491,
+  "rows": 492,
   "columns": [
    {
     "name": "id",
@@ -677,7 +677,7 @@
  "stripe_sync_jobs": {
   "name": "public.stripe_sync_jobs",
   "rls_enabled": true,
-  "rows": 224,
+  "rows": 233,
   "columns": [
    {
     "name": "id",
@@ -791,7 +791,7 @@
  "stripe_customers_bigquery": {
   "name": "public.stripe_customers_bigquery",
   "rls_enabled": true,
-  "rows": 27677,
+  "rows": 27678,
   "columns": [
    {
     "name": "id",

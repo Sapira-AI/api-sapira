@@ -355,6 +355,17 @@
     "scale": null,
     "array": false
    },
+   "commune": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "email": {
     "type": "text",
     "nullable": true,
@@ -1994,6 +2005,393 @@
   "checks": [],
   "foreignKeys": {
    "fk_sellers_holding_id": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
+ "import_batches": {
+  "class": "ImportBatch",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "entity_type": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "label": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "key_field": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "fields": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "'[]'::jsonb",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "rows_total": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "updated_count": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "skipped_count": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "failed_count": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": 0,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamp with time zone",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "reverted_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "reverted_by": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "reverted_summary": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "idx_import_batches_holding_created": {
+    "columns": [
+     "holding_id",
+     "created_at"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "import_batches_entity_type_check",
+    "expression": "entity_type = ANY (ARRAY['client'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "import_batches_holding_id_fkey": {
+    "columns": [
+     "holding_id"
+    ],
+    "table": "company_holdings",
+    "onDelete": "CASCADE"
+   },
+   "import_batches_created_by_fkey": {
+    "columns": [
+     "created_by"
+    ],
+    "table": "users",
+    "onDelete": "SET NULL"
+   },
+   "import_batches_reverted_by_fkey": {
+    "columns": [
+     "reverted_by"
+    ],
+    "table": "users",
+    "onDelete": "SET NULL"
+   }
+  }
+ },
+ "import_batch_rows": {
+  "class": "ImportBatchRow",
+  "columns": {
+   "id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": true,
+    "generated": "uuid",
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "batch_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "holding_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "row": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "key_value": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "entity_id": {
+    "type": "uuid",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "status": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "before": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "'{}'::jsonb",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "after": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "'{}'::jsonb",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "message": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "reverted_fields": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "kept_fields": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {},
+  "indices": {
+   "idx_import_batch_rows_holding_entity": {
+    "columns": [
+     "holding_id",
+     "entity_id"
+    ],
+    "unique": false,
+    "where": "entity_id IS NOT NULL"
+   },
+   "idx_import_batch_rows_batch": {
+    "columns": [
+     "batch_id"
+    ],
+    "unique": false,
+    "where": null
+   }
+  },
+  "checks": [
+   {
+    "name": "import_batch_rows_status_check",
+    "expression": "status = ANY (ARRAY['updated'::text, 'unchanged'::text, 'not_found'::text, 'ambiguous'::text, 'failed'::text])"
+   }
+  ],
+  "foreignKeys": {
+   "import_batch_rows_batch_id_fkey": {
+    "columns": [
+     "batch_id"
+    ],
+    "table": "import_batches",
+    "onDelete": "CASCADE"
+   },
+   "import_batch_rows_holding_id_fkey": {
     "columns": [
      "holding_id"
     ],

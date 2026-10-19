@@ -1221,7 +1221,7 @@
  "app_notification_recipients": {
   "name": "public.app_notification_recipients",
   "rls_enabled": true,
-  "rows": 401,
+  "rows": 405,
   "columns": [
    {
     "name": "id",
@@ -1426,7 +1426,7 @@
  "email_sender_addresses": {
   "name": "public.email_sender_addresses",
   "rls_enabled": true,
-  "rows": 0,
+  "rows": 1,
   "columns": [
    {
     "name": "id",
@@ -1571,7 +1571,7 @@
  "holding_email_sender_settings": {
   "name": "public.holding_email_sender_settings",
   "rls_enabled": true,
-  "rows": 0,
+  "rows": 1,
   "columns": [
    {
     "name": "id",
@@ -1738,6 +1738,163 @@
    {
     "name": "holding_email_sender_settings_holding_id_fkey",
     "source_table": "public.holding_email_sender_settings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "holding_inbound_email_domains": {
+  "name": "public.holding_inbound_email_domains",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "inbound_domain",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Subdominio de recepción, en minúsculas (ej: dte.miempresa.cl)"
+   },
+   {
+    "name": "sendgrid_domain_id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "ID del dominio autenticado en SendGrid (para responder desde las casillas)"
+   },
+   {
+    "name": "domain_status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'pending'::text",
+    "comment": "pending o verified: verified cuando el MX y los CNAME de autenticación están puestos"
+   },
+   {
+    "name": "dns_records",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Registros DNS a publicar: MX hacia SendGrid y los CNAME de autenticación, con su estado"
+   },
+   {
+    "name": "mx_verified_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "domain_verified_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "inbound_parse_configured_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Cuándo se creó el Inbound Parse en SendGrid (apunta al webhook de api-factura)"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "holding_inbound_email_domains_created_by_fkey",
+    "source_table": "public.holding_inbound_email_domains",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "holding_inbound_email_domains_holding_id_fkey",
+    "source_table": "public.holding_inbound_email_domains",
     "source_columns": [
      "holding_id"
     ],

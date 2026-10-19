@@ -1025,5 +1025,142 @@
     "with_check": null
    }
   ]
+ },
+ "import_batches": {
+  "comment": "Lotes de \"Importar para actualizar\" (clientes; genérico para otras entidades). Solo la API escribe",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "import_batches_created_by_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL"
+   },
+   {
+    "name": "import_batches_entity_type_check",
+    "type": "c",
+    "expr": "entity_type = ANY (ARRAY['client'::text])"
+   },
+   {
+    "name": "import_batches_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "import_batches_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "import_batches_reverted_by_fkey",
+    "type": "f",
+    "ondelete": "n",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (reverted_by) REFERENCES users(id) ON DELETE SET NULL"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_import_batches_holding_created",
+    "cols": [
+     "holding_id",
+     "created_at"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "holding_access_import_batches (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "holding_access_import_batches",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "ALL",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
+ },
+ "import_batch_rows": {
+  "comment": "Filas de un lote de \"Importar para actualizar\": registro, estado y valores antes/después",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "import_batch_rows_batch_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (batch_id) REFERENCES import_batches(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "import_batch_rows_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "import_batch_rows_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "import_batch_rows_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['updated'::text, 'unchanged'::text, 'not_found'::text, 'ambiguous'::text, 'failed'::text])"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "idx_import_batch_rows_batch",
+    "cols": [
+     "batch_id"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_import_batch_rows_holding_entity",
+    "cols": [
+     "holding_id",
+     "entity_id"
+    ],
+    "unique": false,
+    "where": "entity_id IS NOT NULL"
+   }
+  ],
+  "triggers": [],
+  "policies": [
+   "holding_access_import_batch_rows (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "holding_access_import_batch_rows",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "ALL",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
  }
 }
