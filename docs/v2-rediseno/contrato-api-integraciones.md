@@ -751,3 +751,54 @@ Orden: migración → desplegar la API. `VIEW_INTEGRACIONES` / `EDIT_INTEGRACION
 - Textos: "Integraciones › ERP › Mapeos" para productos sin mapeo (catálogo y `translateErpError`), "Integraciones › CRM › Historial"
   para la falla del CRM. Sin "Odoo"/"Salesforce" en los textos de Integraciones del catálogo.
 - Pestañas del 360: `estado` · `mapeos` · `configuracion` · `historial`.
+
+## 10. ERP › Kame · `/integrations/erp/kame/*`
+
+Kame es el segundo sistema del tipo `erp`. Vive aparte de los endpoints genéricos `:tipo/*` porque **su conexión es por compañía**: Kame entrega una credencial por empresa. Además, solo exporta lo que Sapira ya emitió: las facturas (DTE 33, 34, 56 y 61) y los asientos de devengo. Diseño completo: [`front-sapira/docs/integracion-kame/README.md`](../../../front-sapira/docs/integracion-kame/README.md).
+
+- **Permisos:** `VIEW_INTEGRACIONES` para leer y `EDIT_INTEGRACIONES` para cambiar.
+- **Tenancy:** `HoldingScopeGuard`. Una compañía de otro holding responde 404.
+- **Secret:** nunca vuelve; el front solo ve `has_secret` y `secret_last4`.
+- **En el resumen (§1):** la fila `erp` trae `available_systems: [odoo, kame]` y `kame: { companies, connected }`, que dice cuántas compañías tienen la conexión activa.
+
+| Método y ruta | Permiso | Qué hace |
+|---|---|---|
+| `GET companies` | VIEW | Compañías chilenas del holding, cada una con lo que se detalla debajo de la tabla. |
+| `PUT auto` `{ enabled }` | EDIT | Envío automático del holding (`holding_integration_settings`, `kame`; la fila ausente vale apagado). |
+| `PUT companies/:companyId/connections/:environment` | EDIT | Guarda la credencial de `pruebas` o `produccion`: `client_id`, `client_secret?` (vacío conserva el guardado), `user_email`, `kame_company_rut`, `business_unit?` y `branch?`. Las reglas están en «Reglas al guardar la credencial». |
+| `POST companies/:companyId/connections/:environment/test` | EDIT | Pide el token y lista las unidades de negocio. Responde `{ ok, message, business_units[] }` y guarda el resultado. |
+| `DELETE companies/:companyId/connections/:environment` | EDIT | 204. La conexión del ambiente activo no se borra si la compañía está activa (409). |
+| `PATCH companies/:companyId/settings` | EDIT | `{ enabled?, send_invoices?, send_journal?, dry_run?, invoices_from? (YYYY-MM-DD), journal_from? (YYYY-MM) }`. Las reglas están en «Reglas de los interruptores». |
+| `POST companies/:companyId/environment` | EDIT | `{ environment, invoices_from?, journal_from? }`. A producción exige su conexión probada, fija desde cuándo se envía (hoy y el último cierre) y vuelve a simulación. |
+| `GET companies/:companyId/journal/:period` | VIEW | Vista previa del comprobante del mes (`YYYY-MM`): `{ period, closed, ok, error, total, body }`. No envía nada. |
+| `POST companies/:companyId/journal/:period/send` | EDIT | Envía ya los asientos de un mes cerrado (en simulación, solo los arma). Un mes ya enviado da 400. |
+| `GET exports?company_id=&object=&status=&environment=&page=&limit=` | VIEW | Cola e historial, con el contrato paginado. Detalle de cada fila debajo de la tabla. |
+| `GET exports/:id` | VIEW | Un envío, con el cuerpo enviado o el que se enviaría. |
+| `POST exports/send-now` `{ company_id? }` | EDIT | Encola y envía ya lo pendiente: `{ enqueued: { invoices, journal }, processed, sent, simulated, errors, skipped }`. No depende del envío automático. |
+| `POST exports/retry` `{ ids[] }` | EDIT | Reintenta desde cero los envíos con error, simulados u omitidos (404 si ninguno lo está). Antes de crear una venta siempre se consulta `getVenta`, así que reintentar no la duplica. |
+
+**`GET companies`** devuelve, por compañía:
+- `has_odoo` y `dte_enabled`;
+- `settings`;
+- `connections.{pruebas,produccion}` (sin secretos, con `rut_allowed`);
+- `exports.{pending,sent,error,simulated}` del ambiente activo.
+
+Además devuelve `auto_enabled`, `job_enabled` (`KAME_EXPORT_JOB_ENABLED`), `allowed_ruts` (`KAME_ALLOWED_RUTS`) y `rut_guard` (`lista`, `abierto` en producción sin lista, o `cerrado` fuera de producción sin lista: no escribe en ninguna empresa).
+
+**Reglas al guardar la credencial:**
+- 409 si la compañía tiene Odoo;
+- 400 si no es de Chile;
+- un RUT fuera de `KAME_ALLOWED_RUTS` da 400.
+
+**Reglas de los interruptores:**
+- prender `enabled` exige la conexión del ambiente activo probada (409);
+- `send_invoices` sin fecha toma hoy;
+- `send_journal` sin mes toma el último cierre.
+
+**Cada fila de `GET exports`** trae:
+- estado, intentos, `next_attempt_at` y `last_error`;
+- `external_id` y `external_folio`;
+- `request_payload`;
+- de la factura: folio, tipo y contrato.
+
+**Base de datos:** migración `1792200000000-KameIntegration`. Crea `kame_connections`, `kame_company_settings` y `erp_exports`, todas con RLS sin policies, y suma `kame` al CHECK de `holding_integration_settings`. Orden: migración, después el deploy de la API.

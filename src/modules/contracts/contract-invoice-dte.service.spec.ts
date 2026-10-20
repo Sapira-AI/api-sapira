@@ -178,7 +178,10 @@ const build = (options: { invoice?: Row; extra?: Row; dte?: Row; pending?: Row[]
 			.fn()
 			.mockResolvedValue({ contenido: Buffer.from('%PDF-borrador'), contentType: 'application/pdf', fileName: 'Borrador.pdf' }),
 	};
-	const exchangeRates = { getExchangeRateWithFallback: jest.fn().mockResolvedValue({ rate: UF, is_fallback: false }) };
+	// Tasa del día anterior (no había del día de emisión): la nota de la línea dice de qué día es.
+	const exchangeRates = {
+		getExchangeRateWithFallback: jest.fn().mockResolvedValue({ rate: UF, is_fallback: true, rate_date: new Date(2026, 9, 17) }),
+	};
 	const service = new ContractInvoiceDteService(
 		dataSource,
 		contracts,
@@ -224,6 +227,7 @@ describe('ContractInvoiceDteService (emisión de DTE con el servicio de facturac
 		expect(externalRef).toBe(INVOICE_ID);
 		expect(body.Encabezado.Receptor).toMatchObject({ RUTRecep: '76120605-2', CmnaRecep: 'San Bernardo' });
 		expect(body.Encabezado.Totales).toEqual({ MntNeto: 789713, TasaIVA: 19, IVA: 150045, MntTotal: 939758 });
+		expect(body.Detalle[0].DscItem).toBe('Valor: 20 UF × $39.485,65 (UF del 17-10-2026)');
 		expect(factura.enviarDte).toHaveBeenCalledWith(COMPANY, 'dte-1');
 
 		// Vínculo guardado antes de enviar, y la emisión después.
@@ -260,6 +264,36 @@ describe('ContractInvoiceDteService (emisión de DTE con el servicio de facturac
 		expect(preview.document?.retry).toBe(true);
 		await service.emitDte(CONTRACT_ID, INVOICE_ID, HOLDING, 'auth-1', TODAY);
 		expect(factura.crearDte.mock.calls[0][2]).toBe(INVOICE_ID);
+	});
+
+	it('reemite una factura rechazada por el SII: documento nuevo con otro folio, vuelve a Por Emitir sin el folio rechazado y queda Emitida', async () => {
+		const { service, runner, factura } = build({
+			invoice: invoiceRow({ status: 'Emitida', invoice_number: '15', dte_id: 'dte-old', dte_status: 'rechazado', dte_folio: 15 }),
+		});
+		factura.crearDte.mockResolvedValueOnce({ id: 'dte-new', folio: 16, tipoDte: 33, ambiente: 'produccion', existente: false });
+
+		const preview = await service.previewEmitDte(CONTRACT_ID, INVOICE_ID, HOLDING, TODAY);
+		expect(preview.can_apply).toBe(true);
+		expect(preview.warnings.map((warning: { code: string }) => warning.code)).toContain('dte_reissue');
+
+		await service.emitDte(CONTRACT_ID, INVOICE_ID, HOLDING, 'auth-1', TODAY);
+
+		expect(factura.crearDte.mock.calls[0][2]).toBe(INVOICE_ID);
+		expect(factura.crearDte.mock.calls[0][3]).toEqual({ reemitirRechazado: true });
+		const [reset] = calls(runner.query, "dte_status = 'creado'");
+		expect(reset[0]).toContain('invoice_number = NULL');
+		expect(reset[0]).toContain("status = 'Por Emitir'");
+		expect(reset[0]).toContain("OR dte_status = 'rechazado'");
+		expect(reset[1]).toEqual([INVOICE_ID, HOLDING, 'dte-new', 33, 16, 'produccion']);
+		expect(calls(runner.query, "UPDATE invoices SET status = 'Emitida'")).toHaveLength(1);
+		expect(JSON.stringify(runner.query.mock.calls)).toContain('N° 16 reemitida');
+	});
+
+	it('una emisión normal no pide reemitir', async () => {
+		const { service, factura } = build();
+
+		await service.emitDte(CONTRACT_ID, INVOICE_ID, HOLDING, 'auth-1', TODAY);
+		expect(factura.crearDte.mock.calls[0][3]).toEqual({ reemitirRechazado: false });
 	});
 
 	it('bloquea sin facturación electrónica, con receptor incompleto o sin tipo de cambio, y no llama al servicio', async () => {

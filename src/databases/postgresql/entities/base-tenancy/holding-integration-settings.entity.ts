@@ -2,8 +2,12 @@ import { Check, Column, Entity, JoinColumn, ManyToOne, PrimaryColumn } from 'typ
 
 import { CompanyHolding } from '@/databases/postgresql/entities/base-tenancy/company-holding.entity';
 
-/** Integraciones que tienen un proceso automático que se puede apagar por holding (`stripe` lo agrega `1791000000000-IntegrationsV2`). */
-export const HOLDING_INTEGRATIONS = ['odoo', 'salesforce', 'bigquery', 'stripe'] as const;
+/**
+ * Integraciones que tienen un proceso automático que se puede apagar por holding (`stripe` lo agrega `1791000000000-IntegrationsV2`;
+ * `kame` lo agrega `1792200000000-KameIntegration`, y para Kame la fila ausente vale **apagado**: el envío a la contabilidad se prende a
+ * conciencia).
+ */
+export const HOLDING_INTEGRATIONS = ['odoo', 'salesforce', 'bigquery', 'stripe', 'kame'] as const;
 export type HoldingIntegration = (typeof HOLDING_INTEGRATIONS)[number];
 
 /**
@@ -32,7 +36,7 @@ export type HoldingIntegration = (typeof HOLDING_INTEGRATIONS)[number];
 @Entity('holding_integration_settings', {
 	comment: 'Ajustes de cada integración por holding: habilitación de la corrida automática (cron; fila ausente = habilitado) y reglas (settings).',
 })
-@Check('holding_integration_settings_integration_check', `integration IN ('odoo', 'salesforce', 'bigquery', 'stripe')`)
+@Check('holding_integration_settings_integration_check', `integration IN ('odoo', 'salesforce', 'bigquery', 'stripe', 'kame')`)
 export class HoldingIntegrationSettings {
 	@PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'holding_integration_settings_pkey' })
 	holding_id: string;

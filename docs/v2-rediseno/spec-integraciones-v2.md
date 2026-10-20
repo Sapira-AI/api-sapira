@@ -151,7 +151,9 @@ Prevalecen sobre §2 cuando chocan.
 - **A9 · Para Leon (lógica de integración, no interfaz)**: traer del ERP solo las facturas que no nacieron en Sapira
   (sueltas o legacy); notas de crédito; **estados de pago desde el ERP** (hoy todo queda pendiente de pago y no se puede
   conciliar; una actualización masiva sirve de una vez, pero lo correcto es la sincronización continua). Integración
-  Kame (TiMining) sobre el mismo esquema de A2.
+  Kame (TiMining) sobre el mismo esquema de A2. **19-10:** Kame entra como segundo sistema del ERP, con conexión por compañía y
+  ambientes de pruebas y producción. Registra las facturas emitidas en Sapira y los asientos de devengo: [`front-sapira/docs/integracion-kame/README.md`](../../../front-sapira/docs/integracion-kame/README.md),
+  contrato §10.
 - **A10 · Roadmap**: conectar bancos de las compañías del holding (Chile) con Emisso Connect
   (https://connect.emisso.ai/docs, p. ej. BCI Pyme). Domi ya habló con ellos; se contrata después del switch. El diseño
   de A2 debe permitirlo (categoría "Bancos").
