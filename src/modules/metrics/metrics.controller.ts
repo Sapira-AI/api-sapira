@@ -128,9 +128,9 @@ export class MetricsController {
 
 	@Get('sellers')
 	@ApiOperation({
-		summary: 'Vendedores: funnel por vendedor y período',
+		summary: 'Vendedores: oportunidades ganadas por vendedor y período (v2, 22-10)',
 		description:
-			'Cotizaciones creadas → cerradas (etapa firmada/contrato creado o con contrato vinculado) → con contrato → facturado y cobrado, en moneda de sistema. `{ currency, from, to, team{…, sellers_with_sales}, rows[{ seller_id, seller_name, is_active, created, closed, lost, with_contract, conversion, tcv, mrr, billed, collected, cycle_days, days_to_first_invoice }], no_seller{ contracts, tcv, mrr, billed, collected } }`. `companyId` acota a negocios con contrato en esas compañías; `sellerId` a esos vendedores',
+			'Negocios = cotizaciones cerradas por su fecha de cierre (booking, la del CRM): etapa firmada/contrato creado o con contrato vinculado. Por vendedor: negocios y por tipo (new_business, upsell, downsell, other), con/sin contrato, sin facturar aún, mrr (ítems vinculados menos reemplazados: downsell negativo), facturado y cobrado del contrato desde el cierre hasta hoy, % de facturas pagadas, períodos facturados promedio, días cierre → inicio, → 1ª factura, → pago (solo con pagos con fecha), contratos cancelados y facturas anuladas. `{ currency, from, to, type, team{…, sellers_with_deals, sellers}, rows[], trend[{ month, deals, mrr{ new_business, upsell, downsell, other } }], no_seller{ contracts, mrr, billed, collected, contracts_cancelled } }`. `type` acota la familia; `companyId` a negocios con contrato en esas compañías; `sellerId` a esos vendedores',
 	})
 	async sellersFunnel(@Query() query: SellersDto, @HoldingId() holdingId: string) {
 		return await this.sellers.funnel(holdingId, query);
@@ -141,7 +141,7 @@ export class MetricsController {
 	@ApiOperation({
 		summary: 'Vendedores: negocios de un vendedor en el período',
 		description:
-			'Paginado `{ currency, data, total, currentPage, pages, limit }`. Vendedor: cotizaciones creadas o cerradas en el período con etapa, cliente, fechas, monto, contrato vinculado (id y número), tcv, mrr, facturado y cobrado; los cerrados en el período primero. `none`: contratos del período sin cotización con vendedor',
+			'Paginado `{ currency, data, total, currentPage, pages, limit }` (`limit` ≤ 1000), los más recientes primero. Vendedor: `{ quote_id, quote_number, client_name, quote_type, type, type_label, stage, closed_on, amount, currency, contract{ id, number, status } | null, contracts_count, started_on, mrr, billed, collected, first_invoice_on, first_payment_on, periods, paid_periods, invoices_cancelled, contract_cancelled, days_to_start, days_to_first_invoice, days_to_payment }`. `none`: `{ contract{ id, number, status }, client_name, contract_on, mrr, billed, collected, periods, first_invoice_on, days_to_first_invoice, contract_cancelled }`',
 	})
 	async sellerDeals(@Param('sellerId') sellerId: string, @Query() query: SellerDealsDto, @HoldingId() holdingId: string) {
 		if (sellerId !== 'none' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sellerId)) {

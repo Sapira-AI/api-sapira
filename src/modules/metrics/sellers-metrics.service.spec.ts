@@ -1,7 +1,7 @@
 import { DataSource } from 'typeorm';
 
 import { MetricsDataService } from './metrics-data.service';
-import { aggregate, nextMonthStart, type SellerDeal, SellersMetricsService } from './sellers-metrics.service';
+import { aggregate, daysBetween, dealTypeOf, nextMonthStart, type SellerDeal, SellersMetricsService, trend } from './sellers-metrics.service';
 
 const HOLDING = '11111111-1111-4111-8111-111111111111';
 const ANA = '22222222-2222-4222-8222-222222222222';
@@ -18,7 +18,7 @@ function build(rows: Impl = () => []) {
 	return { query, service: new SellersMetricsService(data) };
 }
 
-/** Fila de la base tal como la devuelve el SQL de negocios. */
+/** Fila de la base tal como la devuelve el SQL de negocios cerrados. */
 const dealRow = (over: Record<string, unknown>) => ({
 	id: 'q-1',
 	quote_number: 'COT-1',
@@ -27,23 +27,27 @@ const dealRow = (over: Record<string, unknown>) => ({
 	client_id: 'c-1',
 	client_name: 'Acme',
 	quote_type: 'Nuevo cliente',
-	stage: 'Enviada',
-	stage_kind: 'sent',
-	created_on: '2026-02-10',
-	booking_date: null,
+	stage: 'Firmada',
+	stage_kind: 'signed',
+	booking_date: '2026-02-10',
+	closed_on: '2026-02-10',
 	amount: 1000,
 	currency: 'USD',
-	first_contract_on: null,
-	contracts_count: 0,
-	contract_ref: null,
-	tcv: 0,
-	mrr: 0,
-	billed: 0,
-	collected: 0,
-	first_invoice_on: null,
-	closed: false,
-	lost: false,
-	closed_on: null,
+	contracts_count: 1,
+	started_on: '2026-02-20',
+	contract_ref: 'k1|CTR-9|Activo',
+	contract_cancelled: false,
+	items_count: 2,
+	items_without_mrr: 0,
+	mrr_new: 150,
+	mrr_replaced: 0,
+	billed: 300,
+	collected: 150,
+	periods: 2,
+	paid_periods: 1,
+	invoices_cancelled: 0,
+	first_invoice_on: '2026-03-01',
+	first_payment_on: null,
 	...over,
 });
 
@@ -54,242 +58,272 @@ const sellerRows = [
 ];
 
 const db =
-	(deals: Array<Record<string, unknown>>, noSeller = { contracts: 2, tcv: 500, mrr: 50, billed: 100, collected: 60 }): Impl =>
+	(
+		deals: Array<Record<string, unknown>>,
+		noSeller: Record<string, unknown> = { contracts: 2, mrr: 50, billed: 100, collected: 60, contracts_cancelled: 1 }
+	): Impl =>
 	(sql) =>
-		sql.includes('FROM sellers s')
-			? sellerRows
-			: sql.includes('WITH links AS')
-				? deals
-				: sql.includes('FROM contracts c LEFT JOIN clients cl')
-					? [noSeller]
-					: [];
+		sql.includes('FROM sellers s') ? sellerRows : sql.includes('WITH items AS') ? deals : sql.includes('WITH base AS') ? [noSeller] : [];
 
-describe('aggregate (funnel de un conjunto de negocios)', () => {
-	const period = { from: '2026-01-01', to: '2026-04-01' };
-	const deals: SellerDeal[] = [
-		// Creada y cerrada en el período, con contrato facturado y cobrado.
-		{
+describe('reglas puras del panel de vendedores v2', () => {
+	it('familia de tipo, días entre fechas y tope del período', () => {
+		expect(dealTypeOf('new_business')).toBe('new_business');
+		expect(dealTypeOf('cross_sell')).toBe('upsell');
+		expect(dealTypeOf('downsell')).toBe('downsell');
+		expect(dealTypeOf('renewal')).toBe('other');
+		expect(dealTypeOf(null)).toBe('other');
+		expect(daysBetween('2026-01-05', '2026-01-25')).toBe(20);
+		expect(daysBetween('2026-01-05', null)).toBeNull();
+		expect(nextMonthStart('2026-12')).toBe('2027-01-01');
+	});
+
+	it('aggregate: conteos por tipo, MRR sumando solo los que lo tienen (downsell negativo), sin facturar, % pagado, promedios y reversiones', () => {
+		const base: SellerDeal = {
 			quote_id: 'a',
 			quote_number: 'A',
 			seller_id: ANA,
 			seller_name: 'Ana',
 			client_id: null,
 			client_name: null,
-			quote_type: null,
+			quote_type: 'Nuevo cliente',
+			type_code: 'new_business',
+			type: 'new_business',
+			type_label: 'Nuevo negocio',
 			stage: 'Firmada',
-			stage_kind: 'signed',
-			created_on: '2026-01-05',
-			closed: true,
-			lost: false,
-			closed_on: '2026-01-25',
+			closed_on: '2026-01-05',
 			amount: 100,
 			currency: 'USD',
-			contract: { id: 'k1', number: 'CTR-1' },
+			contract: { id: 'k1', number: 'CTR-1', status: 'Activo' },
 			contracts_count: 1,
-			tcv: 1200,
+			started_on: '2026-01-15',
 			mrr: 100,
 			billed: 300,
 			collected: 200,
 			first_invoice_on: '2026-02-01',
-		},
-		// Creada antes del período y cerrada dentro: cuenta como cerrada pero no como creada.
-		{
-			quote_id: 'b',
-			quote_number: 'B',
-			seller_id: ANA,
-			seller_name: 'Ana',
-			client_id: null,
-			client_name: null,
-			quote_type: null,
-			stage: 'Enviada',
-			stage_kind: 'sent',
-			created_on: '2025-12-01',
-			closed: true,
-			lost: false,
-			closed_on: '2026-03-10',
-			amount: 100,
-			currency: 'USD',
-			contract: null,
-			contracts_count: 0,
-			tcv: 0,
-			mrr: 0,
-			billed: 0,
-			collected: 0,
-			first_invoice_on: null,
-		},
-		// Creada en el período, perdida.
-		{
-			quote_id: 'c',
-			quote_number: 'C',
-			seller_id: ANA,
-			seller_name: 'Ana',
-			client_id: null,
-			client_name: null,
-			quote_type: null,
-			stage: 'Rechazada',
-			stage_kind: 'lost',
-			created_on: '2026-02-01',
-			closed: false,
-			lost: true,
-			closed_on: null,
-			amount: 100,
-			currency: 'USD',
-			contract: null,
-			contracts_count: 0,
-			tcv: 0,
-			mrr: 0,
-			billed: 0,
-			collected: 0,
-			first_invoice_on: null,
-		},
-		// Creada en el período, cerrada después del período: cuenta como creada, no como cerrada.
-		{
-			quote_id: 'd',
-			quote_number: 'D',
-			seller_id: ANA,
-			seller_name: 'Ana',
-			client_id: null,
-			client_name: null,
-			quote_type: null,
-			stage: 'Firmada',
-			stage_kind: 'signed',
-			created_on: '2026-03-20',
-			closed: true,
-			lost: false,
-			closed_on: '2026-04-02',
-			amount: 100,
-			currency: 'USD',
-			contract: null,
-			contracts_count: 0,
-			tcv: 999,
-			mrr: 9,
-			billed: 9,
-			collected: 9,
-			first_invoice_on: null,
-		},
-	];
-
-	it('cuenta creadas y cerradas por su propia fecha, suma el dinero solo de los cierres del período y promedia ciclo y días a la primera factura', () => {
-		const row = aggregate(ANA, 'Ana', true, deals, period.from, period.to);
+			first_payment_on: '2026-02-20',
+			periods: 3,
+			paid_periods: 2,
+			invoices_cancelled: 1,
+			contract_cancelled: false,
+			days_to_start: 10,
+			days_to_first_invoice: 27,
+			days_to_payment: 19,
+		};
+		const deals: SellerDeal[] = [
+			base,
+			{
+				...base,
+				quote_id: 'b',
+				type_code: 'downsell',
+				type: 'downsell',
+				type_label: 'Downsell',
+				mrr: -40,
+				billed: 0,
+				collected: 0,
+				first_invoice_on: null,
+				first_payment_on: null,
+				periods: 0,
+				paid_periods: 0,
+				invoices_cancelled: 0,
+				days_to_start: 20,
+				days_to_first_invoice: null,
+				days_to_payment: null,
+			},
+			{
+				...base,
+				quote_id: 'c',
+				type_code: 'upsell',
+				type: 'upsell',
+				type_label: 'Upsell',
+				contract: null,
+				contracts_count: 0,
+				started_on: null,
+				mrr: null,
+				billed: 0,
+				collected: 0,
+				first_invoice_on: null,
+				first_payment_on: null,
+				periods: 0,
+				paid_periods: 0,
+				invoices_cancelled: 0,
+				contract_cancelled: true,
+				days_to_start: null,
+				days_to_first_invoice: null,
+				days_to_payment: null,
+			},
+		];
+		const row = aggregate(ANA, 'Ana', true, deals);
 
 		expect(row).toEqual({
 			seller_id: ANA,
 			seller_name: 'Ana',
 			is_active: true,
-			created: 3,
-			closed: 2,
-			lost: 1,
-			with_contract: 1,
-			conversion: 0.667,
-			tcv: 1200,
-			mrr: 100,
+			deals: 3,
+			by_type: { new_business: 1, upsell: 1, downsell: 1, other: 0 },
+			with_contract: 2,
+			without_contract: 1,
+			not_invoiced: 1,
+			mrr: 60,
 			billed: 300,
 			collected: 200,
-			cycle_days: 59.5,
-			days_to_first_invoice: 7,
+			paid_share: 0.667,
+			periods_avg: 1.5,
+			days_to_start: 15,
+			days_to_first_invoice: 27,
+			days_to_payment: 19,
+			contracts_cancelled: 1,
+			invoices_cancelled: 1,
 		});
-		expect(aggregate(null, 'Equipo', true, [], period.from, period.to)).toMatchObject({
-			created: 0,
-			closed: 0,
-			conversion: null,
-			cycle_days: null,
+		expect(aggregate(null, 'Equipo', true, [])).toMatchObject({
+			deals: 0,
+			mrr: 0,
+			paid_share: null,
+			periods_avg: null,
 			days_to_first_invoice: null,
 		});
-		expect(nextMonthStart('2026-12')).toBe('2027-01-01');
+		expect(trend(deals, ['2025-12', '2026-01'])).toEqual([
+			{ month: '2025-12', deals: 0, mrr: { new_business: 0, upsell: 0, downsell: 0, other: 0 } },
+			{ month: '2026-01', deals: 3, mrr: { new_business: 100, upsell: 0, downsell: -40, other: 0 } },
+		]);
 	});
 });
 
-describe('SellersMetricsService', () => {
-	it('funnel: una fila por vendedor activo (los inactivos solo con actividad), total del equipo con vendedores con ventas y "Sin vendedor"', async () => {
+describe('SellersMetricsService v2', () => {
+	it('panel: filas por vendedor activo (inactivos solo con negocios), equipo con conteo de vendedores, tendencia y Sin vendedor; MRR = ítems vinculados menos reemplazados', async () => {
 		const { service, query } = build(
 			db([
+				dealRow({ id: 'q-1', closed_on: '2026-02-10' }),
 				dealRow({
-					id: 'q-1',
-					created_on: '2026-02-10',
-					closed: true,
-					closed_on: '2026-02-20',
-					contracts_count: 1,
-					contract_ref: 'k1|CTR-9',
-					tcv: 1200,
-					mrr: 100,
-					billed: 300,
-					collected: 200,
-					first_invoice_on: '2026-03-01',
+					id: 'q-2',
+					seller_id: LUIS,
+					seller_name: 'Luis',
+					quote_type: 'Downselling',
+					closed_on: '2026-03-03',
+					mrr_new: 60,
+					mrr_replaced: 100,
+					started_on: '2026-03-01',
+					periods: 0,
+					paid_periods: 0,
+					billed: 0,
+					collected: 0,
+					first_invoice_on: null,
 				}),
-				dealRow({ id: 'q-2', seller_id: LUIS, seller_name: 'Luis', created_on: '2026-02-11' }),
-				dealRow({ id: 'q-3', seller_id: null, seller_name: null, created_on: '2026-02-12', closed: true, closed_on: '2026-02-13' }),
+				dealRow({ id: 'q-3', seller_id: null, seller_name: null, closed_on: '2026-02-12' }),
+				dealRow({
+					id: 'q-4',
+					quote_type: 'Upselling',
+					closed_on: '2026-02-15',
+					items_count: 1,
+					items_without_mrr: 1,
+					mrr_new: 0,
+					contract_ref: null,
+					contracts_count: 0,
+					started_on: null,
+					billed: 0,
+					collected: 0,
+					periods: 0,
+					paid_periods: 0,
+					first_invoice_on: null,
+				}),
 			])
 		);
 		const result = await service.funnel(HOLDING, { from: '2026-01', to: '2026-03' });
 
 		expect(result.currency).toBe('USD');
-		expect(result.rows.map((row) => [row.seller_name, row.created, row.closed, row.with_contract, row.tcv])).toEqual([
-			['Ana', 1, 1, 1, 1200],
-			['Luis', 1, 0, 0, 0],
+		expect(result.rows.map((row) => [row.seller_name, row.deals, row.with_contract, row.mrr, row.by_type.upsell])).toEqual([
+			['Ana', 2, 1, 150, 1],
+			['Luis', 1, 1, -40, 0],
 		]);
-		// El equipo solo suma negocios con vendedor; la cotización sin vendedor no entra.
-		expect(result.team).toMatchObject({ created: 2, closed: 1, sellers_with_sales: 1, tcv: 1200, billed: 300, collected: 200 });
-		expect(result.no_seller).toEqual({ contracts: 2, tcv: 500, mrr: 50, billed: 100, collected: 60 });
-		const [sql, params] = query.mock.calls.find(([text]) => String(text).includes('WITH links AS')) as [string, unknown[]];
+		expect(result.team).toMatchObject({ deals: 3, mrr: 110, sellers_with_deals: 2, sellers: 2, billed: 300 });
+		expect(result.trend.map((month) => [month.month, month.deals, month.mrr.new_business, month.mrr.downsell])).toEqual([
+			['2026-01', 0, 0, 0],
+			['2026-02', 2, 150, 0],
+			['2026-03', 1, 0, -40],
+		]);
+		expect(result.no_seller).toEqual({ contracts: 2, mrr: 50, billed: 100, collected: 60, contracts_cancelled: 1 });
+		const [sql, params] = query.mock.calls.find(([text]) => String(text).includes('WITH items AS')) as [string, unknown[]];
 
-		// Cerrada = etapa firmada/contrato creado o contrato vinculado; vínculo por quote_id o por ítems; período como $-params.
 		expect(sql).toContain("d.stage_kind IN ('signed', 'contract_created') OR d.contracts_count > 0");
 		expect(sql).toContain('JOIN quote_items qi ON qi.id = ci.quote_item_id');
-		expect(sql).toContain("i.status = 'Pagada'");
+		expect(sql).toContain('contract_amendment_items ai ON ai.new_item_id = i.item_id');
+		expect(sql).toContain('inv.issue_date >= k.closed_on');
+		expect(sql).toContain('LEFT JOIN agg ON agg.quote_id = k.id');
+		expect(sql).toContain('inv AS MATERIALIZED');
+		expect(sql).toContain("inv.status = 'Cancelada'");
 		expect(params.slice(0, 3)).toEqual([HOLDING, '2026-01-01', '2026-04-01']);
-		expect(sql).not.toMatch(/\$\d+\s*$/);
+		expect(params[4]).toEqual(['Emitida', 'Enviada', 'Vencida', 'Pagada']);
+		// Un negocio cuyos ítems no tienen devengo todavía no inventa MRR.
+		const sinMrr = result.rows[0];
+
+		expect(sinMrr.without_contract).toBe(1);
 	});
 
-	it('funnel con sellerId: filtra cotizaciones y vendedores, y no calcula "Sin vendedor"', async () => {
-		const { service, query } = build(db([dealRow({ created_on: '2026-02-10' })]));
-		const result = await service.funnel(HOLDING, { from: '2026-02', to: '2026-02', sellerId: ANA });
+	it('filtro de tipo y de vendedor: acota filas, equipo y tendencia; con sellerId no calcula Sin vendedor', async () => {
+		const { service, query } = build(
+			db([
+				dealRow({ id: 'q-1', closed_on: '2026-02-10' }),
+				dealRow({ id: 'q-2', quote_type: 'Upselling', closed_on: '2026-02-11', mrr_new: 20 }),
+			])
+		);
+		const porTipo = await service.funnel(HOLDING, { from: '2026-02', to: '2026-02', type: 'upsell' });
 
-		expect(result.rows.map((row) => row.seller_name)).toEqual(['Ana', 'Luis']);
-		expect(result.no_seller).toEqual({ contracts: 0, tcv: 0, mrr: 0, billed: 0, collected: 0 });
-		const dealsSql = String(query.mock.calls.find(([text]) => String(text).includes('WITH links AS'))?.[0]);
+		expect(porTipo.rows[0]).toMatchObject({ seller_name: 'Ana', deals: 1, mrr: 20 });
+		expect(porTipo.team.deals).toBe(1);
+		const porVendedor = await service.funnel(HOLDING, { from: '2026-02', to: '2026-02', sellerId: ANA });
 
-		expect(dealsSql).toContain('q.seller_id = ANY(');
-		expect(query.mock.calls.some(([text]) => String(text).includes('FROM contracts c LEFT JOIN clients cl'))).toBe(false);
+		expect(porVendedor.rows.map((row) => row.seller_name)).toEqual(['Ana', 'Luis']);
+		expect(porVendedor.no_seller).toEqual({ contracts: 0, mrr: 0, billed: 0, collected: 0, contracts_cancelled: 0 });
+		expect(String(query.mock.calls.filter(([text]) => String(text).includes('WITH items AS')).at(-1)?.[0])).toContain('q.seller_id = ANY(');
 	});
 
-	it('detalle de un vendedor: paginado, los cerrados en el período primero; `none` lista los contratos sin vendedor', async () => {
+	it('detalle: negocios del vendedor paginados y con su línea de tiempo; `none` lista los contratos sin vendedor con sus días a la primera factura', async () => {
 		const { service } = build(
 			db(
 				[
-					dealRow({ id: 'q-1', quote_number: 'COT-1', created_on: '2026-02-10' }),
-					dealRow({
-						id: 'q-2',
-						quote_number: 'COT-2',
-						created_on: '2026-01-10',
-						closed: true,
-						closed_on: '2026-02-20',
-						contracts_count: 1,
-						contract_ref: 'k1|CTR-9',
-						tcv: 1200,
-					}),
-					dealRow({ id: 'q-3', quote_number: 'COT-3', created_on: '2026-02-12', closed: true, closed_on: '2026-05-01' }),
+					dealRow({ id: 'q-1', quote_number: 'COT-1', closed_on: '2026-02-10' }),
+					dealRow({ id: 'q-2', quote_number: 'COT-2', closed_on: '2026-02-20', first_payment_on: '2026-03-15' }),
 				],
 				{
 					id: 'k2',
 					contract_number: 'CTR-2',
+					status: 'Cancelado',
 					client_name: 'Beta',
 					contract_on: '2026-02-01',
-					tcv: 50,
 					mrr: 5,
 					billed: 10,
 					collected: 0,
-				} as never
+					periods: 1,
+					first_invoice_on: '2026-02-11',
+				}
 			)
 		);
-		const page = await service.sellerDeals(HOLDING, ANA, { from: '2026-01', to: '2026-03', page: 1, limit: 2 });
+		const page = await service.sellerDeals(HOLDING, ANA, { from: '2026-01', to: '2026-03', page: 1, limit: 1 });
 
-		expect(page).toMatchObject({ currency: 'USD', total: 3, pages: 2, currentPage: 1, limit: 2 });
-		expect(page.data.map((deal) => (deal as { quote_number: string }).quote_number)).toEqual(['COT-2', 'COT-3']);
-		expect(page.data[0]).toMatchObject({ contract: { id: 'k1', number: 'CTR-9' }, closed_in_period: true, tcv: 1200 });
+		expect(page).toMatchObject({ currency: 'USD', total: 2, pages: 2, currentPage: 1, limit: 1 });
+		expect(page.data[0]).toMatchObject({
+			quote_number: 'COT-2',
+			type: 'new_business',
+			type_label: 'Nuevo negocio',
+			contract: { id: 'k1', number: 'CTR-9', status: 'Activo' },
+			days_to_start: 0,
+			days_to_first_invoice: 9,
+			days_to_payment: 14,
+		});
 		const none = await service.sellerDeals(HOLDING, 'none', { from: '2026-01', to: '2026-03' });
 
 		expect(none.data).toEqual([
-			{ contract: { id: 'k2', number: 'CTR-2' }, client_name: 'Beta', contract_on: '2026-02-01', tcv: 50, mrr: 5, billed: 10, collected: 0 },
+			{
+				contract: { id: 'k2', number: 'CTR-2', status: 'Cancelado' },
+				client_name: 'Beta',
+				contract_on: '2026-02-01',
+				mrr: 5,
+				billed: 10,
+				collected: 0,
+				periods: 1,
+				first_invoice_on: '2026-02-11',
+				days_to_first_invoice: 10,
+				contract_cancelled: true,
+			},
 		]);
 	});
 });
