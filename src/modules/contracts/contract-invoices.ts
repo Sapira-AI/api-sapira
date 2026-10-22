@@ -356,7 +356,7 @@ export const effectiveFxPolicy = (
 ): StoredFxPolicy | null =>
 	!isMultiCurrency(invoice)
 		? 'same_currency'
-		: invoice.fx_contract_to_invoice !== null
+		: invoice.fx_contract_to_invoice !== null && (invoice as { fx_rate_source?: FxRateSource | null }).fx_rate_source !== 'spot'
 			? 'fixed'
 			: context.contract_fx_invoice_policy === 'fixed'
 				? 'fixed'
@@ -364,10 +364,14 @@ export const effectiveFxPolicy = (
 					? 'spot'
 					: null;
 
-/** Política derivada de la factura sola (sin mirar el contrato): la que ven la lista, el detalle y los eventos. */
+/**
+ * Política derivada de la factura sola (sin mirar el contrato): la que ven la lista, el detalle y los eventos. Una spot ya valorizada al
+ * enviar guarda la tasa realizada con `fx_rate_source = 'spot'`: sigue siendo spot (no "Fija"), decisión Domi 22-10.
+ */
 export const derivedFxPolicy = (
-	invoice: Pick<ContractInvoiceRow, 'fx_contract_to_invoice' | 'contract_currency' | 'invoice_currency'>
-): StoredFxPolicy => (!isMultiCurrency(invoice) ? 'same_currency' : invoice.fx_contract_to_invoice !== null ? 'fixed' : 'spot');
+	invoice: Pick<ContractInvoiceRow, 'fx_contract_to_invoice' | 'contract_currency' | 'invoice_currency'> & { fx_rate_source?: FxRateSource | null }
+): StoredFxPolicy =>
+	!isMultiCurrency(invoice) ? 'same_currency' : invoice.fx_contract_to_invoice === null || invoice.fx_rate_source === 'spot' ? 'spot' : 'fixed';
 
 /** Tasa con la que se valorizaría hoy: la fija de la factura, o la pegada por el contrato; null en spot sin tasa. */
 export const effectiveFxRate = (invoice: Pick<ContractInvoiceRow, 'fx_contract_to_invoice'>) => invoice.fx_contract_to_invoice;

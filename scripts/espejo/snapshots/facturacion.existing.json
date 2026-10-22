@@ -2809,6 +2809,127 @@
     "scale": null,
     "array": false
    },
+   "dte_id": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "dte_tipo": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "dte_folio": {
+    "type": "integer",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "dte_track_id": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "dte_environment": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "dte_status": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "dte_status_detail": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "dte_status_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "dte_receptor_email": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "dte_receptor_sent_at": {
+    "type": "timestamp with time zone",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "dte_receptor_error": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "subscription_id": {
     "type": "uuid",
     "nullable": true,
@@ -2963,6 +3084,13 @@
     "unique": false,
     "where": "(consolidated_into_invoice_id IS NOT NULL)"
    },
+   "idx_invoices_dte_status_enviado": {
+    "columns": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": "(dte_status = 'enviado'::text)"
+   },
    "idx_invoices_auto_invoice": {
     "columns": [
      "auto_invoice",
@@ -3001,6 +3129,14 @@
    {
     "name": "invoices_export_type_check",
     "expression": "((export_type = ANY (ARRAY[0, 1])))"
+   },
+   {
+    "name": "invoices_dte_environment_check",
+    "expression": "((dte_environment IS NULL) OR (dte_environment = ANY (ARRAY['certificacion'::text, 'produccion'::text])))"
+   },
+   {
+    "name": "invoices_dte_status_check",
+    "expression": "((dte_status IS NULL) OR (dte_status = ANY (ARRAY['creado'::text, 'enviado'::text, 'aceptado'::text, 'reparos'::text, 'rechazado'::text])))"
    },
    {
     "name": "invoices_document_type_check",

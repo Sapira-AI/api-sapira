@@ -5,6 +5,7 @@ import {
 	type ContractInvoiceContext,
 	type ContractInvoiceLineRow,
 	type ContractInvoiceRow,
+	derivedFxPolicy,
 	effectiveFxPolicy,
 	fixedFxLines,
 	INVOICE_EVENT_TYPES,
@@ -102,6 +103,18 @@ const line = (overrides: Partial<ContractInvoiceLineRow> = {}): ContractInvoiceL
 });
 
 const codes = (list: Array<{ code: string }>) => list.map((entry) => entry.code);
+
+describe('derivedFxPolicy (Domi 22-10: spot valorizada sigue siendo spot)', () => {
+	const base = { contract_currency: 'CLF', invoice_currency: 'CLP' };
+
+	it('sin tasa → spot; con tasa de origen spot → spot; con tasa manual o net_exact → fixed; misma moneda → same_currency', () => {
+		expect(derivedFxPolicy({ ...base, fx_contract_to_invoice: null })).toBe('spot');
+		expect(derivedFxPolicy({ ...base, fx_contract_to_invoice: 38500, fx_rate_source: 'spot' })).toBe('spot');
+		expect(derivedFxPolicy({ ...base, fx_contract_to_invoice: 38500, fx_rate_source: 'manual' })).toBe('fixed');
+		expect(derivedFxPolicy({ ...base, fx_contract_to_invoice: 38500, fx_rate_source: null })).toBe('fixed');
+		expect(derivedFxPolicy({ contract_currency: 'CLP', invoice_currency: 'CLP', fx_contract_to_invoice: null })).toBe('same_currency');
+	});
+});
 
 describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 	describe('bloqueos comunes', () => {

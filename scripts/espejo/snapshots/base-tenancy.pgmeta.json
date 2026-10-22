@@ -486,6 +486,39 @@
     ]
    },
    {
+    "name": "holding_inbound_email_domains_created_by_fkey",
+    "source_table": "public.holding_inbound_email_domains",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "import_batches_created_by_fkey",
+    "source_table": "public.import_batches",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "import_batches_reverted_by_fkey",
+    "source_table": "public.import_batches",
+    "source_columns": [
+     "reverted_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "invoice_adjustments_adjusted_by_fkey",
     "source_table": "public.invoice_adjustments",
     "source_columns": [
@@ -1799,6 +1832,17 @@
     ]
    },
    {
+    "name": "holding_inbound_email_domains_holding_id_fkey",
+    "source_table": "public.holding_inbound_email_domains",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "holding_integration_settings_holding_id_fkey",
     "source_table": "public.holding_integration_settings",
     "source_columns": [
@@ -1812,6 +1856,28 @@
    {
     "name": "holding_settings_holding_id_fkey",
     "source_table": "public.holding_settings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "import_batch_rows_holding_id_fkey",
+    "source_table": "public.import_batch_rows",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "import_batches_holding_id_fkey",
+    "source_table": "public.import_batches",
     "source_columns": [
      "holding_id"
     ],

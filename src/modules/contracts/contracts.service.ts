@@ -851,6 +851,8 @@ export class ContractsService {
 				inv.invoices_count, inv.invoiced_total,
 				(SELECT COUNT(*) FROM invoices i
 					WHERE i.contract_id = c.id AND i.holding_id = $2 AND i.is_active = true AND i.status = 'Por Emitir'
+						-- Una unificada o consolidada spot multimoneda no tiene encabezado hasta emitir (spec multimoneda §7): no es un descuadre (Domi 22-10).
+						AND NOT (i.amount_contract_currency IS NULL AND i.invoice_type IN ('Unificada', 'Consolidada'))
 						AND ABS(COALESCE(i.amount_contract_currency, 0)
 							- COALESCE((SELECT SUM(ii.subtotal_contract_currency) FROM invoice_items ii WHERE ii.invoice_id = i.id), 0)) > 0.01
 				) AS header_vs_lines,

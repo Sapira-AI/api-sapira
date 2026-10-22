@@ -1385,6 +1385,16 @@
     "expr": "document_type = ANY (ARRAY['FACTURA'::text, 'NC'::text, 'ND'::text, 'FACTURA_EXPORTACION'::text, 'Invoice'::text])"
    },
    {
+    "name": "invoices_dte_environment_check",
+    "type": "c",
+    "expr": "(dte_environment IS NULL) OR (dte_environment = ANY (ARRAY['certificacion'::text, 'produccion'::text]))"
+   },
+   {
+    "name": "invoices_dte_status_check",
+    "type": "c",
+    "expr": "(dte_status IS NULL) OR (dte_status = ANY (ARRAY['creado'::text, 'enviado'::text, 'aceptado'::text, 'reparos'::text, 'rechazado'::text]))"
+   },
+   {
     "name": "invoices_export_type_check",
     "type": "c",
     "expr": "export_type = ANY (ARRAY[0, 1])"
@@ -1486,6 +1496,14 @@
     "unique": false,
     "where": null,
     "expr": "CREATE INDEX idx_invoices_custom_fields ON public.invoices USING gin (custom_fields)"
+   },
+   {
+    "name": "idx_invoices_dte_status_enviado",
+    "cols": [
+     "holding_id"
+    ],
+    "unique": false,
+    "where": "dte_status = 'enviado'::text"
    },
    {
     "name": "idx_invoices_group_id",

@@ -1,5 +1,5 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiHeader, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
 import { HoldingId } from '@/decorators/holding-id.decorator';
@@ -20,10 +20,13 @@ import {
 	RevenueForwardDto,
 	RevenueJournalDto,
 	RevenueScheduleDto,
+	SellerDealsDto,
+	SellersDto,
 } from './dtos/query-metrics.dto';
 import { MetricsDataService } from './metrics-data.service';
 import { MrrMetricsService } from './mrr-metrics.service';
 import { RevenueMetricsService } from './revenue-metrics.service';
+import { SellersMetricsService } from './sellers-metrics.service';
 
 /**
  * Revenue y Métricas v2 (`docs/v2-rediseno/spec-revenue-y-metricas.md` §3): solo lectura sobre el devengo (RSM) y el MRR legacy.
@@ -43,6 +46,7 @@ export class MetricsController {
 	constructor(
 		private readonly mrr: MrrMetricsService,
 		private readonly revenue: RevenueMetricsService,
+		private readonly sellers: SellersMetricsService,
 		private readonly data: MetricsDataService
 	) {}
 
@@ -120,6 +124,31 @@ export class MetricsController {
 	@ApiOperation({ summary: 'Bookings (TCV)', description: 'Valor total de contratos por mes de booking, compañía o cliente, en moneda de sistema' })
 	async bookings(@Query() query: BookingsDto, @HoldingId() holdingId: string) {
 		return await this.mrr.bookings(holdingId, query);
+	}
+
+	@Get('sellers')
+	@ApiOperation({
+		summary: 'Vendedores: oportunidades ganadas por vendedor y período (v2, 22-10)',
+		description:
+			'Negocios = cotizaciones cerradas por su fecha de cierre (booking, la del CRM): etapa firmada/contrato creado o con contrato vinculado. Por vendedor: negocios y por tipo (new_business, upsell, downsell, other), con/sin contrato, sin facturar aún, mrr (ítems vinculados menos reemplazados: downsell negativo), facturado y cobrado del contrato desde el cierre hasta hoy, % de facturas pagadas, períodos facturados promedio, días cierre → inicio, → 1ª factura, → pago (solo con pagos con fecha), contratos cancelados y facturas anuladas. `{ currency, from, to, type, team{…, sellers_with_deals, sellers}, rows[], trend[{ month, deals, mrr{ new_business, upsell, downsell, other } }], no_seller{ contracts, mrr, billed, collected, contracts_cancelled } }`. `type` acota la familia; `companyId` a negocios con contrato en esas compañías; `sellerId` a esos vendedores',
+	})
+	async sellersFunnel(@Query() query: SellersDto, @HoldingId() holdingId: string) {
+		return await this.sellers.funnel(holdingId, query);
+	}
+
+	@Get('sellers/:sellerId/deals')
+	@ApiParam({ name: 'sellerId', description: 'uuid del vendedor o `none` (contratos sin vendedor)' })
+	@ApiOperation({
+		summary: 'Vendedores: negocios de un vendedor en el período',
+		description:
+			'Paginado `{ currency, data, total, currentPage, pages, limit }` (`limit` ≤ 1000), los más recientes primero. Vendedor: `{ quote_id, quote_number, client_name, quote_type, type, type_label, stage, closed_on, amount, currency, contract{ id, number, status } | null, contracts_count, started_on, mrr, billed, collected, first_invoice_on, first_payment_on, periods, paid_periods, invoices_cancelled, contract_cancelled, days_to_start, days_to_first_invoice, days_to_payment }`. `none`: `{ contract{ id, number, status }, client_name, contract_on, mrr, billed, collected, periods, first_invoice_on, days_to_first_invoice, contract_cancelled }`',
+	})
+	async sellerDeals(@Param('sellerId') sellerId: string, @Query() query: SellerDealsDto, @HoldingId() holdingId: string) {
+		if (sellerId !== 'none' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sellerId)) {
+			throw new BadRequestException({ message: 'Vendedor inválido', errors: [{ field: 'sellerId', message: 'uuid o none' }] });
+		}
+
+		return await this.sellers.sellerDeals(holdingId, sellerId, query);
 	}
 
 	@Get('revenue/summary')

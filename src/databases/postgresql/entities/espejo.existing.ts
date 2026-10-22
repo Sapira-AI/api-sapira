@@ -14,6 +14,7 @@ export { AppNotification } from '@/databases/postgresql/entities/automatizacione
 export { ClientAgentConfig } from '@/databases/postgresql/entities/automatizaciones-ia/client-agent-config.entity';
 export { EmailSenderAddress } from '@/databases/postgresql/entities/automatizaciones-ia/email-sender-address.entity';
 export { HoldingEmailSenderSettings } from '@/databases/postgresql/entities/automatizaciones-ia/holding-email-sender-settings.entity';
+export { HoldingInboundEmailDomain } from '@/databases/postgresql/entities/automatizaciones-ia/holding-inbound-email-domain.entity';
 export { NotificationEmailLog } from '@/databases/postgresql/entities/automatizaciones-ia/notification-email-log.entity';
 export { NotificationRoleSubscription } from '@/databases/postgresql/entities/automatizaciones-ia/notification-role-subscription.entity';
 export { RagDocument } from '@/databases/postgresql/entities/automatizaciones-ia/rag-document.entity';
@@ -154,4 +155,3 @@ export { RevenueScheduleMonthly } from '@/databases/postgresql/entities/revenue/
 export { SiiCaf, SiiCertificate, SiiConfiguration } from '@/databases/postgresql/entities/sii/sii.entity';
 export { SubscriptionItem } from '@/databases/postgresql/entities/suscripciones/subscription-item.entity';
 export { Subscription } from '@/databases/postgresql/entities/suscripciones/subscription.entity';
-export { HoldingInboundEmailDomain } from '@/databases/postgresql/entities/automatizaciones-ia/holding-inbound-email-domain.entity';

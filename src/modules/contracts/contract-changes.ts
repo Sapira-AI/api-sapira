@@ -6321,23 +6321,24 @@ export function planItemUpdate(ctx: ChangeContext, req: ContractChangeRequestDto
 	const ends = entries.filter((entry) => entry.end);
 
 	if (commercial.length > 1) p.error('change.items', 'Corrige la cantidad, el precio o el descuento de un ítem a la vez');
-	// Fecha de fin (caso S02762, 07-10): un ítem por cambio, sola o con datos (cuenta, glosa, tipo); nunca con el inicio ni con el valor.
-	if (ends.length && (ends.length > 1 || moves.length || commercial.length))
-		p.error(
-			'change.items',
-			'Corrige la fecha de fin de un ítem a la vez, sin cambiar en el mismo paso la fecha de inicio, la cantidad, el precio o el descuento'
-		);
+	// Fecha de fin (caso S02762, 07-10): un ítem por cambio, sola o con datos (cuenta, glosa, tipo); nunca con el valor. Desde el 22-10
+	// (Domi, caso CTR-2026-164) puede ir junto a la fecha de inicio del MISMO ítem: se mueven las dos en un solo cambio.
+	if (ends.length && (ends.length > 1 || commercial.length || moves.some((move) => move !== ends[0])))
+		p.error('change.items', 'Corrige la fecha de fin de un ítem a la vez, sin cambiar en el mismo paso la cantidad, el precio o el descuento');
 	// Fecha de inicio (CTR-2026-191): un ítem por cambio y sola o con datos (cuenta, glosa, tipo), nunca junto al valor.
 	else if (moves.length > 1 || (moves.length && commercial.length))
 		p.error('change.items', 'Corrige la fecha de inicio de un ítem a la vez, sin cambiar en el mismo paso la cantidad, el precio o el descuento');
 	else {
 		for (const entry of moves) {
-			const extra = startCorrectionSet(p, entry.item, entry.start!, entry.field, anchor);
+			const extra = startCorrectionSet(p, entry.item, entry.start!, entry.field, anchor, entry.end ?? null);
 
 			if (extra) Object.assign(entry.set, extra);
 		}
 		for (const entry of ends) {
-			const extra = endCorrectionSet(p, entry.item, entry.end!, entry.field, anchor);
+			if (!entry.end) continue;
+			// Con el inicio corregido en el mismo cambio, el plazo y el valor del fin se calculan desde el inicio nuevo.
+			const item = entry.start ? { ...entry.item, start_date: entry.start } : entry.item;
+			const extra = endCorrectionSet(p, item, entry.end, entry.field, anchor);
 
 			if (extra) Object.assign(entry.set, extra);
 		}
@@ -6698,7 +6699,14 @@ const isIsoDay = (value: unknown): value is string =>
  * antes. El mes del inicio más temprano debe estar abierto. `term_months` = meses cubiertos; `price`/`final_price` escalan con los meses
  * de ciclo (`monthsBetween`, como al crear), así se respeta cómo se calculó el valor del ítem (modelo de precio, monto fijo).
  */
-function startCorrectionSet(p: Planner, item: ChangeItemRow, to: string, field: string, contractAnchor: number): ItemUpdateSet | null {
+function startCorrectionSet(
+	p: Planner,
+	item: ChangeItemRow,
+	to: string,
+	field: string,
+	contractAnchor: number,
+	explicitEnd: string | null = null
+): ItemUpdateSet | null {
 	const from = item.start_date;
 	const name = item.product_name ?? 'El ítem';
 	const fail = (message: string) => {
@@ -6712,7 +6720,9 @@ function startCorrectionSet(p: Planner, item: ChangeItemRow, to: string, field: 
 		return fail(`"${name}" es un cargo único: su fecha no se corrige aquí (quítalo y agrégalo con la fecha correcta)`);
 	if (REMOVAL_CATEGORIES.has(item.categoria ?? '')) return fail(`"${name}" es el registro de una baja: su inicio no se corrige`);
 	if (item.renews_item_id) return fail(`"${name}" es la renovación de otro ítem: su inicio sigue al fin del anterior`);
-	if (item.end_date && to > item.end_date) return fail(`El inicio no puede quedar después del fin del ítem (${item.end_date})`);
+	// Con el fin corregido en el mismo cambio (Domi 22-10, CTR-2026-164), el inicio se compara con ese fin; su plazo y valor los calcula `endCorrectionSet`.
+	if (explicitEnd && to > explicitEnd) return fail(`El inicio no puede quedar después del fin corregido (${explicitEnd})`);
+	if (!explicitEnd && item.end_date && to > item.end_date) return fail(`El inicio no puede quedar después del fin del ítem (${item.end_date})`);
 	if (item.churn_date && to >= item.churn_date) return fail(`El inicio debe ser anterior a la baja del ítem (${item.churn_date})`);
 	const own = validAnchorDay(item.billing_anchor_day);
 
@@ -6733,7 +6743,7 @@ function startCorrectionSet(p: Planner, item: ChangeItemRow, to: string, field: 
 	p.assertOpenPeriod(to < from ? to : from, 'El inicio del ítem');
 	const set: ItemUpdateSet = { start_date: to };
 
-	if (item.end_date) {
+	if (item.end_date && !explicitEnd) {
 		const anchor = anchorOfItem(item, contractAnchor);
 		const monthsBefore = monthsBetween(from, item.end_date, anchor);
 		const monthsAfter = monthsBetween(to, item.end_date, anchor);
