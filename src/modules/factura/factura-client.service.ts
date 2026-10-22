@@ -67,9 +67,24 @@ export class FacturaClientService {
 	/**
 	 * Crea (timbra y firma) el DTE. `externalRef` (el id de la factura) lo hace idempotente: si ya existe, api-factura devuelve el mismo
 	 * documento y no gasta otro folio. Sin `Emisor`, api-factura usa los datos del emisor de la compañía.
+	 *
+	 * Sapira emite **solo en producción** (`ambienteRequerido`): con la compañía aún en certificación, api-factura responde 409 antes de
+	 * reservar folio, y la factura no queda «Emitida» con un folio de prueba. El ambiente vive en api-factura (perfil de certificación), no
+	 * en `sii_configurations.environment`, que no se sincroniza al pasar a producción.
 	 */
-	async crearDte(companyId: string, body: Record<string, unknown>, externalRef: string): Promise<DteCreado> {
-		const { data } = await this.dteRequest<{ data: DteCreado & { id: unknown } }>(companyId, 'post', '/dte/createDte', { ...body, externalRef });
+	async crearDte(
+		companyId: string,
+		body: Record<string, unknown>,
+		externalRef: string,
+		options: { reemitirRechazado?: boolean } = {}
+	): Promise<DteCreado> {
+		const { data } = await this.dteRequest<{ data: DteCreado & { id: unknown } }>(companyId, 'post', '/dte/createDte', {
+			...body,
+			externalRef,
+			ambienteRequerido: 'produccion',
+			// Reemitir un rechazado: api-factura lo archiva y emite uno nuevo con otro folio (sin esto devolvería el rechazado).
+			...(options.reemitirRechazado ? { reemitirRechazado: true } : {}),
+		});
 
 		return { ...data.data, id: String(data.data.id) };
 	}
@@ -135,7 +150,9 @@ export class FacturaClientService {
 	): Promise<{ data: T; headers?: Record<string, unknown> }> {
 		const baseUrl = this.config.get<string>('FACTURA_API_URL');
 		if (!baseUrl) throw new Error('FACTURA_API_URL no está configurada');
-		const token = await this.oauth.getDteAccessToken();
+		const token = await this.oauth.getDteAccessToken().catch((error: unknown) => {
+			throw facturaTokenError(error);
+		});
 		const headers = { Authorization: `Bearer ${token}`, 'X-Factura-Company-Id': companyId };
 		const url = `${baseUrl.replace(/\/$/, '')}${path}`;
 		// Timbrar, firmar y subir al SII puede tardar: más que el timeout por defecto de axios (sin límite) pero acotado.
@@ -181,6 +198,26 @@ const ESTADOS_DEL_USUARIO = new Set([400, 409, 422]);
  * status code 403"). Los errores de datos conservan su estado; el resto (401/403 entre servicios, 5xx, sin respuesta)
  * es 502: no es un permiso del usuario y un 403 haría que el front mostrara "No tienes permiso".
  */
+/**
+ * Error al pedir el token de DTE a api-factura (`/oauth/token` con `FACTURA_OAUTH_DTE_SCOPE`). El caso típico de un ambiente nuevo: el
+ * cliente OAuth de api-sapira se sembró solo con `factura:empresas:provision` y api-factura rechaza los alcances de DTE con 400/401. Sin
+ * esto el usuario veía un 500 «Request failed with status code 401».
+ */
+export function facturaTokenError(error: unknown): HttpException {
+	const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+
+	if (status === 400 || status === 401 || status === 403) {
+		return new BadGatewayException(
+			'El servicio de facturación no autorizó a Sapira para emitir documentos tributarios: el cliente OAuth de api-sapira necesita los alcances factura:dte:read y factura:dte:write'
+		);
+	}
+	if (!axios.isAxiosError(error)) {
+		return new BadGatewayException(`No se pudo autenticar con el servicio de facturación: ${(error as Error)?.message ?? 'error desconocido'}`);
+	}
+
+	return new BadGatewayException(`No se pudo autenticar con el servicio de facturación${status ? ` (${status})` : ''}`);
+}
+
 export function facturaHttpError(error: unknown): HttpException {
 	if (!axios.isAxiosError(error)) return new BadGatewayException('No fue posible comunicarse con el servicio de facturación');
 

@@ -1,10 +1,13 @@
 import {
+	asReissued,
 	distributeTax,
 	dteAmounts,
 	type DteReceptor,
 	dteReferencesOf,
 	dteStatusFromResultado,
 	dteTipoFor,
+	fxLineNote,
+	isDteRejected,
 	isValidRut,
 	mapInvoiceToDteBody,
 	normalizeRut,
@@ -172,6 +175,44 @@ describe('invoice-dte: documento tributario desde la factura (lógica pura)', ()
 		});
 	});
 
+	it('contrato en UF: cada línea lleva en su descripción el valor en UF y la tasa con su día', () => {
+		const amounts = dteAmounts(
+			[
+				{
+					id: 'a',
+					description: 'Desarrollo de Software Cuenta Sucurdal Norte',
+					quantity: 1,
+					unit_of_measure: 'UND',
+					subtotal_invoice_currency: 823572.8,
+					contract_amount: 20,
+				},
+			],
+			19,
+			false
+		);
+		const body = mapInvoiceToDteBody({
+			tipo: 33,
+			issue_date: '2026-10-19',
+			due_date: '2026-11-18',
+			receptor: receptor(),
+			amounts,
+			references: [],
+			fx: { rate: 41178.64, currency: 'CLF', date: '2026-10-18' },
+		}) as any;
+
+		expect(body.Detalle[0]).toMatchObject({
+			NmbItem: 'Desarrollo de Software Cuenta Sucurdal Norte',
+			DscItem: 'Valor: 20 UF × $41.178,64 (UF del 18-10-2026)',
+			MontoItem: 823573,
+		});
+		expect(fxLineNote(1.5, { rate: 950.4, currency: 'USD', date: null })).toBe('Valor: 1,5 USD × $950,40 (tipo de cambio de la factura)');
+		// Sin conversión no hay nota.
+		expect(
+			(mapInvoiceToDteBody({ tipo: 33, issue_date: '2026-10-19', due_date: null, receptor: receptor(), amounts, references: [] }) as any)
+				.Detalle[0].DscItem
+		).toBeUndefined();
+	});
+
 	it('referencias: las de la factura más las OC/HES del contrato, sin repetir', () => {
 		expect(
 			dteReferencesOf(
@@ -222,6 +263,41 @@ describe('invoice-dte: documento tributario desde la factura (lógica pura)', ()
 		expect(planEmitDte(invoice({ dte_id: 'd1', dte_status: 'creado' }), context(), { receptor: receptor(), base_blockers: [] })).toMatchObject({
 			can_apply: true,
 			retry: true,
+		});
+	});
+
+	it('plan de reemisión: un DTE rechazado por el SII se puede emitir de nuevo (otro folio, fecha de hoy)', () => {
+		const rejected = invoice({ status: 'Emitida', invoice_number: '15', dte_id: 'd1', dte_status: 'rechazado' });
+		const plan = planEmitDte(rejected, context(), { receptor: receptor(), base_blockers: [] });
+
+		expect(plan).toMatchObject({ can_apply: true, reissue: true, retry: false });
+		expect(plan.warnings.find((warning) => warning.code === 'dte_reissue')?.message).toBe(
+			'El SII rechazó el documento N° 15: se emite uno nuevo, con otro folio y fecha de hoy'
+		);
+		// Una nota rechazada ya no está «pendiente» (tiene folio), pero se reemite igual.
+		const note = invoice({ document_type: 'NC', status: 'Cancelada', invoice_number: '3', dte_id: 'd2', dte_status: 'rechazado' });
+		const original = { id: 'orig', invoice_number: '15', issue_date: '2026-10-10', dte_tipo: 33, dte_status: 'aceptado' };
+		expect(planEmitDte(note, context(), { receptor: receptor(), base_blockers: [], original, pending_note: false })).toMatchObject({
+			can_apply: true,
+			reissue: true,
+		});
+		// Aceptado, con reparos o enviado no se reemite.
+		for (const dte_status of ['aceptado', 'reparos', 'enviado']) {
+			expect(planEmitDte(invoice({ dte_id: 'd1', dte_status }), context(), { receptor: receptor(), base_blockers: [] })).toMatchObject({
+				reissue: false,
+				can_apply: false,
+			});
+		}
+		expect(isDteRejected({ dte_id: 'd1', dte_status: 'rechazado' })).toBe(true);
+		expect(asReissued({ document_type: 'FACTURA', status: 'Emitida', invoice_number: '15' }, false)).toEqual({
+			document_type: 'FACTURA',
+			status: 'Por Emitir',
+			invoice_number: null,
+		});
+		expect(asReissued({ document_type: 'NC', status: 'Cancelada', invoice_number: '3' }, true)).toEqual({
+			document_type: 'NC',
+			status: 'Cancelada',
+			invoice_number: null,
 		});
 	});
 

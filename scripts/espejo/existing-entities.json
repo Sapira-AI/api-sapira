@@ -100,6 +100,11 @@
   "file": "src/databases/postgresql/entities/base-tenancy/currency.entity.ts",
   "import": "@/databases/postgresql/entities/base-tenancy/currency.entity"
  },
+ "erp_exports": {
+  "class": "ErpExport",
+  "file": "src/databases/postgresql/entities/integraciones/kame/erp-export.entity.ts",
+  "import": "@/databases/postgresql/entities/integraciones/kame/erp-export.entity"
+ },
  "exchange_rates": {
   "class": "ExchangeRateEntity",
   "file": "src/databases/postgresql/entities/fx/exchange-rate.entity.ts",
@@ -169,6 +174,16 @@
   "class": "Invoice",
   "file": "src/databases/postgresql/entities/facturacion/invoice.entity.ts",
   "import": "@/databases/postgresql/entities/facturacion/invoice.entity"
+ },
+ "kame_company_settings": {
+  "class": "KameCompanySettings",
+  "file": "src/databases/postgresql/entities/integraciones/kame/kame-company-settings.entity.ts",
+  "import": "@/databases/postgresql/entities/integraciones/kame/kame-company-settings.entity"
+ },
+ "kame_connections": {
+  "class": "KameConnection",
+  "file": "src/databases/postgresql/entities/integraciones/kame/kame-connection.entity.ts",
+  "import": "@/databases/postgresql/entities/integraciones/kame/kame-connection.entity"
  },
  "master_data": {
   "class": "MasterData",
