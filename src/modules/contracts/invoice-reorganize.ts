@@ -1662,6 +1662,13 @@ export function planReorganize(ctx: ReorganizeContext, input: ReorganizeInput): 
 				.sort()[0] ?? invoice.issue_date!;
 
 		invoice.fx = findFixedRate(ctx.rules.fixed_invoice_rates, invoice.contract_currency ?? '', invoice.invoice_currency ?? '', periodStart);
+		// Sin tasa del contrato para ese período: la factura nueva hereda la tasa fija de la factura de origen de sus líneas (Domi 22-10; antes
+		// quedaba sin tasa y pedía confirmarla aunque la original ya la tuviera).
+		if (invoice.fx === null)
+			invoice.fx =
+				live(invoice.key)
+					.map((line) => (line.original_invoice_key ? (invoices.get(line.original_invoice_key)?.fx ?? null) : null))
+					.find((rate): rate is number => rate !== null) ?? null;
 		if (invoice.fx === null && invoice.created_by !== null)
 			results[invoice.created_by].warnings.push({
 				code: 'fixed_fx_without_rate',

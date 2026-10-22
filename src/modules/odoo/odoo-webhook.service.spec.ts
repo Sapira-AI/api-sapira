@@ -336,3 +336,93 @@ describe('OdooWebhookService.processInvoiceStatusUpdate · Canceladas (12-10)', 
 		expect(update).toHaveBeenCalledWith('nc-1', expect.objectContaining({ status: 'Pagada' }));
 	});
 });
+
+describe('OdooWebhookService.processInvoiceStatusUpdate · devengo (Domi 22-10)', () => {
+	const crear = (invoice: Record<string, unknown>) => {
+		const update = jest.fn().mockResolvedValue({ affected: 1 });
+		const query = jest.fn().mockResolvedValue([]);
+		const logModel = function (this: any, datos: any) {
+			this.save = jest.fn().mockResolvedValue(datos);
+		};
+		const connection = { model: jest.fn(() => logModel) };
+		const dataSource = { getRepository: jest.fn(() => ({ findOne: jest.fn().mockResolvedValue(invoice), update, query })) };
+
+		return { service: new OdooWebhookService(connection as any, dataSource as any), update, query };
+	};
+	const base = {
+		id: 'f-1',
+		contract_id: 'k-1',
+		holding_id: 'h-1',
+		invoice_number: 'F-10',
+		odoo_invoice_id: 7,
+		issue_date: '2026-08-05',
+		total_invoice_currency: 357,
+	};
+	const rebuilds = (query: jest.Mock) => query.mock.calls.filter(([sql]) => String(sql).includes('revenue_schedule_rebuild'));
+
+	it('Por Emitir → Enviada de un mes pasado reconstruye el devengo del contrato desde ese mes', async () => {
+		const { service, query } = crear({ ...base, status: 'Por Emitir' });
+
+		await service.processInvoiceStatusUpdate({
+			model: 'account.move',
+			x_sapira_invoice_id: 'f-1',
+			id: 7,
+			state: 'posted',
+			payment_state: 'not_paid',
+			name: 'F-10',
+			invoice_date: '2026-08-05',
+			amount_total: 357,
+		});
+
+		expect(rebuilds(query)).toEqual([[expect.stringContaining('revenue_schedule_rebuild'), ['k-1', '2026-08-01']]]);
+	});
+
+	it('Enviada → Pagada no mueve revenue: no reconstruye; cambiar la fecha de emisión sí, desde el mes más temprano', async () => {
+		const pagada = crear({ ...base, status: 'Enviada' });
+
+		await pagada.service.processInvoiceStatusUpdate({
+			model: 'account.move',
+			x_sapira_invoice_id: 'f-1',
+			id: 7,
+			state: 'posted',
+			payment_state: 'paid',
+			name: 'F-10',
+			invoice_date: '2026-08-05',
+			amount_total: 357,
+		});
+		expect(rebuilds(pagada.query)).toEqual([]);
+
+		const movida = crear({ ...base, status: 'Enviada' });
+
+		await movida.service.processInvoiceStatusUpdate({
+			model: 'account.move',
+			x_sapira_invoice_id: 'f-1',
+			id: 7,
+			state: 'posted',
+			payment_state: 'not_paid',
+			name: 'F-10',
+			invoice_date: '2026-07-28',
+			amount_total: 357,
+		});
+		expect(rebuilds(movida.query)).toEqual([[expect.stringContaining('revenue_schedule_rebuild'), ['k-1', '2026-07-01']]]);
+	});
+
+	it('si el rebuild falla, la factura queda actualizada igual', async () => {
+		const { service, update, query } = crear({ ...base, status: 'Por Emitir' });
+
+		query.mockRejectedValue(new Error('rsm caído'));
+		const result = await service.processInvoiceStatusUpdate({
+			model: 'account.move',
+			x_sapira_invoice_id: 'f-1',
+			id: 7,
+			state: 'posted',
+			payment_state: 'not_paid',
+			name: 'F-10',
+			invoice_date: '2026-08-05',
+			amount_total: 357,
+		});
+
+		expect(update).toHaveBeenCalled();
+		expect(result).toMatchObject({ updated: true });
+	});
+});

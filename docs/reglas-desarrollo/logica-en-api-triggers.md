@@ -57,3 +57,6 @@ Un trigger puede salir antes si Domi lo ordena, siempre que todo escritor que de
   pise. El único escritor de la API sin la marca (sync del DWH, `bigquery.service.ts`) llama ahora `revenue_schedule_rebuild`;
   los consumos v2 ya lo hacían. El front viejo deja de mover el devengo al editar cantidades. Los otros 4 triggers de
   `quantities` siguen (ninguno escribe devengo).
+- **22-10-2026 · webhook del ERP** (`odoo-webhook.service.ts`): al cambiar estado, mes de emisión o total de una factura llama
+  `revenue_schedule_rebuild` desde el mes más antiguo afectado. Antes no lo hacía y el devengo de meses pasados quedaba viejo
+  hasta un recálculo a mano (detalle en [`cambios/soporte-22-10-facturas-contratos.md`](../cambios/soporte-22-10-facturas-contratos.md)).

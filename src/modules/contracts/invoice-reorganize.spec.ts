@@ -268,6 +268,31 @@ describe('invoice-reorganize (spec facturas §3.5, lógica pura)', () => {
 	});
 
 	describe('move_line', () => {
+		it('a una factura nueva sin tasa del contrato para el período: hereda la tasa fija de la factura de origen (Domi 22-10) y no avisa', () => {
+			const fixture: Fixture = {
+				invoices: [
+					[
+						invoice('inv-oct', '2026-10-01', {
+							contract_currency: 'USD',
+							invoice_currency: 'CLP',
+							fx_contract_to_invoice: 900,
+							amount_invoice_currency: 900000,
+						}),
+						[
+							line('l-a', '2026-10-01', '2026-10-31', 1000, { subtotal_invoice: 900000, unit_price_invoice: 90000 }),
+							line('l-b', '2026-10-01', '2026-10-31', 500, { contract_item_id: ITEM_B, subtotal_invoice: 450000 }),
+						],
+					],
+				],
+				rules: { contract_currency: 'USD', invoice_currency: 'CLP', fx_invoice_policy: 'fixed', fixed_invoice_rates: [] },
+			};
+			const result = plan(fixture, { operations: [{ op: 'move_line', line_id: 'l-b', new_invoice: { issue_date: '2026-10-15' } }] });
+
+			expect(result.can_apply).toBe(true);
+			expect(result.write.creates[0]).toMatchObject({ fx: 900 });
+			expect(codes(result.warnings)).not.toContain('fixed_fx_without_rate');
+		});
+
 		it('a una factura nueva: nace del generador (FX fijo del contrato para su período, nunca clonado; vencimiento por condición de pago)', () => {
 			const fixture: Fixture = {
 				invoices: [

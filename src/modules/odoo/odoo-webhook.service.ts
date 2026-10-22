@@ -401,6 +401,44 @@ export class OdooWebhookService {
 	/**
 	 * Detecta cambios entre la factura actual y los nuevos datos
 	 */
+
+	/**
+	 * Reconstruye `revenue_schedule_monthly` del contrato cuando el aviso del ERP cambia algo que mueve revenue: el estado entre
+	 * Por Emitir y emitida (Emitida/Enviada/Pagada/Vencida), la fecha de emisión o el total. Moverse entre estados emitidos (Enviada → Pagada)
+	 * no cambia revenue y no reconstruye. Caso CGE CTR-2026-96 y 53 contratos de SimpliRoute (22-10) que hubo que recalcular a mano.
+	 */
+	private async rebuildRevenueIfNeeded(
+		repository: { query: (sql: string, params?: unknown[]) => Promise<unknown> },
+		invoice: Invoice,
+		updateData: Partial<Invoice>
+	) {
+		if (!invoice.contract_id) return;
+		const billed = new Set(['Emitida', 'Enviada', 'Pagada', 'Vencida']);
+		const wasBilled = billed.has(invoice.status ?? '');
+		const isBilled = updateData.status ? billed.has(updateData.status) : wasBilled;
+		const monthOf = (value: unknown): string | null => {
+			if (!value) return null;
+			const text = value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+
+			return /^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text.slice(0, 7)}-01` : null;
+		};
+		const monthBefore = monthOf(invoice.issue_date);
+		const monthAfter = updateData.issue_date === undefined ? monthBefore : monthOf(updateData.issue_date);
+		const totalChanged =
+			updateData.total_invoice_currency !== undefined &&
+			Number(updateData.total_invoice_currency) !== Number(invoice.total_invoice_currency ?? NaN);
+
+		if (wasBilled === isBilled && monthBefore === monthAfter && !totalChanged) return;
+		const from = [monthBefore, monthAfter].filter((month): month is string => month !== null).sort()[0] ?? null;
+
+		try {
+			await repository.query(`SELECT revenue_schedule_rebuild($1::uuid, $2::date)`, [invoice.contract_id, from]);
+			this.logger.log(`Devengo reconstruido para el contrato ${invoice.contract_id} desde ${from ?? 'el inicio'} (factura ${invoice.id})`);
+		} catch (error) {
+			this.logger.error(`No se pudo reconstruir el devengo del contrato ${invoice.contract_id} tras el webhook: ${(error as Error).message}`);
+		}
+	}
+
 	private detectChanges(
 		currentInvoice: Invoice,
 		newData: {
@@ -649,6 +687,10 @@ export class OdooWebhookService {
 
 				const updateResult = await invoiceRepository.update(fields.sapiraInvoiceId, updateData);
 				this.logger.debug(`Resultado de actualización: affected=${updateResult.affected}`);
+				// Devengo (Domi 22-10): los triggers de RSM no corren para lo que escribe la API, y el refresco nocturno no toca meses
+				// pasados. Si cambió algo que mueve revenue (estado entre Por Emitir y emitida, fecha de emisión o total), se reconstruye el
+				// cronograma del contrato desde el mes más temprano afectado. Un error aquí no deshace la actualización: se registra.
+				await this.rebuildRevenueIfNeeded(invoiceRepository, invoice, updateData);
 
 				this.logger.log(
 					`✓ Factura ${invoice.invoice_number || fields.sapiraInvoiceId} actualizada ` +
