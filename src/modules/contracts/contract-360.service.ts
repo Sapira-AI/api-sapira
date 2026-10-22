@@ -128,7 +128,7 @@ export class Contract360Service {
 				i.requires_references_for_billing, COALESCE(i.auto_invoice, false) AS auto_invoice, i.related_invoice_id,
 				l.period_start::text AS period_start, l.period_end::text AS period_end,
 				COALESCE(l.lines_count, 0) AS lines_count, COALESCE(l.lines_without_product, 0) AS lines_without_product,
-				COALESCE(l.has_non_recurring, false) AS has_non_recurring,
+				COALESCE(l.has_non_recurring, false) AS has_non_recurring, l.fx_rate_source,
 				CASE WHEN i.status = '${PENDING_STATUS}' AND i.is_active THEN ${UNMAPPED_PRODUCTS_SQL('i')} ELSE '{}'::text[] END AS unmapped_products,
 				(SELECT COUNT(*) FROM invoice_references r WHERE r.invoice_id = i.id)
 					+ (SELECT COUNT(*) FROM invoice_reference_links rl WHERE rl.invoice_id = i.id) AS references_count
@@ -136,7 +136,8 @@ export class Contract360Service {
 			LEFT JOIN LATERAL (
 				SELECT MIN(ii.billing_period_start) AS period_start, MAX(ii.billing_period_end) AS period_end, COUNT(*) AS lines_count,
 					COUNT(*) FILTER (WHERE ii.product_id IS NULL) AS lines_without_product,
-					bool_or(ci.is_recurring = false) AS has_non_recurring
+					bool_or(ci.is_recurring = false) AS has_non_recurring,
+					mode() WITHIN GROUP (ORDER BY ii.fx_rate_source) FILTER (WHERE ii.fx_rate_source IS NOT NULL) AS fx_rate_source
 				FROM invoice_items ii
 				LEFT JOIN contract_items ci ON ci.id = ii.contract_item_id
 				WHERE ii.invoice_id = i.id
@@ -159,6 +160,7 @@ export class Contract360Service {
 			amount_contract_ccy: toNumber(row.amount_contract_currency),
 			amount_invoice_ccy: toNullableNumber(row.amount_invoice_currency),
 			fx_contract_to_invoice: toNullableNumber(row.fx_contract_to_invoice),
+			fx_rate_source: toText(row.fx_rate_source),
 			requires_references: row.requires_references_for_billing === true,
 			period_start: toText(row.period_start),
 			period_end: toText(row.period_end),

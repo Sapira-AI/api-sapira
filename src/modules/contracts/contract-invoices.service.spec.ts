@@ -556,7 +556,8 @@ describe('ContractInvoicesService (spec facturas §3.1–3.3)', () => {
 
 			await service.fx(CONTRACT_ID, INV_A, { policy: 'spot' }, HOLDING, 'auth-1', TODAY);
 			expect(calls(runner.query, 'UPDATE invoices SET fx_contract_to_invoice')[0][1]).toEqual([INV_A, HOLDING, null, 1000, 190, null, null]);
-			expect(calls(runner.query, 'UPDATE invoice_items')[0][1]).toEqual(['line-1', HOLDING, null, null, null, null, null, null, null]);
+			// La marca `spot` queda en la línea sin tasa ("Del día" elegido en la factura, Domi 22-10); la fecha de la tasa sigue en NULL.
+			expect(calls(runner.query, 'UPDATE invoice_items')[0][1]).toEqual(['line-1', HOLDING, null, null, null, null, null, 'spot', null]);
 		});
 
 		it('net_exact: tasa derivada del neto, encabezado exacto y origen net_exact', async () => {
@@ -678,7 +679,8 @@ describe('ContractInvoicesService · restablecer el borrador del ERP (§3.1)', (
 		const [lines] = calls(runner.query, 'UPDATE invoice_items SET unit_price_invoice_currency = NULL');
 		const [header] = calls(runner.query, 'UPDATE invoices SET fx_contract_to_invoice = NULL');
 
-		expect(lines[1]).toEqual([INV_A, HOLDING]);
+		// Contrato spot: el origen de la tasa vuelve a NULL (en un contrato fijo conservaría la marca `spot`).
+		expect(lines[1]).toEqual([INV_A, HOLDING, null]);
 		expect(header[1]).toEqual([INV_A, HOLDING, 190]);
 		expect(result).toMatchObject({ spot_reset: true, after: { fx_contract_to_invoice: null, amount_invoice_currency: null, vat: 190 } });
 		expect(eventMeta(runner.query)).toMatchObject({
