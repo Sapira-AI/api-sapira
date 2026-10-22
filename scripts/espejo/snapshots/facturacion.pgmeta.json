@@ -228,7 +228,7 @@
  "invoice_adjustments": {
   "name": "public.invoice_adjustments",
   "rls_enabled": true,
-  "rows": 1,
+  "rows": 2,
   "columns": [
    {
     "name": "id",
@@ -1945,7 +1945,7 @@
  "invoices": {
   "name": "public.invoices",
   "rls_enabled": true,
-  "rows": 9961,
+  "rows": 10044,
   "columns": [
    {
     "name": "id",
@@ -2583,6 +2583,127 @@
      "updatable"
     ],
     "comment": "Devengo del descuento en RSM (impact_month = mes de emisión; defer_forward = meses restantes del ítem; service_period = meses del período de servicio de la línea). NC discount y facturas con descuento puntual (sublínea one_off del pricing_breakdown). NULL en el resto."
+   },
+   {
+    "name": "dte_id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Id del DTE en el servicio de facturación electrónica (api-factura). NULL = la factura no se emitió como DTE desde Sapira"
+   },
+   {
+    "name": "dte_tipo",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Tipo SII del DTE emitido (33, 34, 56, 61)"
+   },
+   {
+    "name": "dte_folio",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Folio del DTE asignado por el SII (CAF); se copia a invoice_number"
+   },
+   {
+    "name": "dte_track_id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "TrackId del envío del DTE al SII"
+   },
+   {
+    "name": "dte_environment",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Ambiente SII en que se emitió el DTE: certificacion | produccion"
+   },
+   {
+    "name": "dte_status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Estado del DTE: creado (sin enviar al SII) | enviado | aceptado | reparos | rechazado"
+   },
+   {
+    "name": "dte_status_detail",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Glosa del SII de la última consulta de estado"
+   },
+   {
+    "name": "dte_status_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Fecha de la última consulta o cambio de estado del DTE"
+   },
+   {
+    "name": "dte_receptor_email",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Correo de intercambio al que se envió el DTE (receptor)"
+   },
+   {
+    "name": "dte_receptor_sent_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Fecha del envío del DTE al receptor"
+   },
+   {
+    "name": "dte_receptor_error",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Último error al enviar el DTE al receptor (NULL si se envió o no se intentó)"
    }
   ],
   "primary_keys": [

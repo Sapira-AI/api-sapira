@@ -1,9 +1,9 @@
-# Módulo 3 · Clientes — 12 tablas de prod (2026-10-15)
+# Módulo 3 · Clientes — 14 tablas de prod (2026-10-19)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-15 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/clientes.{pgmeta,catalog}.json`); metadata real de las entities existentes en `clientes.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-19 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/clientes.{pgmeta,catalog}.json`); metadata real de las entities existentes en `clientes.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
-## A · Tablas que YA tenían entity en el repo (6) — no se tocaron ni se duplicaron
+## A · Tablas que YA tenían entity en el repo (8) — no se tocaron ni se duplicaron
 
 Estas entities están **prendidas en producción** exactamente como estaban (`database.module.ts` las carga por el glob `src/**/*.entity.ts` y sus módulos las registran en `forFeature`). "Estado vs prod" = diff entre lo que la entity declara hoy (metadata TypeORM real) y la DB en vivo; es el insumo para completarlas en el paso 3 con Leon.
 
@@ -15,6 +15,8 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 | `client_contacts` (262) | `src/databases/postgresql/entities/clientes/client-contact.entity.ts` · `ClientContact` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_contacts_pkey` |
 | `client_activity_notes` (1) | `src/databases/postgresql/entities/clientes/client-activity-note.entity.ts` · `ClientActivityNote` | ⚠️ difiere de prod | — | — | — | nombre de PK `client_activity_notes_pkey`<br>CHECK `client_activity_notes_body_check`<br>índice con expresión `client_activity_notes_mentions_idx` |
 | `sellers` (39) | `src/databases/postgresql/entities/clientes/seller.entity.ts` · `Seller` | ⚠️ difiere de prod | — | — | `created_at`: default `CURRENT_TIMESTAMP` vs DB `now()` | nombre de PK `sellers_pkey` |
+| `import_batches` (0) | `src/databases/postgresql/entities/clientes/import-batch.entity.ts` · `ImportBatch` | ⚠️ difiere de prod | — | — | — | nombre de PK `import_batches_pkey` |
+| `import_batch_rows` (0) | `src/databases/postgresql/entities/clientes/import-batch-row.entity.ts` · `ImportBatchRow` | ⚠️ difiere de prod | — | — | — | nombre de PK `import_batch_rows_pkey` |
 
 ## B · Tablas SIN entity previa → espejos generados (6): 6 promovidas, 0 apagadas
 

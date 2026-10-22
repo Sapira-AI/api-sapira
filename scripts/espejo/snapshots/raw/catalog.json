@@ -6884,6 +6884,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "País ISO 3166-1 alfa-2 (FK countries). La API escribe también client_entities.country con el nombre en español"
+				},
+				{
+					"column": "commune",
+					"attnum": 26,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Comuna de la dirección legal (CmnaRecep del DTE chileno, hasta 20 caracteres). NULL = sin comuna"
 				}
 			],
 			"constraints": [
@@ -20934,6 +20950,294 @@
 				}
 			]
 		},
+		"holding_inbound_email_domains": {
+			"comment": "Dominio de recepción de DTE del holding (MX hacia SendGrid Inbound Parse)",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "inbound_domain",
+					"attnum": 3,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Subdominio de recepción, en minúsculas (ej: dte.miempresa.cl)"
+				},
+				{
+					"column": "sendgrid_domain_id",
+					"attnum": 4,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "ID del dominio autenticado en SendGrid (para responder desde las casillas)"
+				},
+				{
+					"column": "domain_status",
+					"attnum": 5,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'pending'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "pending o verified: verified cuando el MX y los CNAME de autenticación están puestos"
+				},
+				{
+					"column": "dns_records",
+					"attnum": 6,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Registros DNS a publicar: MX hacia SendGrid y los CNAME de autenticación, con su estado"
+				},
+				{
+					"column": "mx_verified_at",
+					"attnum": 7,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "domain_verified_at",
+					"attnum": 8,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "inbound_parse_configured_at",
+					"attnum": 9,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Cuándo se creó el Inbound Parse en SendGrid (apunta al webhook de api-factura)"
+				},
+				{
+					"column": "created_by",
+					"attnum": 10,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_at",
+					"attnum": 11,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_at",
+					"attnum": 12,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "holding_inbound_email_domains_created_by_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (created_by) REFERENCES users(id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "a",
+					"onupdate": "a"
+				},
+				{
+					"name": "holding_inbound_email_domains_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "holding_inbound_email_domains_holding_id_key",
+					"type": "u",
+					"def": "UNIQUE (holding_id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "holding_inbound_email_domains_inbound_domain_key",
+					"type": "u",
+					"def": "UNIQUE (inbound_domain)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "holding_inbound_email_domains_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "holding_inbound_email_domains_status_check",
+					"type": "c",
+					"def": "CHECK ((domain_status = ANY (ARRAY['pending'::text, 'verified'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "holding_inbound_email_domains_holding_id_key",
+					"def": "CREATE UNIQUE INDEX holding_inbound_email_domains_holding_id_key ON public.holding_inbound_email_domains USING btree (holding_id)",
+					"unique": true,
+					"primary": false
+				},
+				{
+					"name": "holding_inbound_email_domains_inbound_domain_key",
+					"def": "CREATE UNIQUE INDEX holding_inbound_email_domains_inbound_domain_key ON public.holding_inbound_email_domains USING btree (inbound_domain)",
+					"unique": true,
+					"primary": false
+				},
+				{
+					"name": "holding_inbound_email_domains_pkey",
+					"def": "CREATE UNIQUE INDEX holding_inbound_email_domains_pkey ON public.holding_inbound_email_domains USING btree (id)",
+					"unique": true,
+					"primary": true
+				}
+			],
+			"triggers": [],
+			"policies": [
+				{
+					"name": "holding_access_holding_inbound_email_domains",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "ALL",
+					"qual": "(holding_id = get_current_user_holding_id())",
+					"with_check": null
+				}
+			]
+		},
 		"holding_integration_settings": {
 			"comment": "Ajustes de cada integración por holding: habilitación de la corrida automática (cron; fila ausente = habilitado) y reglas (settings).",
 			"rls": true,
@@ -21502,6 +21806,597 @@
 						"public"
 					],
 					"cmd": "UPDATE",
+					"qual": "(holding_id = get_current_user_holding_id())",
+					"with_check": null
+				}
+			]
+		},
+		"import_batch_rows": {
+			"comment": "Filas de un lote de \"Importar para actualizar\": registro, estado y valores antes/después",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "batch_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 3,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "row",
+					"attnum": 4,
+					"data_type": "integer",
+					"udt": "int4",
+					"type": "integer",
+					"char_len": null,
+					"num_prec": 32,
+					"num_scale": 0,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Fila en la planilla (la 1 son los encabezados)"
+				},
+				{
+					"column": "key_value",
+					"attnum": 5,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Valor de la clave en la planilla (N° cliente o RUT)"
+				},
+				{
+					"column": "entity_id",
+					"attnum": 6,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Registro encontrado (clients.id); NULL si no se encontró o fue ambiguo"
+				},
+				{
+					"column": "status",
+					"attnum": 7,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "updated | unchanged | not_found | ambiguous | failed"
+				},
+				{
+					"column": "before",
+					"attnum": 8,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'{}'::jsonb",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Valor anterior de cada campo cambiado"
+				},
+				{
+					"column": "after",
+					"attnum": 9,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'{}'::jsonb",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Valor nuevo de cada campo cambiado"
+				},
+				{
+					"column": "message",
+					"attnum": 10,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Motivo (error de validación, ambigua, no encontrada)"
+				},
+				{
+					"column": "reverted_fields",
+					"attnum": 11,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Al revertir: campos restaurados"
+				},
+				{
+					"column": "kept_fields",
+					"attnum": 12,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Al revertir: campos que no se tocaron porque alguien los editó después"
+				}
+			],
+			"constraints": [
+				{
+					"name": "import_batch_rows_batch_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (batch_id) REFERENCES import_batches(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "import_batch_rows_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "import_batch_rows_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "import_batch_rows_status_check",
+					"type": "c",
+					"def": "CHECK ((status = ANY (ARRAY['updated'::text, 'unchanged'::text, 'not_found'::text, 'ambiguous'::text, 'failed'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "idx_import_batch_rows_batch",
+					"def": "CREATE INDEX idx_import_batch_rows_batch ON public.import_batch_rows USING btree (batch_id)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_import_batch_rows_holding_entity",
+					"def": "CREATE INDEX idx_import_batch_rows_holding_entity ON public.import_batch_rows USING btree (holding_id, entity_id) WHERE (entity_id IS NOT NULL)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "import_batch_rows_pkey",
+					"def": "CREATE UNIQUE INDEX import_batch_rows_pkey ON public.import_batch_rows USING btree (id)",
+					"unique": true,
+					"primary": true
+				}
+			],
+			"triggers": [],
+			"policies": [
+				{
+					"name": "holding_access_import_batch_rows",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "ALL",
+					"qual": "(holding_id = get_current_user_holding_id())",
+					"with_check": null
+				}
+			]
+		},
+		"import_batches": {
+			"comment": "Lotes de \"Importar para actualizar\" (clientes; genérico para otras entidades). Solo la API escribe",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "entity_type",
+					"attnum": 3,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Entidad actualizada: client (clientes comerciales)"
+				},
+				{
+					"column": "label",
+					"attnum": 4,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Nombre del lote (por defecto, el archivo subido)"
+				},
+				{
+					"column": "key_field",
+					"attnum": 5,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Con qué se buscó cada fila: client_number | tax_id"
+				},
+				{
+					"column": "fields",
+					"attnum": 6,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'[]'::jsonb",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Campos mapeados en la planilla (los únicos que se actualizan)"
+				},
+				{
+					"column": "rows_total",
+					"attnum": 7,
+					"data_type": "integer",
+					"udt": "int4",
+					"type": "integer",
+					"char_len": null,
+					"num_prec": 32,
+					"num_scale": 0,
+					"notnull": true,
+					"default": "0",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_count",
+					"attnum": 8,
+					"data_type": "integer",
+					"udt": "int4",
+					"type": "integer",
+					"char_len": null,
+					"num_prec": 32,
+					"num_scale": 0,
+					"notnull": true,
+					"default": "0",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Filas que cambiaron al menos un campo"
+				},
+				{
+					"column": "skipped_count",
+					"attnum": 9,
+					"data_type": "integer",
+					"udt": "int4",
+					"type": "integer",
+					"char_len": null,
+					"num_prec": 32,
+					"num_scale": 0,
+					"notnull": true,
+					"default": "0",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Filas sin cambios, no encontradas o ambiguas"
+				},
+				{
+					"column": "failed_count",
+					"attnum": 10,
+					"data_type": "integer",
+					"udt": "int4",
+					"type": "integer",
+					"char_len": null,
+					"num_prec": 32,
+					"num_scale": 0,
+					"notnull": true,
+					"default": "0",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Filas con error de validación"
+				},
+				{
+					"column": "created_by",
+					"attnum": 11,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "created_at",
+					"attnum": 12,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "reverted_at",
+					"attnum": 13,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Cuándo se revirtió el lote (NULL = vigente)"
+				},
+				{
+					"column": "reverted_by",
+					"attnum": 14,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "reverted_summary",
+					"attnum": 15,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Resumen de la reversión: { restored_rows, kept_rows, kept_fields }"
+				}
+			],
+			"constraints": [
+				{
+					"name": "import_batches_created_by_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
+				},
+				{
+					"name": "import_batches_entity_type_check",
+					"type": "c",
+					"def": "CHECK ((entity_type = ANY (ARRAY['client'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "import_batches_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "import_batches_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "import_batches_reverted_by_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (reverted_by) REFERENCES users(id) ON DELETE SET NULL",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "n",
+					"onupdate": "a"
+				}
+			],
+			"indexes": [
+				{
+					"name": "idx_import_batches_holding_created",
+					"def": "CREATE INDEX idx_import_batches_holding_created ON public.import_batches USING btree (holding_id, created_at)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "import_batches_pkey",
+					"def": "CREATE UNIQUE INDEX import_batches_pkey ON public.import_batches USING btree (id)",
+					"unique": true,
+					"primary": true
+				}
+			],
+			"triggers": [],
+			"policies": [
+				{
+					"name": "holding_access_import_batches",
+					"permissive": "PERMISSIVE",
+					"roles": [
+						"public"
+					],
+					"cmd": "ALL",
 					"qual": "(holding_id = get_current_user_holding_id())",
 					"with_check": null
 				}
@@ -27548,6 +28443,182 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Devengo del descuento en RSM (impact_month = mes de emisión; defer_forward = meses restantes del ítem; service_period = meses del período de servicio de la línea). NC discount y facturas con descuento puntual (sublínea one_off del pricing_breakdown). NULL en el resto."
+				},
+				{
+					"column": "dte_id",
+					"attnum": 64,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Id del DTE en el servicio de facturación electrónica (api-factura). NULL = la factura no se emitió como DTE desde Sapira"
+				},
+				{
+					"column": "dte_tipo",
+					"attnum": 65,
+					"data_type": "integer",
+					"udt": "int4",
+					"type": "integer",
+					"char_len": null,
+					"num_prec": 32,
+					"num_scale": 0,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Tipo SII del DTE emitido (33, 34, 56, 61)"
+				},
+				{
+					"column": "dte_folio",
+					"attnum": 66,
+					"data_type": "integer",
+					"udt": "int4",
+					"type": "integer",
+					"char_len": null,
+					"num_prec": 32,
+					"num_scale": 0,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Folio del DTE asignado por el SII (CAF); se copia a invoice_number"
+				},
+				{
+					"column": "dte_track_id",
+					"attnum": 67,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "TrackId del envío del DTE al SII"
+				},
+				{
+					"column": "dte_environment",
+					"attnum": 68,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Ambiente SII en que se emitió el DTE: certificacion | produccion"
+				},
+				{
+					"column": "dte_status",
+					"attnum": 69,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Estado del DTE: creado (sin enviar al SII) | enviado | aceptado | reparos | rechazado"
+				},
+				{
+					"column": "dte_status_detail",
+					"attnum": 70,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Glosa del SII de la última consulta de estado"
+				},
+				{
+					"column": "dte_status_at",
+					"attnum": 71,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Fecha de la última consulta o cambio de estado del DTE"
+				},
+				{
+					"column": "dte_receptor_email",
+					"attnum": 72,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Correo de intercambio al que se envió el DTE (receptor)"
+				},
+				{
+					"column": "dte_receptor_sent_at",
+					"attnum": 73,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Fecha del envío del DTE al receptor"
+				},
+				{
+					"column": "dte_receptor_error",
+					"attnum": 74,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Último error al enviar el DTE al receptor (NULL si se envió o no se intentó)"
 				}
 			],
 			"constraints": [
@@ -27627,6 +28698,24 @@
 					"name": "invoices_document_type_check",
 					"type": "c",
 					"def": "CHECK ((document_type = ANY (ARRAY['FACTURA'::text, 'NC'::text, 'ND'::text, 'FACTURA_EXPORTACION'::text, 'Invoice'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "invoices_dte_environment_check",
+					"type": "c",
+					"def": "CHECK (((dte_environment IS NULL) OR (dte_environment = ANY (ARRAY['certificacion'::text, 'produccion'::text]))))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "invoices_dte_status_check",
+					"type": "c",
+					"def": "CHECK (((dte_status IS NULL) OR (dte_status = ANY (ARRAY['creado'::text, 'enviado'::text, 'aceptado'::text, 'reparos'::text, 'rechazado'::text]))))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -27754,6 +28843,12 @@
 				{
 					"name": "idx_invoices_custom_fields",
 					"def": "CREATE INDEX idx_invoices_custom_fields ON public.invoices USING gin (custom_fields)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_invoices_dte_status_enviado",
+					"def": "CREATE INDEX idx_invoices_dte_status_enviado ON public.invoices USING btree (holding_id) WHERE (dte_status = 'enviado'::text)",
 					"unique": false,
 					"primary": false
 				},
@@ -57634,6 +58729,120 @@
 				"privilege": "UPDATE"
 			}
 		],
+		"holding_inbound_email_domains": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
 		"holding_integration_settings": [
 			{
 				"grantee": "anon",
@@ -57749,6 +58958,234 @@
 			}
 		],
 		"holding_settings": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
+		"import_batch_rows": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
+		"import_batches": [
 			{
 				"grantee": "anon",
 				"privilege": "DELETE"
@@ -69899,7 +71336,7 @@
 		{
 			"tipo": "tabla",
 			"firma": "anon:DELETE, anon:INSERT, anon:REFERENCES, anon:SELECT, anon:TRIGGER, anon:TRUNCATE, anon:UPDATE, authenticated:DELETE, authenticated:INSERT, authenticated:REFERENCES, authenticated:SELECT, authenticated:TRIGGER, authenticated:TRUNCATE, authenticated:UPDATE, postgres:DELETE, postgres:INSERT, postgres:REFERENCES, postgres:SELECT, postgres:TRIGGER, postgres:TRUNCATE, postgres:UPDATE, service_role:DELETE, service_role:INSERT, service_role:REFERENCES, service_role:SELECT, service_role:TRIGGER, service_role:TRUNCATE, service_role:UPDATE",
-			"objetos": 149,
+			"objetos": 152,
 			"ejemplos": [
 				"accounting_period_cutoff",
 				"accounting_period_events",

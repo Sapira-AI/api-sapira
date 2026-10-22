@@ -514,6 +514,17 @@
      "updatable"
     ],
     "comment": "País ISO 3166-1 alfa-2 (FK countries). La API escribe también client_entities.country con el nombre en español"
+   },
+   {
+    "name": "commune",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Comuna de la dirección legal (CmnaRecep del DTE chileno, hasta 20 caracteres). NULL = sin comuna"
    }
   ],
   "primary_keys": [
@@ -2021,6 +2032,376 @@
      "seller_id"
     ],
     "target_table": "public.sellers",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "import_batches": {
+  "name": "public.import_batches",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "entity_type",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Entidad actualizada: client (clientes comerciales)"
+   },
+   {
+    "name": "label",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Nombre del lote (por defecto, el archivo subido)"
+   },
+   {
+    "name": "key_field",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Con qué se buscó cada fila: client_number | tax_id"
+   },
+   {
+    "name": "fields",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'[]'::jsonb",
+    "comment": "Campos mapeados en la planilla (los únicos que se actualizan)"
+   },
+   {
+    "name": "rows_total",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "0"
+   },
+   {
+    "name": "updated_count",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "0",
+    "comment": "Filas que cambiaron al menos un campo"
+   },
+   {
+    "name": "skipped_count",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "0",
+    "comment": "Filas sin cambios, no encontradas o ambiguas"
+   },
+   {
+    "name": "failed_count",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "0",
+    "comment": "Filas con error de validación"
+   },
+   {
+    "name": "created_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "reverted_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Cuándo se revirtió el lote (NULL = vigente)"
+   },
+   {
+    "name": "reverted_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ]
+   },
+   {
+    "name": "reverted_summary",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Resumen de la reversión: { restored_rows, kept_rows, kept_fields }"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "import_batch_rows_batch_id_fkey",
+    "source_table": "public.import_batch_rows",
+    "source_columns": [
+     "batch_id"
+    ],
+    "target_table": "public.import_batches",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "import_batches_created_by_fkey",
+    "source_table": "public.import_batches",
+    "source_columns": [
+     "created_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "import_batches_holding_id_fkey",
+    "source_table": "public.import_batches",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "import_batches_reverted_by_fkey",
+    "source_table": "public.import_batches",
+    "source_columns": [
+     "reverted_by"
+    ],
+    "target_table": "public.users",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "import_batch_rows": {
+  "name": "public.import_batch_rows",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "batch_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "row",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Fila en la planilla (la 1 son los encabezados)"
+   },
+   {
+    "name": "key_value",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Valor de la clave en la planilla (N° cliente o RUT)"
+   },
+   {
+    "name": "entity_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Registro encontrado (clients.id); NULL si no se encontró o fue ambiguo"
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "updated | unchanged | not_found | ambiguous | failed"
+   },
+   {
+    "name": "before",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb",
+    "comment": "Valor anterior de cada campo cambiado"
+   },
+   {
+    "name": "after",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'{}'::jsonb",
+    "comment": "Valor nuevo de cada campo cambiado"
+   },
+   {
+    "name": "message",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Motivo (error de validación, ambigua, no encontrada)"
+   },
+   {
+    "name": "reverted_fields",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Al revertir: campos restaurados"
+   },
+   {
+    "name": "kept_fields",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Al revertir: campos que no se tocaron porque alguien los editó después"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "import_batch_rows_batch_id_fkey",
+    "source_table": "public.import_batch_rows",
+    "source_columns": [
+     "batch_id"
+    ],
+    "target_table": "public.import_batches",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "import_batch_rows_holding_id_fkey",
+    "source_table": "public.import_batch_rows",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
     "target_columns": [
      "id"
     ]

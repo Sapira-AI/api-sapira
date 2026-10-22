@@ -916,7 +916,7 @@
  "mrr_legacy": {
   "name": "public.mrr_legacy",
   "rls_enabled": true,
-  "rows": 11836,
+  "rows": 11848,
   "columns": [
    {
     "name": "id",

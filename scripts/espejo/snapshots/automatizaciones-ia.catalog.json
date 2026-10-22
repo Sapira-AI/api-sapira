@@ -1197,5 +1197,70 @@
     "with_check": null
    }
   ]
+ },
+ "holding_inbound_email_domains": {
+  "comment": "Dominio de recepción de DTE del holding (MX hacia SendGrid Inbound Parse)",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "holding_inbound_email_domains_created_by_fkey",
+    "type": "f",
+    "ondelete": "a",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (created_by) REFERENCES users(id)"
+   },
+   {
+    "name": "holding_inbound_email_domains_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "holding_inbound_email_domains_holding_id_key",
+    "type": "u",
+    "cols": [
+     "holding_id"
+    ]
+   },
+   {
+    "name": "holding_inbound_email_domains_inbound_domain_key",
+    "type": "u",
+    "cols": [
+     "inbound_domain"
+    ]
+   },
+   {
+    "name": "holding_inbound_email_domains_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "holding_inbound_email_domains_status_check",
+    "type": "c",
+    "expr": "domain_status = ANY (ARRAY['pending'::text, 'verified'::text])"
+   }
+  ],
+  "indexes": [],
+  "triggers": [],
+  "policies": [
+   "holding_access_holding_inbound_email_domains (ALL, public)"
+  ],
+  "policies_detail": [
+   {
+    "name": "holding_access_holding_inbound_email_domains",
+    "permissive": "PERMISSIVE",
+    "roles": [
+     "public"
+    ],
+    "cmd": "ALL",
+    "qual": "(holding_id = get_current_user_holding_id())",
+    "with_check": null
+   }
+  ]
  }
 }
