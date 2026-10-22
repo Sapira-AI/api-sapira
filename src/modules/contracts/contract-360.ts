@@ -310,6 +310,8 @@ export interface ScheduleInvoice {
 	amount_contract_ccy: number;
 	amount_invoice_ccy: number | null;
 	fx_contract_to_invoice: number | null;
+	/** Origen de la tasa según las líneas; `spot` sin tasa = "Del día" elegido en la factura, manda sobre la política fija del contrato. */
+	fx_rate_source?: string | null;
 	/** La factura misma exige referencias (se copia del contrato al generarla). */
 	requires_references: boolean;
 	/** Período facturado: mínimo inicio y máximo fin de sus líneas. */
@@ -635,7 +637,8 @@ export function computeBlockers(invoice: ScheduleInvoice, context: BlockerContex
 		invoice.invoice_currency &&
 		contractCurrency &&
 		invoice.invoice_currency !== contractCurrency &&
-		invoice.fx_contract_to_invoice === null
+		invoice.fx_contract_to_invoice === null &&
+		invoice.fx_rate_source !== 'spot'
 	) {
 		blockers.push({
 			code: 'fixed_fx_without_rate',

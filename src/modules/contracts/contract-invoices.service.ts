@@ -742,7 +742,8 @@ export class ContractInvoicesService {
 					line.after.tax_amount_invoice_currency,
 					line.after.total_invoice_currency,
 					lineFx,
-					lineFx === null ? null : source,
+					// Sin tasa el origen va en NULL, salvo la marca `spot` ("Del día" elegido en la factura, Domi 22-10).
+					lineFx === null && source !== 'spot' ? null : source,
 					lineFx === null ? null : date,
 				]
 			);
@@ -843,9 +844,9 @@ export class ContractInvoicesService {
 			if (plan.spot_reset) {
 				await runner.query(
 					`UPDATE invoice_items SET unit_price_invoice_currency = NULL, subtotal_invoice_currency = NULL, tax_amount_invoice_currency = NULL,
-						total_invoice_currency = NULL, fx_contract_to_invoice = NULL, fx_rate_source = NULL, fx_rate_date = NULL, updated_at = now()
+						total_invoice_currency = NULL, fx_contract_to_invoice = NULL, fx_rate_source = $3, fx_rate_date = NULL, updated_at = now()
 					WHERE invoice_id = $1 AND holding_id = $2`,
-					[plan.id, holdingId]
+					[plan.id, holdingId, plan.after.fx_rate_source]
 				);
 				await runner.query(
 					`UPDATE invoices SET fx_contract_to_invoice = NULL, amount_invoice_currency = NULL, total_invoice_currency = NULL, vat = $3

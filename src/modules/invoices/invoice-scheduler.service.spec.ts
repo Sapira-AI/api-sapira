@@ -473,6 +473,38 @@ describe('InvoiceSchedulerService', () => {
 		expect(exchangeRatesService.getExchangeRateWithFallback).not.toHaveBeenCalled();
 	});
 
+	it('"Del día" elegido en la factura (línea con fx_rate_source spot) en un contrato fijo sin tasa: se valoriza con la tasa del día (Domi 22-10, caso Carelis)', async () => {
+		const { service, invoiceRepository, invoiceItemRepository, exchangeRatesService } = createService();
+
+		exchangeRatesService.getExchangeRateWithFallback.mockResolvedValue({ rate: 41199.85, is_fallback: false, rate_date: new Date('2026-10-22') });
+		await expect(
+			service.calculateInvoiceAmountsAtIssue({
+				id: 'invoice-carelis',
+				invoice_number: 'INV-161-10',
+				issue_date: new Date('2026-10-22'),
+				fx_contract_to_invoice: null,
+				contract: { fx_invoice_policy: 'fixed' },
+				contract_currency: 'CLF',
+				invoice_currency: 'CLP',
+				amount_contract_currency: 10,
+				items: [
+					{
+						id: 'line-1',
+						unit_price_contract_currency: 10,
+						subtotal_contract_currency: 10,
+						tax_amount_contract_currency: 1.9,
+						total_contract_currency: 11.9,
+						fx_contract_to_invoice: null,
+						fx_rate_source: 'spot',
+					},
+				],
+			} as any)
+		).resolves.toMatchObject({ success: true, exchangeRate: 41199.85 });
+		expect(exchangeRatesService.getExchangeRateWithFallback).toHaveBeenCalledWith('CLF', 'CLP', expect.anything());
+		expect(invoiceRepository.update).toHaveBeenCalledWith('invoice-carelis', expect.objectContaining({ fx_contract_to_invoice: 41199.85 }));
+		expect(invoiceItemRepository.update).toHaveBeenCalledWith('line-1', expect.objectContaining({ fx_contract_to_invoice: 41199.85 }));
+	});
+
 	it('política spot del contrato: una tasa pegada sin origen explícito no se usa, se consulta Banco Central como antes', async () => {
 		const { service, exchangeRatesService, invoiceRepository } = createService();
 
@@ -669,6 +701,23 @@ describe('InvoiceSchedulerService', () => {
 				'invoice-mm',
 				expect.objectContaining({ amount_invoice_currency: 2400, fx_contract_to_invoice: 19 })
 			);
+		});
+
+		it('contrato fijo sin tasa pero con "Del día" elegido en la factura (marca spot en una línea): se valoriza por par con la tasa del día (Domi 22-10)', async () => {
+			const { service, exchangeRatesService } = createService();
+
+			exchangeRatesService.getExchangeRateWithFallback.mockResolvedValue({ rate: 18.5, is_fallback: false, rate_date: rateDate });
+			await expect(
+				service.calculateInvoiceAmountsAtIssue(
+					multiInvoice([{ ...usdLine, fx_rate_source: 'spot' }, mxnLine], { fx_invoice_policy: 'fixed' })
+				)
+			).resolves.toMatchObject({ success: true, exchangeRate: 18.5 });
+			// Sin la marca, la política fija del contrato sigue exigiendo la tasa (U12/B3).
+			await expect(
+				service.calculateInvoiceAmountsAtIssue(multiInvoice([usdLine, mxnLine], { fx_invoice_policy: 'fixed' }))
+			).rejects.toMatchObject({
+				code: 'fx_rate_missing',
+			});
 		});
 
 		it('falta la tasa de un par → fx_rate_missing con el par, no escribe nada (no se envía)', async () => {

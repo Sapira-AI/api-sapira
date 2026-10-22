@@ -32,7 +32,11 @@ export type InvoiceFxPolicy = (typeof INVOICE_FX_POLICIES)[number];
  * `net_exact` es un modo de `fixed` cuyo origen queda en `invoice_items.fx_rate_source = 'net_exact'` y en el evento.
  */
 export type StoredFxPolicy = 'same_currency' | 'spot' | 'fixed';
-/** Origen de la tasa, en `invoice_items.fx_rate_source` (texto libre ya existente; v2 escribe manual | net_exact) y en el evento. */
+/**
+ * Origen de la tasa, en `invoice_items.fx_rate_source` (texto libre ya existente; v2 escribe manual | net_exact | spot) y en el evento.
+ * `spot` sin tasa = "Del día" elegido en la factura (Domi 22-10, caso Carelis: manda sobre la política fija del contrato); `spot` con
+ * tasa = valorizada por el envío al ERP.
+ */
 export type FxRateSource = 'contract' | 'manual' | 'official' | 'net_exact' | string;
 
 export const INVOICE_EVENT_TYPES = {
@@ -349,20 +353,26 @@ export function partialBillingBlocker(invoice: Pick<ContractInvoiceRow, 'interna
 export const isMultiCurrency = (invoice: Pick<ContractInvoiceRow, 'contract_currency' | 'invoice_currency'>) =>
 	!!invoice.invoice_currency && !!invoice.contract_currency && invoice.invoice_currency.toUpperCase() !== invoice.contract_currency.toUpperCase();
 
-/** Política FX efectiva de la factura: la propia y, si no tiene, la del contrato (transición U12/B3). */
+/**
+ * Política FX efectiva de la factura: la propia y, si no tiene, la del contrato (transición U12/B3). La decisión por factura manda en
+ * los dos sentidos: tasa con origen manual/net_exact = fija aunque el contrato sea spot; marca `spot` (sin tasa: "Del día" elegido;
+ * con tasa: valorizada al enviar) = spot aunque el contrato sea fijo (Domi 22-10, caso Carelis CTR-2026-161).
+ */
 export const effectiveFxPolicy = (
-	invoice: Pick<ContractInvoiceRow, 'fx_contract_to_invoice' | 'contract_currency' | 'invoice_currency'>,
+	invoice: Pick<ContractInvoiceRow, 'fx_contract_to_invoice' | 'contract_currency' | 'invoice_currency'> & { fx_rate_source?: FxRateSource | null },
 	context: Pick<ContractInvoiceContext, 'contract_fx_invoice_policy'>
 ): StoredFxPolicy | null =>
 	!isMultiCurrency(invoice)
 		? 'same_currency'
-		: invoice.fx_contract_to_invoice !== null && (invoice as { fx_rate_source?: FxRateSource | null }).fx_rate_source !== 'spot'
+		: invoice.fx_contract_to_invoice !== null && invoice.fx_rate_source !== 'spot'
 			? 'fixed'
-			: context.contract_fx_invoice_policy === 'fixed'
-				? 'fixed'
-				: context.contract_fx_invoice_policy === 'spot'
-					? 'spot'
-					: null;
+			: invoice.fx_rate_source === 'spot'
+				? 'spot'
+				: context.contract_fx_invoice_policy === 'fixed'
+					? 'fixed'
+					: context.contract_fx_invoice_policy === 'spot'
+						? 'spot'
+						: null;
 
 /**
  * Política derivada de la factura sola (sin mirar el contrato): la que ven la lista, el detalle y los eventos. Una spot ya valorizada al
@@ -1187,7 +1197,10 @@ export function planFx(invoice: ContractInvoiceRow, lines: ContractInvoiceLineRo
 			message: 'La factura no tiene tasa de IVA: el IVA en moneda de factura sale del IVA guardado en cada línea (revísalo antes de enviar)',
 		});
 	if (input.policy === 'spot') {
-		if (invoice.fx_contract_to_invoice === null) warnings.push({ code: 'no_change', message: 'La factura ya está en spot sin tasa pegada' });
+		// La marca `spot` sin tasa deja constancia de la decisión por factura: el envío la respeta aunque el contrato sea fijo
+		// (Domi 22-10, caso Carelis). Sin ella, una factura spot y una fija pendiente de tasa eran idénticas en la base.
+		if (invoice.fx_contract_to_invoice === null && invoice.fx_rate_source === 'spot')
+			warnings.push({ code: 'no_change', message: 'La factura ya está en spot sin tasa pegada' });
 		const header = headerFromLines(lines, { sameCurrency: false, fx: null, taxRate });
 
 		return {
@@ -1196,9 +1209,9 @@ export function planFx(invoice: ContractInvoiceRow, lines: ContractInvoiceLineRo
 			blockers,
 			warnings,
 			before,
-			after: { fx_policy: 'spot', fx_rate: null, fx_rate_source: null, fx_contract_to_invoice: null, ...header },
+			after: { fx_policy: 'spot', fx_rate: null, fx_rate_source: 'spot', fx_contract_to_invoice: null, ...header },
 			lines: spotFxLines(lines),
-			write: { fx: null, fx_rate_source: null, header },
+			write: { fx: null, fx_rate_source: 'spot', header },
 		};
 	}
 	if (input.policy === 'net_exact') {
@@ -1309,9 +1322,10 @@ export function planErpReset(invoice: ContractInvoiceRow, context: ContractInvoi
 	if (!blockers.some((blocker) => blocker.code === 'credit_note') && invoice.odoo_invoice_id === null && invoice.sent_to_odoo_at === null) {
 		blockers.push({ code: 'not_sent_to_erp', message: 'La factura no está vinculada al ERP: no hay borrador que restablecer', next_step: null });
 	}
+	// También la factura que eligió "Del día" en un contrato fijo (marca `spot`): al restablecer vuelve a spot pendiente y conserva la marca.
 	const spotReset =
 		isMultiCurrency(invoice) &&
-		context.contract_fx_invoice_policy === 'spot' &&
+		(context.contract_fx_invoice_policy === 'spot' || invoice.fx_rate_source === 'spot') &&
 		invoice.fx_contract_to_invoice !== null &&
 		!invoice.fx_explicit &&
 		!invoice.internal_lines;
@@ -1341,7 +1355,7 @@ export function planErpReset(invoice: ContractInvoiceRow, context: ContractInvoi
 			...(spotHeader
 				? {
 						fx_contract_to_invoice: null,
-						fx_rate_source: null,
+						fx_rate_source: context.contract_fx_invoice_policy === 'fixed' ? 'spot' : null,
 						amount_invoice_currency: null,
 						vat: lines.length ? spotHeader.vat : invoice.vat,
 						total_invoice_currency: null,

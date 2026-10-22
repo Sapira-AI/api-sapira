@@ -294,6 +294,37 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 			expect(effectiveFxPolicy(invoice({ invoice_currency: 'USD' }), context({ contract_fx_invoice_policy: 'fixed' }))).toBe('same_currency');
 		});
 
+		it('"Del día" elegido en la factura (marca spot) manda sobre el contrato fijo sin tasa (Domi 22-10, caso Carelis CTR-2026-161)', () => {
+			const fixedContract = context({ contract_fx_invoice_policy: 'fixed' });
+
+			expect(effectiveFxPolicy(invoice({ fx_rate_source: 'spot' }), fixedContract)).toBe('spot');
+			expect(effectiveFxPolicy(invoice({ fx_rate_source: null }), fixedContract)).toBe('fixed');
+			// Valorizada por el envío (marca spot con tasa): sigue spot; tasa manual: fija aunque el contrato sea spot.
+			expect(effectiveFxPolicy(invoice({ fx_contract_to_invoice: 38500, fx_rate_source: 'spot' }), fixedContract)).toBe('spot');
+			expect(
+				effectiveFxPolicy(
+					invoice({ fx_contract_to_invoice: 38500, fx_rate_source: 'manual' }),
+					context({ contract_fx_invoice_policy: 'spot' })
+				)
+			).toBe('fixed');
+
+			const plan = planSendNow(invoice({ fx_rate_source: 'spot' }), fixedContract);
+
+			expect(codes(plan.blockers)).not.toContain('fixed_fx_without_rate');
+			expect(plan.can_apply).toBe(true);
+			expect(plan.summary).toMatchObject({ fx_policy: 'spot', fx_rate: null });
+			expect(codes(planSendNow(invoice(), fixedContract).blockers)).toContain('fixed_fx_without_rate');
+
+			// Restablecer el borrador del ERP de esa factura ya valorizada: vuelve a spot pendiente y conserva la marca.
+			const reset = planErpReset(invoice({ odoo_invoice_id: 9, fx_contract_to_invoice: 38500, fx_rate_source: 'spot' }), fixedContract);
+
+			expect(reset.spot_reset).toBe(true);
+			expect(reset.after).toMatchObject({ fx_contract_to_invoice: null, fx_rate_source: 'spot' });
+			expect(
+				planErpReset(invoice({ odoo_invoice_id: 9, fx_contract_to_invoice: 38500, fx_rate_source: 'manual' }), fixedContract).spot_reset
+			).toBe(false);
+		});
+
 		it('la fecha pasada y el spot no bloquean: avisan (la usuaria decide)', () => {
 			const plan = planSendNow(invoice({ issue_date: '2026-08-01' }), context());
 
@@ -618,7 +649,7 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 			expect(plan.after).toEqual({
 				fx_policy: 'spot',
 				fx_rate: null,
-				fx_rate_source: null,
+				fx_rate_source: 'spot',
 				fx_contract_to_invoice: null,
 				amount_contract_currency: 1099.99,
 				vat: 209,
@@ -628,10 +659,12 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 			expect(plan.lines.every((entry) => Object.values(entry.after).every((value) => value === null))).toBe(true);
 			expect(plan.write).toEqual({
 				fx: null,
-				fx_rate_source: null,
+				fx_rate_source: 'spot',
 				header: { amount_contract_currency: 1099.99, vat: 209, amount_invoice_currency: null, total_invoice_currency: null },
 			});
-			expect(codes(planFx(invoice(), lines, context(), { policy: 'spot' }).warnings)).toEqual(['no_change']);
+			// Sin tasa pero sin la marca (fija pendiente, contrato fijo): elegir spot sí cambia algo (deja la marca); ya marcada: no_change.
+			expect(codes(planFx(invoice(), lines, context(), { policy: 'spot' }).warnings)).toEqual([]);
+			expect(codes(planFx(invoice({ fx_rate_source: 'spot' }), lines, context(), { policy: 'spot' }).warnings)).toEqual(['no_change']);
 		});
 
 		it('net_exact: misma matemática que apply_fixed_fx_to_contract (fx = neto ÷ Σ qty × unitario, redondeo a la línea mayor, unitario sin redondear)', () => {
