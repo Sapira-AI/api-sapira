@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import type { FieldError } from '@/core/utils/validation-errors';
 
 import { findFixedRate, type FxPeriodRate, round2 } from './billing-engine';
+import { PER_INVOICE_FX_SOURCES } from './fx-rate-sources';
 
 /**
  * Multimoneda en el contrato (`docs/v2-rediseno/spec-multimoneda-contrato.md`): códigos estables y conversiones puras que comparten el alta
@@ -256,10 +257,9 @@ export function multicurrencyHeader(
 
 /**
  * Orígenes de tasa fijada **por factura** (`PATCH …/invoices/fx`: tasa manual o neto exacto): en un documento multimoneda la tasa de ese par en
- * ESE documento manda sobre la pactada del contrato. Mismo conjunto que `PER_INVOICE_FX_SOURCES` (`contract-changes.ts`; no se importa para no
- * crear un ciclo de módulos).
+ * ESE documento manda sobre la pactada del contrato. Lista única en `fx-rate-sources.ts` (módulo hoja, sin ciclo).
  */
-export const DOCUMENT_RATE_SOURCES: ReadonlySet<string> = new Set(['manual', 'net_exact']);
+export const DOCUMENT_RATE_SOURCES: ReadonlySet<string> = PER_INVOICE_FX_SOURCES;
 
 /** Contexto de un contrato multimoneda para revalorizar sus Por Emitir (política, tasas por par y moneda de cada ítem). */
 export interface PairRateContext {

@@ -63,6 +63,7 @@ import {
 } from './dtos/contract-changes.dto';
 import { hasPricingModel, type PriceSpecDto, UF_CURRENCY } from './dtos/create-contract.dto';
 import { lastPartialPeriod } from './end-off-cycle';
+import { PER_INVOICE_FX_SOURCES } from './fx-rate-sources';
 import { DESCRIPTION_FITTED_CODE, type DescriptionTemplate } from './invoice-description';
 import {
 	type CodedFieldError,
@@ -995,8 +996,8 @@ export const isPartialBilled = (invoice: ChangeInvoiceRow) => invoice.lines.some
 export const hasErpDraft = (invoice: Pick<ChangeInvoiceRow, 'odoo_invoice_id' | 'sent_to_odoo_at'>) =>
 	(invoice.odoo_invoice_id !== null && invoice.odoo_invoice_id !== undefined) || Boolean(invoice.sent_to_odoo_at);
 
-/** Tasa fijada por factura desde el 360 (política por factura: `manual` o `net_exact`): el cambio de moneda/FX del contrato no la pisa. */
-export const PER_INVOICE_FX_SOURCES = new Set(['manual', 'net_exact']);
+/** Tasa fijada por factura desde el 360 (`manual` o `net_exact`, lista única en `fx-rate-sources.ts`): el cambio de moneda/FX del contrato no la pisa. */
+export { PER_INVOICE_FX_SOURCES };
 export const hasPerInvoiceFx = (invoice: ChangeInvoiceRow) => invoice.lines.some((line) => PER_INVOICE_FX_SOURCES.has(line.fx_rate_source ?? ''));
 
 /** Línea cuya cantidad sale de un consumo registrado (`consumption` / `estimated` o con fila en `consumption_entries`). */

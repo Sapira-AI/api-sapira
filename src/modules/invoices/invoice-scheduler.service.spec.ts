@@ -505,6 +505,37 @@ describe('InvoiceSchedulerService', () => {
 		expect(invoiceItemRepository.update).toHaveBeenCalledWith('line-1', expect.objectContaining({ fx_contract_to_invoice: 41199.85 }));
 	});
 
+	it('reenvío de una "Del día" ya valorizada en un contrato fijo (marca spot con tasa): no reutiliza la tasa guardada, consulta la del día (revisión 23-10)', async () => {
+		const { service, invoiceRepository, exchangeRatesService } = createService();
+
+		exchangeRatesService.getExchangeRateWithFallback.mockResolvedValue({ rate: 41350, is_fallback: false, rate_date: new Date('2026-10-23') });
+		await expect(
+			service.calculateInvoiceAmountsAtIssue({
+				id: 'invoice-carelis-resend',
+				invoice_number: 'INV-161-10',
+				issue_date: new Date('2026-10-23'),
+				fx_contract_to_invoice: 41199.85,
+				contract: { fx_invoice_policy: 'fixed' },
+				contract_currency: 'CLF',
+				invoice_currency: 'CLP',
+				amount_contract_currency: 10,
+				items: [
+					{
+						id: 'line-1',
+						unit_price_contract_currency: 10,
+						subtotal_contract_currency: 10,
+						tax_amount_contract_currency: 1.9,
+						total_contract_currency: 11.9,
+						fx_contract_to_invoice: 41199.85,
+						fx_rate_source: 'spot',
+					},
+				],
+			} as any)
+		).resolves.toMatchObject({ success: true, exchangeRate: 41350 });
+		expect(exchangeRatesService.getExchangeRateWithFallback).toHaveBeenCalledWith('CLF', 'CLP', expect.anything());
+		expect(invoiceRepository.update).toHaveBeenCalledWith('invoice-carelis-resend', expect.objectContaining({ fx_contract_to_invoice: 41350 }));
+	});
+
 	it('política spot del contrato: una tasa pegada sin origen explícito no se usa, se consulta Banco Central como antes', async () => {
 		const { service, exchangeRatesService, invoiceRepository } = createService();
 
@@ -718,6 +749,63 @@ describe('InvoiceSchedulerService', () => {
 			).rejects.toMatchObject({
 				code: 'fx_rate_missing',
 			});
+		});
+
+		it('contrato fijo: una línea con tasa la conserva sea cual sea su origen (scheduled-generation, contract-change, NULL), sin consultar Banco Central (Domi 23-10, caso Carelis)', async () => {
+			for (const source of ['scheduled-generation', 'contract-change', null]) {
+				const { service, invoiceItemRepository, exchangeRatesService } = createService();
+				const valuedUsd = {
+					...usdLine,
+					fx_contract_to_invoice: 18,
+					fx_rate_source: source,
+					unit_price_invoice_currency: 900,
+					subtotal_invoice_currency: 1800,
+					tax_amount_invoice_currency: 288,
+					total_invoice_currency: 2088,
+				};
+
+				await expect(
+					service.calculateInvoiceAmountsAtIssue(multiInvoice([valuedUsd, mxnLine], { fx_invoice_policy: 'fixed' }))
+				).resolves.toMatchObject({
+					success: true,
+				});
+				expect(exchangeRatesService.getExchangeRateWithFallback).not.toHaveBeenCalled();
+				expect(invoiceItemRepository.update).toHaveBeenCalledWith('line-usd', expect.objectContaining({ fx_contract_to_invoice: 18 }));
+			}
+		});
+
+		it('contrato fijo: la línea SIN tasa sigue deteniendo el envío con el par que falta; la marca spot con tasa no cuenta como fija', async () => {
+			const { service } = createService();
+
+			await expect(
+				service.calculateInvoiceAmountsAtIssue(multiInvoice([usdLine, mxnLine], { fx_invoice_policy: 'fixed' }))
+			).rejects.toMatchObject({
+				code: 'fx_rate_missing',
+				pairs: ['USD>MXN'],
+				message: expect.stringContaining('USD → MXN'),
+			});
+		});
+
+		it('contrato spot: una tasa de origen reissue/scheduled-generation no se conserva (se valoriza al día); la del contrato o la manual sí', async () => {
+			const valued = (source: string) => ({ ...usdLine, fx_contract_to_invoice: 18, fx_rate_source: source });
+
+			for (const source of ['reissue', 'scheduled-generation']) {
+				const { service, exchangeRatesService } = createService();
+
+				exchangeRatesService.getExchangeRateWithFallback.mockResolvedValue({ rate: 18.5, is_fallback: false, rate_date: rateDate });
+				await expect(service.calculateInvoiceAmountsAtIssue(multiInvoice([valued(source), mxnLine]))).resolves.toMatchObject({
+					exchangeRate: 18.5,
+				});
+				expect(exchangeRatesService.getExchangeRateWithFallback).toHaveBeenCalled();
+			}
+			for (const source of ['contract-change', 'manual']) {
+				const { service, exchangeRatesService } = createService();
+
+				await expect(service.calculateInvoiceAmountsAtIssue(multiInvoice([valued(source), mxnLine]))).resolves.toMatchObject({
+					success: true,
+				});
+				expect(exchangeRatesService.getExchangeRateWithFallback).not.toHaveBeenCalled();
+			}
 		});
 
 		it('falta la tasa de un par → fx_rate_missing con el par, no escribe nada (no se envía)', async () => {
