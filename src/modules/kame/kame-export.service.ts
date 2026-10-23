@@ -359,7 +359,15 @@ export class KameExportService {
 	/** Vista previa del comprobante de un mes, sin enviar nada: el cuerpo, si cuadra y qué falta. */
 	async previewJournal(holdingId: string, companyId: string, period: string) {
 		await this.connections.assertCompany(holdingId, companyId);
-		const month = await this.journalMonth(holdingId, companyId, period);
+		let month: Awaited<ReturnType<KameExportService['journalMonth']>>;
+
+		try {
+			month = await this.journalMonth(holdingId, companyId, period);
+		} catch (error) {
+			// Una compañía que no lleva pesos (o un mes que no se puede armar) se informa en la vista previa, no como error 500.
+			if (error instanceof KameMappingError) return { period, closed: false, ok: false, error: error.message, total: 0, body: null };
+			throw error;
+		}
 		const settings = await this.connections.findSettings(holdingId, companyId);
 		const connection = settings ? await this.connections.findConnection(holdingId, companyId, settings.active_environment) : null;
 
