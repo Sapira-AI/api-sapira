@@ -183,6 +183,13 @@ describe('computeBlockers', () => {
 		expect(codes(invoice(), context())).toEqual([]);
 	});
 
+	it('"Del día" elegido en la factura (marca spot) no exige la tasa del contrato fijo (Domi 22-10, caso Carelis)', () => {
+		const fixedContract = context({ fx_invoice_policy: 'fixed' });
+
+		expect(codes(invoice({ fx_contract_to_invoice: null, fx_rate_source: 'spot' }), fixedContract)).not.toContain('fixed_fx_without_rate');
+		expect(codes(invoice({ fx_contract_to_invoice: null, fx_rate_source: null }), fixedContract)).toContain('fixed_fx_without_rate');
+	});
+
 	it('detecta referencias faltantes (del contrato o de la factura), tasa fija sin cargar, ERP, producto y mes pasado', () => {
 		const blockers = computeBlockers(
 			invoice({ fx_contract_to_invoice: null, lines_without_product: 2, issue_date: '2026-08-31' }),

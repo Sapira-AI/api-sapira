@@ -137,7 +137,7 @@ export class MrrOverviewDto extends MetricsFiltersDto {
 	asOf?: string;
 }
 
-class PageDto extends MetricsFiltersDto {
+export class PageDto extends MetricsFiltersDto {
 	@ApiPropertyOptional({ default: 1 })
 	@Type(() => Number)
 	@IsInt()
@@ -283,3 +283,40 @@ export class RevenueJournalDto extends MetricsFiltersDto {
 }
 
 export class ExceptionsDto extends PageDto {}
+
+export const DEAL_TYPE_FILTERS = ['new_business', 'upsell', 'downsell', 'other'] as const;
+export type DealTypeFilter = (typeof DEAL_TYPE_FILTERS)[number];
+
+/** Vendedores (Domi 19/22-10): oportunidades ganadas por vendedor y período; `sellerId` acota vendedores, `type` la familia de negocio. */
+export class SellersDto extends MetricsFiltersDto {
+	@ApiPropertyOptional({ description: 'Uno o varios vendedores (uuid separados por coma)' })
+	@Matches(UUID_LIST, { message: 'sellerId debe ser uno o varios UUID separados por coma' })
+	@IsOptional()
+	sellerId?: string;
+
+	@ApiPropertyOptional({
+		enum: DEAL_TYPE_FILTERS,
+		description: 'Familia de tipo de negocio (upsell incluye cross-sell; other = renovación, renegociación, reactivación o sin tipo)',
+	})
+	@IsIn(DEAL_TYPE_FILTERS, { message: 'type debe ser new_business, upsell, downsell u other' })
+	@IsOptional()
+	type?: DealTypeFilter;
+}
+
+/** Detalle de un vendedor (o `none` = contratos sin vendedor): sus negocios del período, paginados (`limit` ≤ 1000). */
+export class SellerDealsDto extends SellersDto {
+	@ApiPropertyOptional({ default: 1 })
+	@Type(() => Number)
+	@IsInt()
+	@Min(1)
+	@IsOptional()
+	page?: number;
+
+	@ApiPropertyOptional({ default: 25, maximum: 1000 })
+	@Type(() => Number)
+	@IsInt()
+	@Min(1)
+	@Max(1000)
+	@IsOptional()
+	limit?: number;
+}

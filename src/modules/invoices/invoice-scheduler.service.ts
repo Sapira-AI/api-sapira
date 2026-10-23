@@ -1464,8 +1464,13 @@ export class InvoiceSchedulerService {
 		// `fx_contract_to_invoice` (valor = fija confirmada desde el Contrato 360; NULL = spot pendiente).
 		const fxPolicy = invoice.contract?.fx_invoice_policy ?? null;
 		const fixedRate = invoice.fx_contract_to_invoice;
+		// "Del día" elegido en la factura (`invoice_items.fx_rate_source = 'spot'`, Domi 22-10, caso Carelis CTR-2026-161): manda sobre la
+		// política fija del contrato, espejo de la tasa fija por factura en un contrato spot. Se valoriza con la tasa del día.
+		const explicitlySpot = (invoice.items || []).some(
+			(item) => String((item as { fx_rate_source?: string | null }).fx_rate_source ?? '') === 'spot'
+		);
 
-		if (fxPolicy === 'fixed' && !(fixedRate != null && Number(fixedRate) > 0)) {
+		if (fxPolicy === 'fixed' && !explicitlySpot && !(fixedRate != null && Number(fixedRate) > 0)) {
 			throw new Error(
 				`La factura ${invoice.invoice_number || invoice.id} usa tipo de cambio fijo (política del contrato) y no tiene tasa: ` +
 					`confírmala desde el contrato antes de enviarla.`
@@ -1480,7 +1485,7 @@ export class InvoiceSchedulerService {
 			['manual', 'net_exact'].includes(String((item as { fx_rate_source?: string | null }).fx_rate_source ?? ''))
 		);
 
-		if ((fxPolicy === 'fixed' || explicitlyFixed) && fixedRate != null && Number(fixedRate) > 0) {
+		if (((fxPolicy === 'fixed' && !explicitlySpot) || explicitlyFixed) && fixedRate != null && Number(fixedRate) > 0) {
 			this.logger.log(
 				`💱 FX fijo aplicado para factura ${invoice.invoice_number}: ` +
 					`${invoice.contract_currency}/${invoice.invoice_currency} = ${fixedRate} ` +
@@ -1649,7 +1654,8 @@ export class InvoiceSchedulerService {
 			InvoiceSchedulerService.KEPT_FX_SOURCES.has(String(item.fx_rate_source ?? '')) && Number(item.fx_contract_to_invoice) > 0
 				? Number(item.fx_contract_to_invoice)
 				: null;
-		const fixedPolicy = invoice.contract?.fx_invoice_policy === 'fixed';
+		// Marca `spot` en alguna línea ("Del día" elegido en la factura, Domi 22-10): la política fija del contrato no exige tasa.
+		const fixedPolicy = invoice.contract?.fx_invoice_policy === 'fixed' && !items.some((item) => String(item.fx_rate_source ?? '') === 'spot');
 		const issueDate = invoice.issue_date instanceof Date ? invoice.issue_date : new Date(invoice.issue_date);
 		const spot = new Map<string, { rate: number; rate_date: Date; is_fallback: boolean }>();
 		const missing: string[] = [];

@@ -2187,6 +2187,45 @@ describe('item_update · corregir la fecha de inicio (caso CTR-2026-191, decisi�
 			request({ type: 'item_update', items: [{ item_id: ANALITICA, start_date: start, ...extra }] } as never, { effective_date: '2026-09-28' })
 		);
 
+	it('inicio y fin del mismo ítem en un solo cambio (Domi 22-10, CTR-2026-164): el plazo y el valor se calculan desde el inicio nuevo al fin nuevo', () => {
+		const plan = move(ninja(), '2026-10-01', { end_date: '2027-01-31' });
+
+		expect(plan.preview.can_apply).toBe(true);
+		expect(ops(plan, 'update_item')[0]).toMatchObject({
+			kind: 'update_item',
+			item_id: ANALITICA,
+			set: expect.objectContaining({ start_date: '2026-10-01', end_date: '2027-01-31', term_months: 4 }),
+		});
+		expect(plan.event?.metadata).toEqual(
+			expect.objectContaining({
+				items: [
+					expect.objectContaining({
+						changes: expect.arrayContaining([
+							{ field: 'start_date', before: '2026-09-01', after: '2026-10-01' },
+							{ field: 'end_date', before: '2026-12-31', after: '2027-01-31' },
+						]),
+					}),
+				],
+			})
+		);
+		// El fin de OTRO ítem no va con el inicio en el mismo cambio: la validación lo rechaza.
+		expect(() =>
+			planChange(
+				ninja(),
+				request(
+					{
+						type: 'item_update',
+						items: [
+							{ item_id: ANALITICA, start_date: '2026-10-01' },
+							{ item_id: SOPORTE, end_date: '2027-01-31' },
+						],
+					} as never,
+					{ effective_date: '2026-09-28' }
+				)
+			)
+		).toThrow(/a la vez/);
+	});
+
 	it('Ninja: la de septiembre anulada con NC (sin reemitir) → mover el inicio al 01-10 corrige el ítem en su lugar sin tocar facturas', () => {
 		const plan = move(ninja(), '2026-10-01');
 

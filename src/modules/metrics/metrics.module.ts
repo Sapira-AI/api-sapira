@@ -7,6 +7,7 @@ import { MetricsDataService } from './metrics-data.service';
 import { MetricsController } from './metrics.controller';
 import { MrrMetricsService } from './mrr-metrics.service';
 import { RevenueMetricsService } from './revenue-metrics.service';
+import { SellersMetricsService } from './sellers-metrics.service';
 
 /**
  * Métricas del holding: `HoldingMetricsService` (MRR y clientes activos del Dashboard y Clientes) y los endpoints de solo lectura de
@@ -15,7 +16,7 @@ import { RevenueMetricsService } from './revenue-metrics.service';
 @Module({
 	imports: [PostgreSQLDatabaseModule],
 	controllers: [MetricsController],
-	providers: [HoldingMetricsService, MetricsDataService, MrrMetricsService, RevenueMetricsService],
+	providers: [HoldingMetricsService, MetricsDataService, MrrMetricsService, RevenueMetricsService, SellersMetricsService],
 	exports: [HoldingMetricsService, RevenueMetricsService, MrrMetricsService],
 })
 export class MetricsModule {}
