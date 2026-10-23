@@ -46,6 +46,27 @@ export interface ErpErrorTranslation {
 
 const MAX_CLEAN = 240;
 
+/**
+ * Pares sin tasa que nombra el texto técnico ("…tasa para USD → CLP, CLF → CLP: …" del scheduler por pares, "…disponible para USD/CLP en
+ * fecha …" del scheduler simple, "No se encontró tipo de cambio para USD/CLP en o antes de …" del servicio de tasas), unidos con "y"; null
+ * si no los trae. Solo códigos de moneda en mayúsculas y completos: "para esa línea" o "para esta fecha" no cuentan (revisión 23-10).
+ */
+export function missingFxPairs(raw: string | null | undefined): string | null {
+	const code = '[A-Z]{3}';
+	const pair = `${code}(?:\\s*(?:→|->|\\/)\\s*${code})?`;
+	const match = String(raw ?? '').match(
+		new RegExp(`(?:tasa|tipo de cambio(?: disponible)?) para (${pair}(?:,\\s*${pair})*)(?![A-Za-z])(?!\\s*(?:→|->|\\/))`)
+	);
+
+	if (!match) return null;
+	const pairs = match[1]
+		.split(',')
+		.map((pair) => pair.trim().replace(/\s*(?:->|\/)\s*/, ' → '))
+		.filter(Boolean);
+
+	return pairs.length > 1 ? `${pairs.slice(0, -1).join(', ')} y ${pairs[pairs.length - 1]}` : (pairs[0] ?? null);
+}
+
 /** Quita prefijos técnicos, trazas y nombres de excepciones de un mensaje de Odoo y deja la primera frase útil. */
 export function cleanErpMessage(raw: string | null | undefined): string {
 	if (!raw) return '';
@@ -99,9 +120,13 @@ export function translateErpError(rawInput: string | null | undefined, errorType
 		);
 	}
 	if (type === 'exchange_rate' || type === 'amount_calculation' || has(/tipo de cambio|exchange rate|fx_rate|montos no calculados/)) {
+		// El scheduler ya nombra los pares que faltan ("…tasa para USD → CLP, CLF → CLP: …" / "…disponible para USD/CLP en fecha …"):
+		// se conservan en el mensaje (Domi 23-10) en vez de la frase genérica.
+		const pairs = missingFxPairs(raw ?? text);
+
 		return build(
 			'fx_rate_missing',
-			'Falta el tipo de cambio para valorizar la factura en su moneda',
+			pairs ? `Falta el tipo de cambio para ${pairs}` : 'Falta el tipo de cambio para valorizar la factura en su moneda',
 			'Confirma la tasa desde Tipo de cambio de la factura y vuelve a enviarla',
 			'fx',
 			raw
