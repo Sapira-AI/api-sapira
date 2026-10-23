@@ -14,6 +14,7 @@ import { InvoiceReference } from '@/databases/postgresql/entities/facturacion/in
 import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
 import { OdooProductMapping } from '@/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity';
 import { NEEDS_REFERENCE_CODE, referenceRequirement } from '@/modules/contracts/contract-360';
+import { isPerInvoiceFxSource, keepsRateAtIssue, SPOT_FX_SOURCE } from '@/modules/contracts/fx-rate-sources';
 import { pairKey, type PairLine, upperCode, valuateLinesByPair } from '@/modules/contracts/multicurrency';
 import { INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE, NotificationsService } from '@/modules/notifications/notifications.service';
 
@@ -1467,7 +1468,7 @@ export class InvoiceSchedulerService {
 		// "Del día" elegido en la factura (`invoice_items.fx_rate_source = 'spot'`, Domi 22-10, caso Carelis CTR-2026-161): manda sobre la
 		// política fija del contrato, espejo de la tasa fija por factura en un contrato spot. Se valoriza con la tasa del día.
 		const explicitlySpot = (invoice.items || []).some(
-			(item) => String((item as { fx_rate_source?: string | null }).fx_rate_source ?? '') === 'spot'
+			(item) => String((item as { fx_rate_source?: string | null }).fx_rate_source ?? '') === SPOT_FX_SOURCE
 		);
 
 		if (fxPolicy === 'fixed' && !explicitlySpot && !(fixedRate != null && Number(fixedRate) > 0)) {
@@ -1482,7 +1483,7 @@ export class InvoiceSchedulerService {
 		// factura, neto exacto o facturación por OC) se respeta aunque la política del contrato sea spot. Una tasa "pegada" por datos
 		// heredados (sin ese origen) sigue recalculándose a spot como antes.
 		const explicitlyFixed = (invoice.items || []).some((item) =>
-			['manual', 'net_exact'].includes(String((item as { fx_rate_source?: string | null }).fx_rate_source ?? ''))
+			isPerInvoiceFxSource((item as { fx_rate_source?: string | null }).fx_rate_source)
 		);
 
 		if (((fxPolicy === 'fixed' && !explicitlySpot) || explicitlyFixed) && fixedRate != null && Number(fixedRate) > 0) {
@@ -1633,7 +1634,7 @@ export class InvoiceSchedulerService {
 	 * MM4 · valorización por par al emitir (spec-multimoneda §4, decisión de Domi 01-10: al ERP va siempre la moneda de la factura y la
 	 * conversión es directa moneda de la línea → factura, sin pasar por la moneda del contrato). Por cada par presente:
 	 * - misma moneda que la factura → tasa 1 (la línea no se toca si ya tiene sus montos en moneda de factura);
-	 * - línea ya fijada (`fx_rate_source` contract / manual / net_exact / manual_unify con tasa) → conserva su tasa;
+	 * - línea con tasa que se respeta (`keepsRateAtIssue`: cualquier origen salvo `spot` con contrato fijo; por factura o del contrato con spot) → conserva su tasa;
 	 * - si no, spot del día de emisión de ESE par (`getExchangeRateWithFallback`); con política fija nunca se sale a spot en silencio.
 	 * Si falta la tasa de cualquier par no escribe nada y no envía (`fx_rate_missing` con el par). Escribe cada línea (unitario, subtotal,
 	 * IVA, total en moneda de factura, tasa, origen y fecha) y el encabezado = Σ líneas; `fx_contract_to_invoice` del encabezado = la tasa
@@ -1650,12 +1651,13 @@ export class InvoiceSchedulerService {
 		const target = upperCode(invoice.invoice_currency);
 		const items = invoice.items || [];
 		const currencyOf = (item: InvoiceItem) => upperCode(item.contract_currency) || header;
-		const keptRate = (item: InvoiceItem) =>
-			InvoiceSchedulerService.KEPT_FX_SOURCES.has(String(item.fx_rate_source ?? '')) && Number(item.fx_contract_to_invoice) > 0
-				? Number(item.fx_contract_to_invoice)
-				: null;
 		// Marca `spot` en alguna línea ("Del día" elegido en la factura, Domi 22-10): la política fija del contrato no exige tasa.
-		const fixedPolicy = invoice.contract?.fx_invoice_policy === 'fixed' && !items.some((item) => String(item.fx_rate_source ?? '') === 'spot');
+		const fixedPolicy =
+			invoice.contract?.fx_invoice_policy === 'fixed' && !items.some((item) => String(item.fx_rate_source ?? '') === SPOT_FX_SOURCE);
+		// Tasa que la línea ya tiene y se respeta al emitir (`keepsRateAtIssue`, Domi 23-10, caso Carelis): con contrato fijo cualquier
+		// origen (scheduled-generation, contract-change, NULL heredado…), con contrato spot solo las fijadas por factura o del contrato.
+		const keptRate = (item: InvoiceItem) =>
+			keepsRateAtIssue(item.fx_rate_source, item.fx_contract_to_invoice, fixedPolicy) ? Number(item.fx_contract_to_invoice) : null;
 		const issueDate = invoice.issue_date instanceof Date ? invoice.issue_date : new Date(invoice.issue_date);
 		const spot = new Map<string, { rate: number; rate_date: Date; is_fallback: boolean }>();
 		const missing: string[] = [];
@@ -1774,9 +1776,6 @@ export class InvoiceSchedulerService {
 			fallbackDate: fallback?.rate_date,
 		};
 	}
-
-	/** Orígenes de una tasa ya fijada en la línea que el envío respeta (fija del contrato, por factura, neto exacto, manual de la unificación). */
-	private static readonly KEPT_FX_SOURCES: ReadonlySet<string> = new Set(['contract', 'manual', 'net_exact', 'manual_unify']);
 
 	private async getInvoiceWithRelations(invoiceId: string): Promise<InvoiceWithRelations> {
 		const invoice = await this.invoiceRepository.findOne({ where: { id: invoiceId } });

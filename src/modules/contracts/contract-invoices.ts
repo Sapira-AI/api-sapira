@@ -12,6 +12,7 @@ import {
 	unmappedProductsMessage,
 } from './contract-360';
 import { cleanPaymentTerms } from './contract-drafts.service';
+import { PER_INVOICE_FX_SOURCES } from './fx-rate-sources';
 import { CONSOLIDATION_EVENT_TYPES } from './invoice-consolidation-read';
 import { codedValidationException, MULTICURRENCY_CODES, pairKey, upperCode, valuateLinesByPair } from './multicurrency';
 
@@ -165,8 +166,8 @@ export interface ContractInvoiceRow {
 	unified_v2?: boolean;
 }
 
-/** Orígenes de tasa que fijan la factura aunque el contrato sea spot (mismo criterio que el envío al ERP del scheduler). */
-export const EXPLICIT_FX_SOURCES = ['manual', 'net_exact'] as const;
+/** Orígenes de tasa que fijan la factura aunque el contrato sea spot (lista única `PER_INVOICE_FX_SOURCES` de `fx-rate-sources.ts`). */
+export const EXPLICIT_FX_SOURCES: readonly string[] = [...PER_INVOICE_FX_SOURCES];
 
 /** Contrato, compañía y razón social que gobiernan la factura. */
 export interface ContractInvoiceContext {

@@ -1,4 +1,4 @@
-import { cleanErpMessage, erpErrorSentence, translateErpError } from './erp-error-translation';
+import { cleanErpMessage, erpErrorSentence, missingFxPairs, translateErpError } from './erp-error-translation';
 
 describe('translateErpError (errores del envío al ERP en palabras de la usuaria)', () => {
 	it.each([
@@ -71,5 +71,36 @@ describe('translateErpError (errores del envío al ERP en palabras de la usuaria
 	it('sin texto: desconocido con raw null', () => {
 		expect(translateErpError(null)).toMatchObject({ category: 'unknown', raw: null });
 		expect(cleanErpMessage('Traceback (most recent call last): boom')).toBe('');
+	});
+});
+
+describe('fx_rate_missing con el par que falta (Domi 23-10)', () => {
+	it('conserva los pares que nombra el scheduler, unidos con "y"; sin pares, la frase genérica', () => {
+		expect(
+			translateErpError(
+				'fx_rate_missing: la factura INV-161 usa tipo de cambio fijo y no tiene tasa para USD → CLP, CLF → CLP: confírmala desde el contrato antes de enviarla.',
+				'exchange_rate'
+			)
+		).toMatchObject({ category: 'fx_rate_missing', message: 'Falta el tipo de cambio para USD → CLP y CLF → CLP', action: 'fx' });
+		expect(translateErpError('No hay tipo de cambio disponible para USD/CLP en fecha 2026-07-10', 'exchange_rate').message).toBe(
+			'Falta el tipo de cambio para USD → CLP'
+		);
+		expect(translateErpError('Montos no calculados para la factura', 'amount_calculation').message).toBe(
+			'Falta el tipo de cambio para valorizar la factura en su moneda'
+		);
+		expect(missingFxPairs('… no tiene tasa para USD → CLP, CLF → CLP, MXN → CLP: …')).toBe('USD → CLP, CLF → CLP y MXN → CLP');
+		expect(missingFxPairs('sin pares')).toBeNull();
+		// Texto del servicio de tasas (rama simple sin tasa en o antes de la fecha).
+		expect(translateErpError('No se encontró tipo de cambio para USD/CLP en o antes de 2026-10-23', 'exchange_rate').message).toBe(
+			'Falta el tipo de cambio para USD → CLP'
+		);
+		// Sin falsos positivos: solo códigos de moneda en mayúsculas y completos (revisión 23-10).
+		expect(missingFxPairs('no tiene tasa para esa línea')).toBeNull();
+		expect(missingFxPairs('No hay tipo de cambio disponible para esta fecha')).toBeNull();
+		expect(missingFxPairs('tasa para USDX')).toBeNull();
+		expect(missingFxPairs('tasa para USD → CLPX')).toBeNull();
+		expect(translateErpError('No hay tipo de cambio disponible para esta fecha', 'exchange_rate').message).toBe(
+			'Falta el tipo de cambio para valorizar la factura en su moneda'
+		);
 	});
 });

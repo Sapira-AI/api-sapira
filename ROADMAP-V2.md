@@ -43,6 +43,11 @@ este repo ([GUIA](src/databases/postgresql/GUIA-CAMBIOS-DE-ESQUEMA.md)).
    18-10: proponer el contrato activo a una factura previa o a un registro pendiente cuando calcen —mismo cliente, producto
    y moneda— y cierren un hueco justo antes del primer mes del contrato; con solape, con aviso de ajustar el contrato; spec
    §8.4) · "conservar Renovación al editar borrador" (va en las mejoras cortas de abajo).
+6. **ERP + FP&A con agentes (finanzas como servicio)**: giro comercial del 21-10 — contabilidad
+   derivada de los documentos, tesorería, consolidación y FP&A sobre el O2C, operados por agentes
+   con aprobación humana. Plan, referentes (DualEntry, Fathom/Aleph/Abacum), estrategia comercial y
+   spec de la Fase 0 → [`docs/erp-fpa/README.md`](docs/erp-fpa/README.md). Demo navegable para
+   pilotos (Xbrein) en `front-sapira` `/lab` (commit `e6f6e3f`, 23-10).
 
 ## 🧭 Prioridades vigentes (acordadas con Domi el 18 y 19-10-2026)
 

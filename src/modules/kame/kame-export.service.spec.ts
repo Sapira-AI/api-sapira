@@ -201,6 +201,20 @@ describe('KameExportService', () => {
 		expect(reopened.last()).toMatchObject({ status: 'skipped' });
 	});
 
+	it('la vista previa de una compañía que no lleva pesos dice por qué, sin error 500', async () => {
+		const ctx = setup();
+		ctx.revenue.journal.mockResolvedValueOnce({ currency: 'USD', months: [] } as never);
+
+		await expect(ctx.service.previewJournal('h-1', 'c-1', '2026-09')).resolves.toEqual({
+			period: '2026-09',
+			closed: false,
+			ok: false,
+			error: 'Los asientos de la compañía están en USD y Kame lleva pesos',
+			total: 0,
+			body: null,
+		});
+	});
+
 	it('un mes sin códigos de cuenta no se envía y dice qué falta', async () => {
 		const ctx = setup({
 			row: { object: 'journal', invoice_id: null, period: '2026-09-01' },
