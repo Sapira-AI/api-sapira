@@ -1,0 +1,604 @@
+{
+ "kame_connections": {
+  "name": "public.kame_connections",
+  "rls_enabled": true,
+  "rows": 1,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "environment",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "pruebas (empresa de pruebas de Kame) o produccion (la empresa real)"
+   },
+   {
+    "name": "client_id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Client ID de la API de Kame (datos de empresa en Kame)"
+   },
+   {
+    "name": "client_secret_encrypted",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Client secret cifrado con EncryptionService (iv:hex). Nunca se devuelve al front"
+   },
+   {
+    "name": "user_email",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Correo de un usuario de la empresa en Kame: va en el campo Usuario de cada envío"
+   },
+   {
+    "name": "kame_company_rut",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "RUT de la empresa en Kame (sin puntos, con guion): resguardo contra enviar a otra empresa"
+   },
+   {
+    "name": "business_unit",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Unidad de negocio de Kame (centro de costo) para las líneas de venta y los asientos"
+   },
+   {
+    "name": "branch",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Sucursal de Kame; vacía = casa matriz"
+   },
+   {
+    "name": "tested_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Última prueba de conexión exitosa"
+   },
+   {
+    "name": "test_error",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Error de la última prueba de conexión (null si salió bien)"
+   },
+   {
+    "name": "updated_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Usuario (public.users.id) que la cambió por última vez"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "kame_connections_company_id_fkey",
+    "source_table": "public.kame_connections",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "kame_connections_holding_id_fkey",
+    "source_table": "public.kame_connections",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "kame_company_settings": {
+  "name": "public.kame_company_settings",
+  "rls_enabled": true,
+  "rows": 1,
+  "columns": [
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "active_environment",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'pruebas'::text",
+    "comment": "Ambiente al que se envía: pruebas o produccion"
+   },
+   {
+    "name": "enabled",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "Conexión de la compañía activa: apagada no se encola ni se envía nada"
+   },
+   {
+    "name": "send_invoices",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "Registrar en Kame las facturas emitidas en Sapira"
+   },
+   {
+    "name": "send_journal",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "false",
+    "comment": "Enviar a Kame los asientos de devengo de los meses cerrados"
+   },
+   {
+    "name": "dry_run",
+    "data_type": "boolean",
+    "format": "bool",
+    "type": "boolean",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "true",
+    "comment": "Simulación: arma y guarda el envío sin llamar a Kame"
+   },
+   {
+    "name": "invoices_from",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Se registran las facturas emitidas desde esta fecha (null = desde que se activó)"
+   },
+   {
+    "name": "journal_from",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Primer mes (día 1) cuyos asientos se envían"
+   },
+   {
+    "name": "updated_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Usuario (public.users.id) que la cambió por última vez"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "company_id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "kame_company_settings_company_id_fkey",
+    "source_table": "public.kame_company_settings",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "kame_company_settings_holding_id_fkey",
+    "source_table": "public.kame_company_settings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
+ "erp_exports": {
+  "name": "public.erp_exports",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "gen_random_uuid()"
+   },
+   {
+    "name": "holding_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "system",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "ERP de destino: kame"
+   },
+   {
+    "name": "environment",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Ambiente del ERP al que se envió: pruebas o produccion"
+   },
+   {
+    "name": "object",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "invoice (factura emitida) o journal (asientos de devengo de un mes)"
+   },
+   {
+    "name": "invoice_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Factura enviada (object = invoice)"
+   },
+   {
+    "name": "period",
+    "data_type": "date",
+    "format": "date",
+    "type": "date",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Mes de los asientos, día 1 (object = journal)"
+   },
+   {
+    "name": "status",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "'pending'::text",
+    "comment": "pending, sending, sent, error, simulated (dry run) o skipped"
+   },
+   {
+    "name": "attempts",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "0",
+    "comment": "Intentos de envío hechos"
+   },
+   {
+    "name": "next_attempt_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()",
+    "comment": "Cuándo puede volver a intentarse (espera creciente tras un error)"
+   },
+   {
+    "name": "external_id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Id del registro en el ERP (IdVenta / comprobante)"
+   },
+   {
+    "name": "external_folio",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Folio del registro en el ERP"
+   },
+   {
+    "name": "last_error",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Último error (traducido para el usuario)"
+   },
+   {
+    "name": "request_payload",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Cuerpo enviado (o que se enviaría, en simulación)"
+   },
+   {
+    "name": "response",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Respuesta del ERP"
+   },
+   {
+    "name": "sent_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Cuándo quedó registrado en el ERP"
+   },
+   {
+    "name": "requested_by",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Usuario que lo envió a mano (null = job)"
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   },
+   {
+    "name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "erp_exports_company_id_fkey",
+    "source_table": "public.erp_exports",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "erp_exports_holding_id_fkey",
+    "source_table": "public.erp_exports",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "erp_exports_invoice_id_fkey",
+    "source_table": "public.erp_exports",
+    "source_columns": [
+     "invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ }
+}

@@ -623,6 +623,17 @@
      "updatable"
     ],
     "comment": "Plantilla de descripción de las líneas de factura {separator?, blocks: [{type, format?, text?}]} (spec facturas §3.6). NULL = glosa estándar PRODUCTO Cuenta X - Periodo dd/mm/aaaa a dd/mm/aaaa"
+   },
+   {
+    "name": "export_details",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Datos de exportación del contrato para la factura de exportación (DTE 110): {kind: servicios|bienes, sale_modality, sale_clause, payment_form, transport_route, carrier_name, port_of_loading, port_of_unloading, destination_country}, con los códigos de Aduana. Todos opcionales. NULL = sin datos de exportación"
    }
   ],
   "primary_keys": [
@@ -2021,7 +2032,7 @@
  "contract_lifecycle_events": {
   "name": "public.contract_lifecycle_events",
   "rls_enabled": true,
-  "rows": 757,
+  "rows": 1031,
   "columns": [
    {
     "name": "id",
@@ -5399,7 +5410,7 @@
  "invoice_consolidation_rules": {
   "name": "public.invoice_consolidation_rules",
   "rls_enabled": true,
-  "rows": 3,
+  "rows": 4,
   "columns": [
    {
     "name": "id",

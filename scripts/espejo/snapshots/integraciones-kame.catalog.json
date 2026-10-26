@@ -1,0 +1,253 @@
+{
+ "_meta": {
+  "source": "prod hklompkypzqtglprfobu · MCP Supabase list_tables verbose + execute_sql (solo lectura) sobre pg_catalog",
+  "date": "2026-08-22"
+ },
+ "_enums": {
+  "amendment_scope_type": [
+   "permanent",
+   "one_time"
+  ],
+  "contract_amendment_type": [
+   "RENEWAL",
+   "UPSELL",
+   "CROSS_SELL",
+   "DOWNSELL",
+   "CHURN"
+  ],
+  "credit_note_reason": [
+   "downsell",
+   "churn",
+   "reschedule",
+   "issue_error",
+   "prompt_payment_discount",
+   "one_time_discount",
+   "compensation",
+   "other"
+  ],
+  "credit_note_type": [
+   "cancellation",
+   "discount"
+  ],
+  "fx_conversion_type": [
+   "to_company",
+   "to_system"
+  ],
+  "fx_policy_type": [
+   "holding_default",
+   "spot",
+   "monthly_avg",
+   "fixed",
+   "period_fixed",
+   "table"
+  ],
+  "reference_status_enum": [
+   "Active",
+   "Expired",
+   "Cancelled"
+  ],
+  "reference_type_enum": [
+   "PO",
+   "HES",
+   "ACCEPTANCE",
+   "OTHER"
+  ],
+  "transformation_type_enum": [
+   "direct",
+   "lookup_table",
+   "company_mapping",
+   "partner_mapping",
+   "custom_function",
+   "value_mapping"
+  ]
+ },
+ "kame_connections": {
+  "comment": "Credencial de Kame de una compañía por ambiente (pruebas o producción). Solo la API",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "kame_connections_company_environment_key",
+    "type": "u",
+    "cols": [
+     "company_id",
+     "environment"
+    ]
+   },
+   {
+    "name": "kame_connections_company_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "kame_connections_environment_check",
+    "type": "c",
+    "expr": "environment = ANY (ARRAY['pruebas'::text, 'produccion'::text])"
+   },
+   {
+    "name": "kame_connections_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "kame_connections_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [],
+  "triggers": [],
+  "policies": [],
+  "policies_detail": []
+ },
+ "kame_company_settings": {
+  "comment": "Uso de Kame por compañía: ambiente activo e interruptores de envío. Solo la API",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "kame_company_settings_company_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "kame_company_settings_environment_check",
+    "type": "c",
+    "expr": "active_environment = ANY (ARRAY['pruebas'::text, 'produccion'::text])"
+   },
+   {
+    "name": "kame_company_settings_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "kame_company_settings_pkey",
+    "type": "p",
+    "cols": [
+     "company_id"
+    ]
+   }
+  ],
+  "indexes": [],
+  "triggers": [],
+  "policies": [],
+  "policies_detail": []
+ },
+ "erp_exports": {
+  "comment": "Cola e historial de envíos de facturas y asientos a un ERP contable (Kame). Solo la API",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "erp_exports_company_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "erp_exports_environment_check",
+    "type": "c",
+    "expr": "environment = ANY (ARRAY['pruebas'::text, 'produccion'::text])"
+   },
+   {
+    "name": "erp_exports_holding_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "erp_exports_invoice_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "erp_exports_object_check",
+    "type": "c",
+    "expr": "object = ANY (ARRAY['invoice'::text, 'journal'::text])"
+   },
+   {
+    "name": "erp_exports_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   },
+   {
+    "name": "erp_exports_status_check",
+    "type": "c",
+    "expr": "status = ANY (ARRAY['pending'::text, 'sending'::text, 'sent'::text, 'error'::text, 'simulated'::text, 'skipped'::text])"
+   },
+   {
+    "name": "erp_exports_system_check",
+    "type": "c",
+    "expr": "system = ANY (ARRAY['kame'::text])"
+   },
+   {
+    "name": "erp_exports_target_check",
+    "type": "c",
+    "expr": "((object = 'invoice'::text) AND (invoice_id IS NOT NULL) AND (period IS NULL)) OR ((object = 'journal'::text) AND (invoice_id IS NULL) AND (period IS NOT NULL))"
+   }
+  ],
+  "indexes": [
+   {
+    "name": "erp_exports_invoice_key",
+    "cols": [
+     "system",
+     "environment",
+     "invoice_id"
+    ],
+    "unique": true,
+    "where": "object = 'invoice'::text"
+   },
+   {
+    "name": "erp_exports_journal_key",
+    "cols": [
+     "system",
+     "environment",
+     "company_id",
+     "period"
+    ],
+    "unique": true,
+    "where": "object = 'journal'::text"
+   },
+   {
+    "name": "idx_erp_exports_due",
+    "cols": [
+     "status",
+     "next_attempt_at"
+    ],
+    "unique": false,
+    "where": null
+   },
+   {
+    "name": "idx_erp_exports_holding",
+    "cols": [
+     "holding_id",
+     "created_at"
+    ],
+    "unique": false,
+    "where": null
+   }
+  ],
+  "triggers": [],
+  "policies": [],
+  "policies_detail": []
+ }
+}

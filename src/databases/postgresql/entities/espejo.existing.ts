@@ -108,6 +108,9 @@ export { FxApiSyncLog } from '@/databases/postgresql/entities/fx/fx-api-sync-log
 export { GenericExportVat } from '@/databases/postgresql/entities/fx/generic-export-vat.entity';
 export { HoldingFxPeriodRate } from '@/databases/postgresql/entities/fx/holding-fx-period-rate.entity';
 export { IndicadorEconomicoEntity } from '@/databases/postgresql/entities/fx/indicador-economico.entity';
+export { ErpExport } from '@/databases/postgresql/entities/integraciones/kame/erp-export.entity';
+export { KameCompanySettings } from '@/databases/postgresql/entities/integraciones/kame/kame-company-settings.entity';
+export { KameConnection } from '@/databases/postgresql/entities/integraciones/kame/kame-connection.entity';
 export { OdooConnection } from '@/databases/postgresql/entities/integraciones/odoo/odoo-connection.entity';
 export { OdooInvoiceLinesStg } from '@/databases/postgresql/entities/integraciones/odoo/odoo-invoice-lines-stg.entity';
 export { OdooInvoicesStg } from '@/databases/postgresql/entities/integraciones/odoo/odoo-invoices-stg.entity';
@@ -137,9 +140,6 @@ export { StripeInvoicesStg } from '@/databases/postgresql/entities/integraciones
 export { StripeProductMapping } from '@/databases/postgresql/entities/integraciones/stripe/stripe-product-mapping.entity';
 export { StripeSubscriptionsStg } from '@/databases/postgresql/entities/integraciones/stripe/stripe-subscriptions-stg.entity';
 export { StripeSyncJob } from '@/databases/postgresql/entities/integraciones/stripe/stripe-sync-job.entity';
-export { ErpExport } from '@/databases/postgresql/entities/integraciones/kame/erp-export.entity';
-export { KameCompanySettings } from '@/databases/postgresql/entities/integraciones/kame/kame-company-settings.entity';
-export { KameConnection } from '@/databases/postgresql/entities/integraciones/kame/kame-connection.entity';
 export { InvoiceItemsLegacyMatch } from '@/databases/postgresql/entities/legacy/invoice-items-legacy-match.entity';
 export { InvoiceItemsLegacy } from '@/databases/postgresql/entities/legacy/invoice-items-legacy.entity';
 export { InvoicesLegacy } from '@/databases/postgresql/entities/legacy/invoices-legacy.entity';

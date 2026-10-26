@@ -366,6 +366,17 @@
     "scale": null,
     "array": false
    },
+   "city": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "email": {
     "type": "text",
     "nullable": true,

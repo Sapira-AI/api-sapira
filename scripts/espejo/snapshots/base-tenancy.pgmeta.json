@@ -1074,7 +1074,7 @@
  "user_holdings": {
   "name": "public.user_holdings",
   "rls_enabled": true,
-  "rows": 40,
+  "rows": 41,
   "columns": [
    {
     "name": "user_id",
@@ -1535,6 +1535,17 @@
     ]
    },
    {
+    "name": "erp_exports_holding_id_fkey",
+    "source_table": "public.erp_exports",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "field_mappings_holding_id_fkey",
     "source_table": "public.field_mappings",
     "source_columns": [
@@ -1977,6 +1988,28 @@
    {
     "name": "invoices_legacy_holding_id_fkey",
     "source_table": "public.invoices_legacy",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "kame_company_settings_holding_id_fkey",
+    "source_table": "public.kame_company_settings",
+    "source_columns": [
+     "holding_id"
+    ],
+    "target_table": "public.company_holdings",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "kame_connections_holding_id_fkey",
+    "source_table": "public.kame_connections",
     "source_columns": [
      "holding_id"
     ],
@@ -2762,6 +2795,17 @@
     ]
    },
    {
+    "name": "erp_exports_company_id_fkey",
+    "source_table": "public.erp_exports",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
     "name": "fk_revenue_schedule_company",
     "source_table": "public.revenue_schedule_monthly",
     "source_columns": [
@@ -2797,6 +2841,28 @@
    {
     "name": "invoices_legacy_company_id_fkey",
     "source_table": "public.invoices_legacy",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "kame_company_settings_company_id_fkey",
+    "source_table": "public.kame_company_settings",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "kame_connections_company_id_fkey",
+    "source_table": "public.kame_connections",
     "source_columns": [
      "company_id"
     ],

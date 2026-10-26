@@ -2,7 +2,7 @@
  "sii_configurations": {
   "name": "public.sii_configurations",
   "rls_enabled": true,
-  "rows": 1,
+  "rows": 2,
   "columns": [
    {
     "name": "id",
