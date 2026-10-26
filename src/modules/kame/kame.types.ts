@@ -11,7 +11,10 @@ export const KAME_ENVIRONMENT_LABELS: Record<KameEnvironment, string> = { prueba
 /** RUT de la empresa de pruebas que entrega Kame («AMBIENTE DE PRUEBAS API»). */
 export const KAME_TEST_COMPANY_RUT = '10491356-3';
 
-/** Kame identifica los documentos por nombre, no por el código del SII. */
+/**
+ * Kame identifica los documentos por nombre, no por el código del SII. Solo estos tipos se encolan: la factura de exportación y sus notas
+ * (110, 111, 112) quedan fuera hasta confirmar en el sondeo de la API de Kame cómo las nombra y qué campos pide.
+ */
 export const KAME_DOCUMENT_NAMES: Record<number, string> = {
 	33: 'Factura Electrónica',
 	34: 'Factura Exenta Electrónica',

@@ -2,10 +2,12 @@ import {
 	asReissued,
 	distributeTax,
 	dteAmounts,
+	dteExportAmounts,
 	type DteReceptor,
 	dteReferencesOf,
 	dteStatusFromResultado,
 	dteTipoFor,
+	exportAduana,
 	fxLineNote,
 	isDteRejected,
 	isValidRut,
@@ -14,7 +16,9 @@ import {
 	planDebitNote,
 	planEmitDte,
 	receptorDteBlockers,
+	receptorExportDteBlockers,
 	roundClp,
+	roundTo,
 } from './invoice-dte';
 
 import type { ContractInvoiceRow } from './contract-invoices';
@@ -65,13 +69,17 @@ describe('invoice-dte: documento tributario desde la factura (lógica pura)', ()
 		expect(normalizeRut('no es rut')).toBeNull();
 	});
 
-	it('tipo SII: factura 33, sin IVA 34, NC 61, ND 56 y exportación fuera de este camino', () => {
+	it('tipo SII: factura 33, sin IVA 34, NC 61, ND 56; exportación 110 y sus notas 112 y 111', () => {
 		expect(dteTipoFor({ document_type: 'FACTURA', tax_rate: 19 }, '33')).toBe(33);
 		expect(dteTipoFor({ document_type: 'FACTURA', tax_rate: 0 }, '33')).toBe(34);
 		expect(dteTipoFor({ document_type: 'FACTURA', tax_rate: 19 }, '34')).toBe(34);
 		expect(dteTipoFor({ document_type: 'NC', tax_rate: 19 }, '33')).toBe(61);
 		expect(dteTipoFor({ document_type: 'ND', tax_rate: 19 }, '33')).toBe(56);
-		expect(dteTipoFor({ document_type: 'FACTURA_EXPORTACION', tax_rate: 0 }, '110')).toBeNull();
+		expect(dteTipoFor({ document_type: 'FACTURA_EXPORTACION', tax_rate: 0 }, '110')).toBe(110);
+		expect(dteTipoFor({ document_type: 'FACTURA', tax_rate: 0 }, '110')).toBe(110);
+		// Las notas de una factura de exportación (export_type = 1, o su original es un DTE de exportación).
+		expect(dteTipoFor({ document_type: 'NC', tax_rate: 0 }, '110', true)).toBe(112);
+		expect(dteTipoFor({ document_type: 'ND', tax_rate: 0 }, '33', true)).toBe(111);
 	});
 
 	it('montos en pesos enteros: el residuo de redondear va a la línea mayor, IVA sobre el neto y total = neto + IVA', () => {
@@ -368,5 +376,153 @@ describe('invoice-dte: documento tributario desde la factura (lógica pura)', ()
 		expect(dteStatusFromResultado('reparos')).toBe('reparos');
 		expect(dteStatusFromResultado('rechazado')).toBe('rechazado');
 		expect(dteStatusFromResultado('en_proceso')).toBe('enviado');
+	});
+
+	describe('exportación (110, 111, 112)', () => {
+		const extranjero = (patch: Partial<DteReceptor> = {}): DteReceptor =>
+			receptor({
+				tax_id: '98-7654321',
+				legal_name: 'Example Client Inc.',
+				economic_activity: 'Software services',
+				legal_address: '100 Example Street',
+				commune: null,
+				city: 'Miami',
+				country_code: 'US',
+				...patch,
+			});
+		const lineas = [
+			{ id: 'a', description: 'Desarrollo', quantity: 1, unit_of_measure: 'UN', subtotal_invoice_currency: 1250.505 },
+			{ id: 'b', description: 'Soporte', quantity: 2, unit_of_measure: 'UN', subtotal_invoice_currency: 300.004 },
+		];
+
+		it('montos en la moneda de la factura: centavos en dólares, enteros en pesos, todo exento y sin IVA', () => {
+			const usd = dteExportAmounts(lineas, 'USD');
+
+			// Σ exacta 1550,509 → 1550,51; líneas 1250,51 + 300 = 1550,51.
+			expect(usd.lines.map((line) => line.monto)).toEqual([1250.51, 300]);
+			expect(usd).toMatchObject({ neto: 0, exento: 1550.51, iva: 0, total: 1550.51, tasa: 0 });
+			expect(dteExportAmounts(lineas, 'CLP')).toMatchObject({ total: 1551, iva: 0 });
+			expect(roundTo(2.345, 2)).toBe(2.35);
+		});
+
+		it('arma el elemento de exportación: receptor extranjero, Aduana de servicios y total en pesos', () => {
+			const amounts = dteExportAmounts(lineas, 'USD');
+			const body = mapInvoiceToDteBody({
+				tipo: 110,
+				issue_date: '2026-10-26',
+				due_date: '2026-11-25',
+				receptor: extranjero(),
+				amounts,
+				references: [],
+				exportacion: { currency: 'USD', clp_rate: 950.25, contract: { kind: 'servicios', sale_clause: 5, payment_form: 1 }, invoice: null },
+			});
+
+			expect(body).toEqual({
+				Encabezado: {
+					IdDoc: { TipoDTE: 110, FchEmis: '2026-10-26', IndServicio: 3, FmaPagExp: 1, FchVenc: '2026-11-25' },
+					Receptor: {
+						RUTRecep: '55555555-5',
+						RznSocRecep: 'Example Client Inc.',
+						Extranjero: { NumId: '98-7654321', Nacionalidad: '225' },
+						GiroRecep: 'Software services',
+						DirRecep: '100 Example Street',
+						CiudadRecep: 'Miami',
+					},
+					Transporte: { Aduana: { CodClauVenta: 5, CodPaisRecep: 225, CodPaisDestin: 225 } },
+					Totales: { TpoMoneda: 'DOLAR USA', MntExe: 1550.51, MntTotal: 1550.51 },
+					OtraMoneda: { TpoMoneda: 'PESO CL', TpoCambio: 950.25, MntExeOtrMnda: 1473372, MntTotOtrMnda: 1473372 },
+				},
+				Detalle: [
+					expect.objectContaining({ NroLinDet: 1, NmbItem: 'Desarrollo', QtyItem: 1, PrcItem: 1250.51, MontoItem: 1250.51 }),
+					expect.objectContaining({ NroLinDet: 2, NmbItem: 'Soporte', QtyItem: 2, PrcItem: 150, MontoItem: 300 }),
+				],
+			});
+		});
+
+		it('una exportación en pesos no lleva OtraMoneda; la nota de crédito referencia con CodRef', () => {
+			const body = mapInvoiceToDteBody({
+				tipo: 112,
+				issue_date: '2026-10-26',
+				due_date: null,
+				receptor: extranjero(),
+				amounts: dteExportAmounts(lineas, 'CLP'),
+				references: [{ document_type_code: '110', document_number: '7', reference_date: '2026-10-20', reference_code: 1, reason: 'Anula' }],
+				exportacion: { currency: 'CLP', clp_rate: null, contract: null, invoice: null },
+			}) as { Encabezado: Record<string, unknown>; Referencia: unknown[] };
+
+			expect(body.Encabezado.OtraMoneda).toBeUndefined();
+			expect(body.Encabezado.Totales).toEqual({ TpoMoneda: 'PESO CL', MntExe: 1551, MntTotal: 1551 });
+			expect(body.Referencia).toEqual([{ NroLinRef: 1, TpoDocRef: '110', FolioRef: '7', FchRef: '2026-10-20', CodRef: 1, RazonRef: 'Anula' }]);
+		});
+
+		it('Aduana de bienes: transporte, puertos, bultos, pesos, flete y seguro; en servicios se ignoran', () => {
+			const contract = {
+				kind: 'bienes' as const,
+				sale_modality: 1,
+				sale_clause: 5,
+				transport_route: 1,
+				port_of_loading: 906,
+				port_of_unloading: 141,
+			};
+			const shipment = {
+				total_packages: 30,
+				package_type: 22,
+				gross_weight: 1200.5,
+				weight_unit: 6,
+				freight: 350.5,
+				insurance: 42,
+				sale_clause_total: 36115,
+			};
+
+			expect(exportAduana({ currency: 'USD', clp_rate: 950, contract, invoice: shipment }, 225)).toEqual({
+				CodModVenta: 1,
+				CodClauVenta: 5,
+				TotClauVenta: 36115,
+				CodViaTransp: 1,
+				CodPtoEmbarque: 906,
+				CodPtoDesemb: 141,
+				PesoBruto: 1200.5,
+				CodUnidPesoBruto: 6,
+				TotBultos: 30,
+				TipoBultos: [{ CodTpoBultos: 22, CantBultos: 30 }],
+				MntFlete: 350.5,
+				MntSeguro: 42,
+				CodPaisRecep: 225,
+				CodPaisDestin: 225,
+			});
+			expect(exportAduana({ currency: 'USD', clp_rate: 950, contract: { ...contract, kind: 'servicios' }, invoice: shipment }, 225)).toEqual({
+				CodModVenta: 1,
+				CodClauVenta: 5,
+				CodPaisRecep: 225,
+				CodPaisDestin: 225,
+			});
+		});
+
+		it('bloqueos del receptor extranjero: país de Aduana, dirección y ciudad; el RUT no aplica', () => {
+			expect(receptorExportDteBlockers(extranjero())).toEqual([]);
+			expect(receptorExportDteBlockers(extranjero({ tax_id: null, commune: null }))).toEqual([]);
+			expect(receptorExportDteBlockers(extranjero({ country_code: 'XX', city: '', legal_address: null })).map((item) => item.code)).toEqual([
+				'dte_receptor_country',
+				'dte_receptor_address',
+				'dte_receptor_city',
+			]);
+		});
+
+		it('plan: deja emitir en dólares, euros y pesos y bloquea otras monedas', () => {
+			const exportInvoice = invoice({ document_type: 'FACTURA_EXPORTACION', invoice_currency: 'USD', contract_currency: 'USD', tax_rate: 0 });
+			const plan = planEmitDte(exportInvoice, context({ contract_document_code: '110' }), { receptor: extranjero(), base_blockers: [] });
+
+			expect(plan).toMatchObject({ tipo: 110, can_apply: true, blockers: [] });
+			const enYenes = planEmitDte({ ...exportInvoice, invoice_currency: 'JPY' }, context({ contract_document_code: '110' }), {
+				receptor: extranjero(),
+				base_blockers: [],
+			});
+			expect(enYenes.blockers.map((item) => item.code)).toEqual(['dte_export_currency_unsupported']);
+			const sinId = planEmitDte(exportInvoice, context({ contract_document_code: '110' }), {
+				receptor: extranjero({ tax_id: null }),
+				base_blockers: [],
+			});
+			expect(sinId.warnings.map((item) => item.code)).toContain('dte_receptor_without_tax_id');
+		});
 	});
 });

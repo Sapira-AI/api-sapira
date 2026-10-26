@@ -60,6 +60,14 @@ export class ClientEntity {
 	})
 	commune?: string | null;
 
+	@Column({
+		type: 'text',
+		nullable: true,
+		comment:
+			'Ciudad de la dirección legal (CiudadRecep del DTE, hasta 20 caracteres): obligatoria en la factura de exportación. NULL = sin ciudad',
+	})
+	city?: string | null;
+
 	@Column({ type: 'text', nullable: true })
 	email?: string;
 
