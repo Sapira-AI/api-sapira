@@ -173,6 +173,13 @@ export class UpdateClientEntityDto {
 	@IsOptional()
 	commune?: string;
 
+	/** Ciudad de la dirección legal (`CiudadRecep` del DTE: hasta 20 caracteres). Obligatoria para emitir una factura de exportación. */
+	@ApiPropertyOptional({ example: 'Miami' })
+	@IsString()
+	@MaxLength(20)
+	@IsOptional()
+	city?: string;
+
 	@ApiPropertyOptional()
 	@IsString()
 	@MaxLength(200)
@@ -256,6 +263,13 @@ export class CreateClientEntityDto {
 	@MaxLength(20)
 	@IsOptional()
 	commune?: string;
+
+	/** Ciudad de la dirección legal (`CiudadRecep` del DTE: hasta 20 caracteres). Obligatoria para emitir una factura de exportación. */
+	@ApiPropertyOptional({ example: 'Miami' })
+	@IsString()
+	@MaxLength(20)
+	@IsOptional()
+	city?: string;
 
 	@ApiPropertyOptional()
 	@IsString()

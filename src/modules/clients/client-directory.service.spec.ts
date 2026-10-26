@@ -142,6 +142,21 @@ describe('ClientDirectoryService · edición', () => {
 		expect(params).toEqual(['e-1', 'h-1', 'Las Condes']);
 	});
 
+	it('razón social: la ciudad es editable (CiudadRecep de la factura de exportación)', async () => {
+		const { service, query } = build((sql) => {
+			if (sql.startsWith('SELECT id, tax_id')) return [{ id: 'e-1', tax_id: '98-7654321' }];
+			if (sql.startsWith('UPDATE')) return [[{ id: 'e-1', city: 'Miami' }], 1];
+
+			return [];
+		});
+
+		await service.updateEntity('h-1', 'e-1', { city: 'Miami' });
+
+		const [sql, params] = query.mock.calls.find(([text]) => (text as string).startsWith('UPDATE'))!;
+		expect(sql).toContain('SET city = $3 WHERE id = $1 AND holding_id = $2');
+		expect(params).toEqual(['e-1', 'h-1', 'Miami']);
+	});
+
 	it('razón social: guarda la condición de pago (jsonb) y permite quitarla con null', async () => {
 		const { service, query } = build((sql) => {
 			if (sql.startsWith('SELECT id, tax_id')) return [{ id: 'e-1', tax_id: '1-9' }];
