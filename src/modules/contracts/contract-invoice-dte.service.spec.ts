@@ -137,10 +137,14 @@ const dteRow = (overrides: Row = {}): Row => ({
 
 const UF = 39_485.65;
 
-const build = (options: { invoice?: Row; extra?: Row; dte?: Row; pending?: Row[]; lines?: Row[]; references?: Row[]; original?: Row } = {}) => {
+const build = (
+	options: { invoice?: Row; extra?: Row; dte?: Row; pending?: Row[]; lines?: Row[]; references?: Row[]; original?: Row; status?: Row } = {}
+) => {
 	let events = 0;
 	const route = (sql: string): Row[] => {
 		if (sql.includes('FROM users WHERE auth_id')) return [{ id: 'user-1' }];
+		if (sql.includes('SELECT status, dte_id, dte_status FROM invoices'))
+			return [options.status ?? { status: 'Por Emitir', dte_id: null, dte_status: null }];
 		if (sql.includes('dte_tipo, dte_status FROM invoices')) return options.original ? [options.original] : [];
 		if (sql.includes('get_cutoff_date')) return [contextRow];
 		if (sql.includes('priced_base')) return [options.invoice ?? invoiceRow()];
@@ -435,6 +439,153 @@ describe('ContractInvoiceDteController', () => {
 		code: Reflect.getMetadata(HTTP_CODE_METADATA, ContractInvoiceDteController.prototype[handler]),
 	});
 
+	describe('factura de exportación (110, 112)', () => {
+		const exportInvoice = (overrides: Row = {}) =>
+			invoiceRow({
+				document_type: 'FACTURA_EXPORTACION',
+				contract_currency: 'USD',
+				invoice_currency: 'USD',
+				amount_contract_currency: '1550.5',
+				vat: '0',
+				tax_rate: '0',
+				...overrides,
+			});
+		const exportExtra = (overrides: Row = {}) =>
+			extraRow({
+				contract_document_code: '110',
+				export_type: 1,
+				tax_id: '98-7654321',
+				receptor_legal_name: 'Example Client Inc.',
+				economic_activity: 'Software services',
+				legal_address: '100 Example Street',
+				commune: null,
+				country_code: 'US',
+				city: 'Miami',
+				contract_export_details: { kind: 'servicios', sale_clause: 5, payment_form: 1 },
+				invoice_export_details: null,
+				...overrides,
+			});
+		const exportLine = {
+			...lineRow,
+			description: 'Desarrollo de software',
+			subtotal_contract_currency: '1550.5',
+			tax_amount_contract_currency: '0',
+		};
+		const rates = (table: Record<string, number>) =>
+			jest.fn(async (from: string, to: string) => {
+				const rate = table[`${from}/${to}`];
+				if (!rate) throw new Error(`sin tasa ${from}/${to}`);
+				return { rate, rate_date: new Date(2026, 9, 18) };
+			});
+
+		it('emite una 110 en dólares: receptor extranjero, Aduana del contrato y total en pesos con el dólar observado', async () => {
+			const { service, factura, exchangeRates } = build({ invoice: exportInvoice(), extra: exportExtra(), lines: [exportLine] });
+			exchangeRates.getExchangeRateWithFallback = rates({ 'USD/CLP': 950.25 });
+			factura.crearDte.mockResolvedValue({ id: 'dte-1', folio: 3, tipoDte: 110, ambiente: 'produccion', existente: false });
+
+			const preview = await service.previewEmitDte(CONTRACT_ID, INVOICE_ID, HOLDING, TODAY);
+			expect(preview.document).toMatchObject({
+				tipo: 110,
+				currency: 'USD',
+				total: 1550.5,
+				iva: 0,
+				export: { services: true, clp_rate: 950.25, total_clp: 1473363 },
+			});
+			expect(preview.can_apply).toBe(true);
+
+			await service.emitDte(CONTRACT_ID, INVOICE_ID, HOLDING, 'auth-1', TODAY);
+			const body = factura.crearDte.mock.calls[0][1];
+			expect(body.Encabezado.IdDoc).toEqual({ TipoDTE: 110, FchEmis: '2026-10-18', IndServicio: 3, FmaPagExp: 1, FchVenc: '2026-11-17' });
+			expect(body.Encabezado.Receptor).toMatchObject({
+				RUTRecep: '55555555-5',
+				Extranjero: { NumId: '98-7654321', Nacionalidad: '225' },
+				CiudadRecep: 'Miami',
+			});
+			expect(body.Encabezado.Receptor).not.toHaveProperty('CmnaRecep');
+			expect(body.Encabezado.Transporte).toEqual({ Aduana: { CodClauVenta: 5, CodPaisRecep: 225, CodPaisDestin: 225 } });
+			expect(body.Encabezado.Totales).toEqual({ TpoMoneda: 'DOLAR USA', MntExe: 1550.5, MntTotal: 1550.5 });
+			expect(body.Encabezado.OtraMoneda).toEqual({ TpoMoneda: 'PESO CL', TpoCambio: 950.25, MntExeOtrMnda: 1473363, MntTotOtrMnda: 1473363 });
+		});
+
+		it('en euros el tipo de cambio es EUR → USD × dólar observado; sin tasa, bloquea la emisión', async () => {
+			const enEuros = build({
+				invoice: exportInvoice({ contract_currency: 'EUR', invoice_currency: 'EUR' }),
+				extra: exportExtra(),
+				lines: [exportLine],
+			});
+			enEuros.exchangeRates.getExchangeRateWithFallback = rates({ 'USD/CLP': 950, 'EUR/USD': 1.08 });
+			const preview = await enEuros.service.previewEmitDte(CONTRACT_ID, INVOICE_ID, HOLDING, TODAY);
+			expect(preview.document).toMatchObject({ currency: 'EUR', export: { clp_rate: 1026 } });
+
+			const sinTasa = build({ invoice: exportInvoice(), extra: exportExtra(), lines: [exportLine] });
+			sinTasa.exchangeRates.getExchangeRateWithFallback = rates({});
+			const bloqueada = await sinTasa.service.previewEmitDte(CONTRACT_ID, INVOICE_ID, HOLDING, TODAY);
+			expect(bloqueada.can_apply).toBe(false);
+			expect(bloqueada.blockers.map((blocker: { code: string }) => blocker.code)).toContain('dte_export_fx_missing');
+		});
+
+		it('una factura de bienes lleva el embarque y el DUS como referencia 807', async () => {
+			const { service, factura, exchangeRates } = build({
+				invoice: exportInvoice({ invoice_currency: 'CLP', contract_currency: 'CLP' }),
+				extra: exportExtra({
+					contract_export_details: { kind: 'bienes', sale_clause: 5, transport_route: 1, port_of_loading: 906, port_of_unloading: 141 },
+					invoice_export_details: { total_packages: 30, package_type: 22, freight: 120, dus_number: '6012345', dus_date: '2026-10-17' },
+				}),
+				lines: [{ ...exportLine, subtotal_contract_currency: '1500000' }],
+			});
+			factura.crearDte.mockResolvedValue({ id: 'dte-1', folio: 3, tipoDte: 110, ambiente: 'produccion', existente: false });
+
+			await service.emitDte(CONTRACT_ID, INVOICE_ID, HOLDING, 'auth-1', TODAY);
+			const body = factura.crearDte.mock.calls[0][1];
+			expect(exchangeRates.getExchangeRateWithFallback).not.toHaveBeenCalled();
+			expect(body.Encabezado.IdDoc).not.toHaveProperty('IndServicio');
+			expect(body.Encabezado.Transporte.Aduana).toMatchObject({ CodViaTransp: 1, CodPtoEmbarque: 906, TotBultos: 30, MntFlete: 120 });
+			expect(body.Encabezado.Totales).toEqual({ TpoMoneda: 'PESO CL', MntExe: 1500000, MntTotal: 1500000 });
+			expect(body.Encabezado).not.toHaveProperty('OtraMoneda');
+			expect(body.Referencia).toEqual([{ NroLinRef: 1, TpoDocRef: '807', FolioRef: '6012345', FchRef: '2026-10-17', RazonRef: 'DUS' }]);
+		});
+
+		it('la NC de una factura de exportación sale como 112 y referencia la 110', async () => {
+			const { service, factura, exchangeRates } = build({
+				invoice: exportInvoice({ document_type: 'NC', status: 'Emitida', fx_contract_to_invoice: null }),
+				extra: exportExtra({ related_invoice_id: 'orig-1', credit_type: 'cancellation' }),
+				lines: [{ ...exportLine, subtotal_contract_currency: '-1550.5' }],
+				original: { id: 'orig-1', invoice_number: '3', issue_date: '2026-10-10', dte_tipo: 110, dte_status: 'aceptado' },
+				references: [{ document_type_code: '110', document_number: '3', reference_date: '2026-10-10', reference_code: '1', reason: 'Anula' }],
+			});
+			exchangeRates.getExchangeRateWithFallback = rates({ 'USD/CLP': 950.25 });
+
+			const preview = await service.previewEmitDte(CONTRACT_ID, INVOICE_ID, HOLDING, TODAY);
+			expect(preview.document).toMatchObject({ tipo: 112, total: 1550.5 });
+			expect(preview.document!.references).toEqual([{ type: '110', folio: '3', date: '2026-10-10', code: 1 }]);
+			expect(factura.crearDte).not.toHaveBeenCalled();
+		});
+
+		it('guarda los datos de exportación del contrato y el embarque solo en una factura Por Emitir sin DTE', async () => {
+			const { service, runner } = build();
+			await expect(
+				service.updateContractExportDetails(CONTRACT_ID, HOLDING, { kind: 'bienes', sale_clause: 5, port_of_loading: null })
+			).resolves.toEqual({
+				contract_id: CONTRACT_ID,
+				export_details: { kind: 'bienes', sale_clause: 5 },
+			});
+			expect(calls(runner.query, 'UPDATE contracts SET export_details')[0][1]).toEqual([
+				CONTRACT_ID,
+				HOLDING,
+				'{"kind":"bienes","sale_clause":5}',
+			]);
+
+			await expect(service.updateInvoiceExportDetails(CONTRACT_ID, INVOICE_ID, HOLDING, { total_packages: 3 })).resolves.toEqual({
+				invoice_id: INVOICE_ID,
+				export_details: { total_packages: 3 },
+			});
+			const emitida = build({ status: { status: 'Emitida', dte_id: 'dte-1', dte_status: 'aceptado' } });
+			await expect(emitida.service.updateInvoiceExportDetails(CONTRACT_ID, INVOICE_ID, HOLDING, { total_packages: 3 })).rejects.toBeInstanceOf(
+				ConflictException
+			);
+		});
+	});
+
 	it('rutas bajo `contracts/:id/invoices/:invoiceId/...`, tras SupabaseAuthGuard + HoldingScopeGuard (sin header 400, holding ajeno 403)', () => {
 		expect(Reflect.getMetadata(PATH_METADATA, ContractInvoiceDteController)).toBe('contracts');
 		expect(Reflect.getMetadata(GUARDS_METADATA, ContractInvoiceDteController)).toEqual([SupabaseAuthGuard, HoldingScopeGuard]);
@@ -448,6 +599,9 @@ describe('ContractInvoiceDteController', () => {
 		expect(routeOf('dteDocument')).toMatchObject({ path: ':id/invoices/:invoiceId/dte-document', method: GET });
 		expect(routeOf('debitNotePreview')).toEqual({ path: ':id/invoices/:invoiceId/debit-note/preview', method: POST, code: 200 });
 		expect(routeOf('createDebitNote')).toMatchObject({ path: ':id/invoices/:invoiceId/debit-note', method: POST });
+		const PATCH = 4;
+		expect(routeOf('updateContractExportDetails')).toMatchObject({ path: ':id/export-details', method: PATCH });
+		expect(routeOf('updateInvoiceExportDetails')).toMatchObject({ path: ':id/invoices/:invoiceId/export-details', method: PATCH });
 	});
 
 	it('pasa el holding y el usuario al servicio, y devuelve el documento en base64', async () => {

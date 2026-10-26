@@ -1,3 +1,4 @@
+import { aduanaCountryOf } from './aduana-paises';
 import { isCreditNote } from './contract-360';
 
 import type { ContractInvoiceRow, InvoiceBlocker, InvoiceWarning } from './contract-invoices';
@@ -16,7 +17,15 @@ export type DteStatus = (typeof DTE_STATUSES)[number];
 /** Con estos el documento ya vale ante el SII: se entrega al receptor y sirve de referencia para una nota. */
 export const DTE_VALID_STATUSES: readonly DteStatus[] = ['aceptado', 'reparos'];
 
-export const DTE_TYPES = { invoice: 33, exempt_invoice: 34, debit_note: 56, credit_note: 61 } as const;
+export const DTE_TYPES = {
+	invoice: 33,
+	exempt_invoice: 34,
+	debit_note: 56,
+	credit_note: 61,
+	export_invoice: 110,
+	export_debit_note: 111,
+	export_credit_note: 112,
+} as const;
 export type DteTipo = (typeof DTE_TYPES)[keyof typeof DTE_TYPES];
 
 export const DTE_TYPE_LABELS: Record<number, string> = {
@@ -24,10 +33,38 @@ export const DTE_TYPE_LABELS: Record<number, string> = {
 	34: 'Factura no afecta o exenta electrónica',
 	56: 'Nota de débito electrónica',
 	61: 'Nota de crédito electrónica',
+	110: 'Factura de exportación electrónica',
+	111: 'Nota de débito de exportación electrónica',
+	112: 'Nota de crédito de exportación electrónica',
 };
 
+/** Factura (110), nota de débito (111) y nota de crédito (112) de exportación. */
+export const EXPORT_DTE_TYPES: readonly number[] = [DTE_TYPES.export_invoice, DTE_TYPES.export_debit_note, DTE_TYPES.export_credit_note];
+export const isExportDte = (tipo: number | null | undefined) => EXPORT_DTE_TYPES.includes(Number(tipo));
+/** Notas de crédito y débito, nacionales y de exportación. */
+export const isNoteDte = (tipo: number | null | undefined) => [56, 61, 111, 112].includes(Number(tipo));
+
+/**
+ * Monedas en que Sapira emite la factura de exportación, con su glosa del SII (`TpoMoneda`, `TipMonType` de DTE_v10.xsd). En moneda
+ * extranjera el DTE lleva además el equivalente en pesos (`OtraMoneda`) con el dólar observado del día de emisión.
+ */
+export const EXPORT_CURRENCIES: Readonly<Record<string, string>> = { USD: 'DOLAR USA', EUR: 'EURO', CLP: 'PESO CL' };
+
+/** RUT genérico del receptor extranjero (formato DTE del SII). */
+export const RUT_EXTRANJERO = '55555555-5';
+
 /** Largos máximos de DTE_v10.xsd que la API corta antes de enviar (el resto lo valida api-factura contra el XSD). */
-export const DTE_LIMITS = { razon_social: 100, giro: 40, direccion: 70, comuna: 20, nombre_item: 80, descripcion_item: 1000, razon_ref: 90 } as const;
+export const DTE_LIMITS = {
+	razon_social: 100,
+	giro: 40,
+	direccion: 70,
+	comuna: 20,
+	ciudad: 20,
+	id_extranjero: 20,
+	nombre_item: 80,
+	descripcion_item: 1000,
+	razon_ref: 90,
+} as const;
 
 /** Tipos de referencia de `billing_references` que viajan al DTE: orden de compra (801) y hoja de entrada de servicios (HES). */
 const BILLING_REFERENCE_DTE_CODES: Record<string, string> = { PO: '801', OC: '801', HES: 'HES' };
@@ -81,16 +118,20 @@ const cut = (value: string | null | undefined, max: number) => {
 };
 
 /**
- * Tipo SII del documento: NC → 61, ND → 56; factura → 34 si va sin IVA (tasa 0 o el contrato es 34), si no 33. La factura de exportación
- * (110 y sus notas 111/112) no se emite por este camino: null.
+ * Tipo SII del documento. Exportación (la factura es `FACTURA_EXPORTACION`, el contrato es 110, o la nota corrige un documento de
+ * exportación: `exportDocument`): NC → 112, ND → 111, factura → 110. Nacional: NC → 61, ND → 56; factura → 34 si va sin IVA (tasa 0 o
+ * el contrato es 34), si no 33.
  */
 export function dteTipoFor(
 	invoice: Pick<ContractInvoiceRow, 'document_type' | 'tax_rate'>,
-	contractDocumentCode: string | null | undefined
+	contractDocumentCode: string | null | undefined,
+	exportDocument = false
 ): DteTipo | null {
-	if (invoice.document_type === 'FACTURA_EXPORTACION' || contractDocumentCode === '110') return null;
-	if (isCreditNote(invoice.document_type)) return DTE_TYPES.credit_note;
-	if (isDebitNote(invoice.document_type)) return DTE_TYPES.debit_note;
+	const exportacion = exportDocument || invoice.document_type === 'FACTURA_EXPORTACION' || contractDocumentCode === '110';
+
+	if (isCreditNote(invoice.document_type)) return exportacion ? DTE_TYPES.export_credit_note : DTE_TYPES.credit_note;
+	if (isDebitNote(invoice.document_type)) return exportacion ? DTE_TYPES.export_debit_note : DTE_TYPES.debit_note;
+	if (exportacion) return DTE_TYPES.export_invoice;
 	if (contractDocumentCode === '34' || invoice.tax_rate === 0) return DTE_TYPES.exempt_invoice;
 
 	return DTE_TYPES.invoice;
@@ -178,6 +219,53 @@ export function distributeTax(amounts: DteAmounts): number[] {
 	return taxes;
 }
 
+/** Decimales de los montos de exportación: los de la moneda (pesos enteros; dólar y euro con centavos). */
+export const exportDecimals = (currency: string | null | undefined) => (String(currency ?? '').toUpperCase() === 'CLP' ? 0 : 2);
+
+/** Redondeo con 0,5 hacia arriba a `decimals` decimales (el mismo criterio que `dte-montos.ts` de api-factura). */
+export function roundTo(value: number, decimals: number): number {
+	const factor = 10 ** decimals;
+
+	return (Math.sign(value) * Math.round(Math.abs(value) * factor + Number.EPSILON * factor)) / factor;
+}
+
+/**
+ * Montos de un documento de exportación en la moneda de la factura: todo exento y sin IVA. Cada línea redondeada a los decimales de la
+ * moneda, con el residuo del redondeo en la línea más grande (como `dteAmounts`), para que el total sea el redondeo del total exacto.
+ */
+export function dteExportAmounts(lines: DteSourceLine[], currency: string | null | undefined): DteAmounts {
+	const decimals = exportDecimals(currency);
+	const absolute = lines.map((line) => Math.abs(line.subtotal_invoice_currency));
+	const montos = absolute.map((value) => roundTo(value, decimals));
+	const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
+
+	if (lines.length) {
+		let largest = 0;
+
+		absolute.forEach((value, index) => {
+			if (value > absolute[largest]) largest = index;
+		});
+		montos[largest] = roundTo(montos[largest] + roundTo(sum(absolute), decimals) - sum(montos), decimals);
+	}
+	const total = roundTo(sum(montos), decimals);
+
+	return {
+		lines: lines.map((line, index) => ({
+			id: line.id,
+			description: line.description,
+			quantity: Math.abs(line.quantity) || 1,
+			unit_of_measure: line.unit_of_measure,
+			monto: montos[index],
+			contract_amount: line.contract_amount === null || line.contract_amount === undefined ? null : Math.abs(line.contract_amount),
+		})),
+		neto: 0,
+		exento: total,
+		iva: 0,
+		total,
+		tasa: 0,
+	};
+}
+
 export interface DteReceptor {
 	tax_id: string | null;
 	legal_name: string | null;
@@ -186,6 +274,96 @@ export interface DteReceptor {
 	commune: string | null;
 	/** «Correo (DTE)» de la razón social: ahí se entrega cada documento. */
 	email: string | null;
+	/** País ISO-2 de la razón social (`client_entities.country_code`): en exportación da el código de país de Aduana. */
+	country_code?: string | null;
+	/** Ciudad de la dirección legal (`CiudadRecep`): obligatoria en la factura de exportación. */
+	city?: string | null;
+}
+
+/** Datos de exportación del contrato (`contracts.export_details`), con los códigos de las tablas de Aduana. Todos opcionales. */
+export interface ContractExportDetails {
+	/** Servicios (IndServicio 3: sin transporte de mercaderías) o bienes. Sin valor: servicios. */
+	kind?: 'servicios' | 'bienes';
+	sale_modality?: number | null;
+	sale_clause?: number | null;
+	/** Forma de pago de exportación (`FmaPagExp`, tabla de Aduana). */
+	payment_form?: number | null;
+	transport_route?: number | null;
+	carrier_name?: string | null;
+	port_of_loading?: number | null;
+	port_of_unloading?: number | null;
+	/** País de destino (código de Aduana); sin valor, el del receptor. */
+	destination_country?: number | null;
+}
+
+/** Datos del embarque de una factura de exportación de bienes (`invoices.export_details`): pisan los del contrato. */
+export interface InvoiceExportDetails {
+	total_packages?: number | null;
+	package_type?: number | null;
+	gross_weight?: number | null;
+	net_weight?: number | null;
+	/** Unidad de los pesos (código de Aduana). */
+	weight_unit?: number | null;
+	freight?: number | null;
+	insurance?: number | null;
+	sale_clause_total?: number | null;
+	dus_number?: string | null;
+	dus_date?: string | null;
+}
+
+/** Lo que un documento de exportación necesita además de lo nacional. */
+export interface DteExportInput {
+	/** Moneda ISO de la factura (USD, EUR o CLP). */
+	currency: string;
+	/** Pesos por unidad de la moneda (`OtraMoneda.TpoCambio`); null en pesos. */
+	clp_rate: number | null;
+	contract: ContractExportDetails | null;
+	invoice: InvoiceExportDetails | null;
+}
+
+const positive = (value: unknown) => {
+	const number = Number(value);
+	return value !== null && value !== undefined && value !== '' && Number.isFinite(number) && number > 0 ? number : undefined;
+};
+const code = (value: unknown) => {
+	const number = positive(value);
+	return number !== undefined && Number.isInteger(number) ? number : undefined;
+};
+const compact = <T extends Record<string, unknown>>(value: T): T =>
+	Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== '')) as T;
+
+/**
+ * Bloque `Aduana` del DTE de exportación: lo del contrato, el embarque de la factura y el país del receptor. En servicios solo van la
+ * venta (modalidad, cláusula) y los países; en bienes, además el transporte, los puertos, los bultos, los pesos, el flete y el seguro.
+ */
+export function exportAduana(input: DteExportInput, receptorCountry: number | null): Record<string, unknown> {
+	const contract = input.contract ?? {};
+	const shipment = input.invoice ?? {};
+	const goods = contract.kind === 'bienes';
+	const packages = goods ? code(shipment.total_packages) : undefined;
+	const packageType = goods ? code(shipment.package_type) : undefined;
+	const weightUnit = goods ? code(shipment.weight_unit) : undefined;
+	const decimals = exportDecimals(input.currency);
+
+	return compact({
+		CodModVenta: code(contract.sale_modality),
+		CodClauVenta: code(contract.sale_clause),
+		TotClauVenta: goods && positive(shipment.sale_clause_total) ? roundTo(positive(shipment.sale_clause_total)!, 2) : undefined,
+		CodViaTransp: goods ? code(contract.transport_route) : undefined,
+		NombreTransp: goods ? cut(contract.carrier_name, 40) : undefined,
+		CodPtoEmbarque: goods ? code(contract.port_of_loading) : undefined,
+		CodPtoDesemb: goods ? code(contract.port_of_unloading) : undefined,
+		PesoBruto: goods && positive(shipment.gross_weight) ? roundTo(positive(shipment.gross_weight)!, 2) : undefined,
+		CodUnidPesoBruto: goods && positive(shipment.gross_weight) ? weightUnit : undefined,
+		PesoNeto: goods && positive(shipment.net_weight) ? roundTo(positive(shipment.net_weight)!, 2) : undefined,
+		CodUnidPesoNeto: goods && positive(shipment.net_weight) ? weightUnit : undefined,
+		TotBultos: packages,
+		TipoBultos: packageType ? [compact({ CodTpoBultos: packageType, CantBultos: packages })] : undefined,
+		MntFlete: goods && positive(shipment.freight) ? roundTo(positive(shipment.freight)!, decimals) : undefined,
+		MntSeguro: goods && positive(shipment.insurance) ? roundTo(positive(shipment.insurance)!, decimals) : undefined,
+		CodPaisRecep: receptorCountry ?? undefined,
+		CodPaisDestin: code(contract.destination_country) ?? receptorCountry ?? undefined,
+	});
 }
 
 export interface DteReference {
@@ -244,16 +422,20 @@ export function mapInvoiceToDteBody(input: {
 	references: DteReference[];
 	/** Con conversión (contrato en UF u otra moneda): cada línea lleva en su descripción el valor en esa moneda y la tasa. */
 	fx?: DteFxNote | null;
+	/** Documento de exportación (110, 111, 112): moneda, tipo de cambio a pesos y datos de Aduana. */
+	exportacion?: DteExportInput | null;
 }): Record<string, unknown> {
 	const { tipo, amounts, receptor } = input;
+	const exportacion = isExportDte(tipo) ? (input.exportacion ?? null) : null;
 	const exempt = tipo === DTE_TYPES.exempt_invoice;
-	const note = tipo === DTE_TYPES.credit_note || tipo === DTE_TYPES.debit_note;
+	const note = isNoteDte(tipo);
 	const credit = !!input.due_date && input.due_date > input.issue_date;
 
 	const Detalle = amounts.lines.map((line, index) => {
 		const text = (line.description ?? '').replace(/\s+/g, ' ').trim() || `Línea ${index + 1}`;
 		const price = Math.round((line.monto / line.quantity) * 1e6) / 1e6;
-		const reproducible = roundClp(line.quantity * price) === line.monto;
+		// api-factura valida cantidad × precio al peso (nacional) o a 4 decimales (exportación).
+		const reproducible = exportacion ? roundTo(line.quantity * price, 4) === line.monto : roundClp(line.quantity * price) === line.monto;
 		// Descripción adicional: el texto que no cabe en el nombre (80) y la nota del tipo de cambio, si la factura se convirtió.
 		const description = [
 			text.length > DTE_LIMITS.nombre_item ? text : null,
@@ -283,6 +465,8 @@ export function mapInvoiceToDteBody(input: {
 		...(reference.reason ? { RazonRef: cut(reference.reason, DTE_LIMITS.razon_ref) } : {}),
 	}));
 
+	if (exportacion) return { ...exportBody(input, exportacion, Detalle, credit), ...(Referencia.length ? { Referencia } : {}) };
+
 	return {
 		Encabezado: {
 			IdDoc: {
@@ -304,6 +488,60 @@ export function mapInvoiceToDteBody(input: {
 		},
 		Detalle,
 		...(Referencia.length ? { Referencia } : {}),
+	};
+}
+
+/**
+ * Encabezado y detalle de un documento de exportación (elemento `Exportaciones`): receptor extranjero con el RUT genérico y su ID
+ * tributario, Aduana, montos exentos en la moneda de la factura y, en moneda extranjera, el equivalente en pesos.
+ */
+function exportBody(
+	input: Parameters<typeof mapInvoiceToDteBody>[0],
+	exportacion: DteExportInput,
+	Detalle: Record<string, unknown>[],
+	credit: boolean
+): Record<string, unknown> {
+	const { tipo, amounts, receptor } = input;
+	const country = aduanaCountryOf(receptor.country_code);
+	const aduana = exportAduana(exportacion, country);
+	const currency = exportacion.currency.toUpperCase();
+	const services = exportacion.contract?.kind !== 'bienes';
+	const paymentForm = code(exportacion.contract?.payment_form);
+	const decimals = exportDecimals(currency);
+	const inPesos = currency === 'CLP';
+	const totalClp = !inPesos && exportacion.clp_rate ? roundClp(amounts.total * exportacion.clp_rate) : null;
+
+	return {
+		Encabezado: {
+			IdDoc: compact({
+				TipoDTE: tipo,
+				FchEmis: input.issue_date,
+				IndServicio: services ? 3 : undefined,
+				FmaPagExp: paymentForm,
+				FchVenc: credit ? input.due_date : undefined,
+			}),
+			Receptor: compact({
+				RUTRecep: RUT_EXTRANJERO,
+				RznSocRecep: cut(receptor.legal_name, DTE_LIMITS.razon_social),
+				Extranjero: compact({ NumId: cut(receptor.tax_id, DTE_LIMITS.id_extranjero), Nacionalidad: country ? String(country) : undefined }),
+				GiroRecep: cut(receptor.economic_activity, DTE_LIMITS.giro),
+				DirRecep: cut(receptor.legal_address, DTE_LIMITS.direccion),
+				CiudadRecep: cut(receptor.city, DTE_LIMITS.ciudad),
+			}),
+			...(Object.keys(aduana).length ? { Transporte: { Aduana: aduana } } : {}),
+			Totales: { TpoMoneda: EXPORT_CURRENCIES[currency], MntExe: roundTo(amounts.total, decimals), MntTotal: roundTo(amounts.total, decimals) },
+			...(totalClp !== null
+				? {
+						OtraMoneda: {
+							TpoMoneda: EXPORT_CURRENCIES.CLP,
+							TpoCambio: exportacion.clp_rate,
+							MntExeOtrMnda: totalClp,
+							MntTotOtrMnda: totalClp,
+						},
+					}
+				: {}),
+		},
+		Detalle,
 	};
 }
 
@@ -400,6 +638,25 @@ export function receptorDteBlockers(receptor: DteReceptor | null): InvoiceBlocke
 }
 
 /**
+ * Bloqueos del receptor extranjero de un documento de exportación: razón social, país que Aduana reconozca, dirección y ciudad (el SII
+ * los exige en la factura de exportación). El RUT no aplica: va el genérico 55555555-5 y el ID tributario del país en `NumId`.
+ */
+export function receptorExportDteBlockers(receptor: DteReceptor | null): InvoiceBlocker[] {
+	if (!receptor) return [blocker('dte_receptor_missing', 'La factura no tiene razón social asignada', 'Asigna la razón social en el contrato')];
+	const step = 'Complétalo en Clientes › Razones sociales';
+	const blockers: InvoiceBlocker[] = [];
+
+	if (!receptor.legal_name?.trim()) blockers.push(blocker('dte_receptor_legal_name', 'La razón social no tiene nombre legal', step));
+	if (!receptor.country_code?.trim()) blockers.push(blocker('dte_receptor_country', 'La razón social no tiene país', step));
+	else if (!aduanaCountryOf(receptor.country_code))
+		blockers.push(blocker('dte_receptor_country', `El país ${receptor.country_code} no está en la tabla de países de Aduana`, step));
+	if (!receptor.legal_address?.trim()) blockers.push(blocker('dte_receptor_address', 'La razón social no tiene dirección legal', step));
+	if (!receptor.city?.trim()) blockers.push(blocker('dte_receptor_city', 'La razón social no tiene ciudad', step));
+
+	return blockers;
+}
+
+/**
  * Se puede emitir la factura o nota como DTE (spec del puente, fase 1 y 2)? Facturas: Por Emitir activas, sin borrador en el ERP, con
  * líneas y en pesos. Notas: pendientes de emisión, con su documento original ya emitido (folio) y, si ese se emitió como DTE, válido
  * ante el SII. Siempre: compañía con facturación electrónica y sin ERP, receptor completo y tipo soportado.
@@ -407,13 +664,21 @@ export function receptorDteBlockers(receptor: DteReceptor | null): InvoiceBlocke
 export function planEmitDte(
 	invoice: ContractInvoiceRow & { dte_id?: string | null; dte_status?: string | null },
 	context: DteContext,
-	input: { receptor: DteReceptor | null; base_blockers: InvoiceBlocker[]; original?: DteOriginal | null; pending_note?: boolean }
+	input: {
+		receptor: DteReceptor | null;
+		base_blockers: InvoiceBlocker[];
+		original?: DteOriginal | null;
+		pending_note?: boolean;
+		/** La factura es de exportación (`invoices.export_type = 1`) o la nota corrige un documento de exportación. */
+		export_document?: boolean;
+	}
 ): EmitDtePlan {
 	const reissue = isDteRejected(invoice);
 	const blockers: InvoiceBlocker[] = [...input.base_blockers];
 	const warnings: InvoiceWarning[] = [];
-	const tipo = dteTipoFor(invoice, context.contract_document_code);
-	const note = tipo === DTE_TYPES.credit_note || tipo === DTE_TYPES.debit_note;
+	const tipo = dteTipoFor(invoice, context.contract_document_code, input.export_document);
+	const note = isNoteDte(tipo);
+	const exportacion = isExportDte(tipo);
 
 	if (!context.has_electronic_invoicing) {
 		blockers.push(
@@ -432,7 +697,15 @@ export function planEmitDte(
 			blocker('unsupported_document_type', 'Las facturas de exportación todavía no se emiten como documento tributario desde Sapira', null)
 		);
 	}
-	if ((invoice.invoice_currency ?? '').toUpperCase() !== 'CLP') {
+	if (exportacion && !EXPORT_CURRENCIES[(invoice.invoice_currency ?? '').toUpperCase()]) {
+		blockers.push(
+			blocker(
+				'dte_export_currency_unsupported',
+				`La factura se emite en ${invoice.invoice_currency ?? 'sin moneda'}: la factura de exportación se emite desde Sapira en dólares, euros o pesos`,
+				null
+			)
+		);
+	} else if (!exportacion && (invoice.invoice_currency ?? '').toUpperCase() !== 'CLP') {
 		blockers.push(
 			blocker(
 				'dte_currency_not_clp',
@@ -467,7 +740,13 @@ export function planEmitDte(
 	if (invoice.dte_status && invoice.dte_status !== 'creado' && !reissue) {
 		blockers.push(blocker('dte_already_issued', `Ya se emitió como documento tributario (estado: ${invoice.dte_status})`, null));
 	}
-	blockers.push(...receptorDteBlockers(input.receptor));
+	blockers.push(...(exportacion ? receptorExportDteBlockers(input.receptor) : receptorDteBlockers(input.receptor)));
+	if (exportacion && input.receptor && !input.receptor.tax_id?.trim()) {
+		warnings.push({
+			code: 'dte_receptor_without_tax_id',
+			message: 'La razón social no tiene ID tributario: el documento va sin identificación del receptor extranjero',
+		});
+	}
 	if (input.receptor && !receptorEmailOf(input.receptor)) {
 		warnings.push({
 			code: 'dte_receptor_without_email',

@@ -1,4 +1,4 @@
-import { BadGatewayException, HttpException, Injectable } from '@nestjs/common';
+import { BadGatewayException, HttpException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
@@ -28,10 +28,18 @@ export class FacturaClientService {
 		private readonly oauth: FacturaOAuthService
 	) {}
 
-	async provisionEmpresa(empresa: ProvisionFacturaEmpresa) {
+	/** URL de api-factura; sin ella la integración no está configurada en este ambiente (503 con el motivo, no un 500 genérico). */
+	private baseUrl() {
 		const baseUrl = this.config.get<string>('FACTURA_API_URL');
-		if (!baseUrl) throw new Error('FACTURA_API_URL no está configurada');
-		const token = await this.oauth.getAccessToken();
+		if (!baseUrl) throw new ServiceUnavailableException('El servicio de facturación no está configurado en api-sapira (falta FACTURA_API_URL)');
+		return baseUrl;
+	}
+
+	async provisionEmpresa(empresa: ProvisionFacturaEmpresa) {
+		const baseUrl = this.baseUrl();
+		const token = await this.oauth.getAccessToken().catch((error: unknown) => {
+			throw facturaTokenError(error, 'provision');
+		});
 		try {
 			return await axios.post(`${baseUrl.replace(/\/$/, '')}/empresas/provision`, empresa, {
 				headers: { Authorization: `Bearer ${token}` },
@@ -46,9 +54,10 @@ export class FacturaClientService {
 	 * envíe las respuestas de intercambio de las compañías. Idempotente. Devuelve la URL de Inbound Parse con su secreto.
 	 */
 	async registrarCanalCorreo(sendgridApiKey: string): Promise<{ inboundUrl: string }> {
-		const baseUrl = this.config.get<string>('FACTURA_API_URL');
-		if (!baseUrl) throw new Error('FACTURA_API_URL no está configurada');
-		const token = await this.oauth.getAccessToken();
+		const baseUrl = this.baseUrl();
+		const token = await this.oauth.getAccessToken().catch((error: unknown) => {
+			throw facturaTokenError(error, 'provision');
+		});
 		try {
 			const respuesta = await axios.put(
 				`${baseUrl.replace(/\/$/, '')}/integrators/me/mail-channel`,
@@ -148,8 +157,7 @@ export class FacturaClientService {
 		body?: unknown,
 		responseType?: 'arraybuffer'
 	): Promise<{ data: T; headers?: Record<string, unknown> }> {
-		const baseUrl = this.config.get<string>('FACTURA_API_URL');
-		if (!baseUrl) throw new Error('FACTURA_API_URL no está configurada');
+		const baseUrl = this.baseUrl();
 		const token = await this.oauth.getDteAccessToken().catch((error: unknown) => {
 			throw facturaTokenError(error);
 		});
@@ -198,19 +206,22 @@ const ESTADOS_DEL_USUARIO = new Set([400, 409, 422]);
  * status code 403"). Los errores de datos conservan su estado; el resto (401/403 entre servicios, 5xx, sin respuesta)
  * es 502: no es un permiso del usuario y un 403 haría que el front mostrara "No tienes permiso".
  */
+/** Para qué se pide el token: cada uso tiene su alcance y su mensaje cuando api-factura no lo concede. */
+const RECHAZO_DEL_TOKEN = {
+	dte: 'El servicio de facturación no autorizó a Sapira para emitir documentos tributarios: el cliente OAuth de api-sapira necesita los alcances factura:dte:read y factura:dte:write',
+	provision:
+		'El servicio de facturación no autorizó a Sapira para activar empresas: revisa FACTURA_OAUTH_CLIENT_ID y FACTURA_OAUTH_CLIENT_SECRET de api-sapira y que su cliente OAuth tenga el alcance factura:empresas:provision',
+} as const;
+
 /**
- * Error al pedir el token de DTE a api-factura (`/oauth/token` con `FACTURA_OAUTH_DTE_SCOPE`). El caso típico de un ambiente nuevo: el
- * cliente OAuth de api-sapira se sembró solo con `factura:empresas:provision` y api-factura rechaza los alcances de DTE con 400/401. Sin
- * esto el usuario veía un 500 «Request failed with status code 401».
+ * Error al pedir el token a api-factura (`/oauth/token`). El caso típico de un ambiente nuevo: el cliente OAuth de api-sapira no
+ * existe, tiene otro secreto o le falta el alcance (`factura:empresas:provision` para activar empresas, los de DTE para emitir), y
+ * api-factura responde 400/401. Sin esto el usuario veía un 500 «Ha ocurrido un error interno».
  */
-export function facturaTokenError(error: unknown): HttpException {
+export function facturaTokenError(error: unknown, uso: keyof typeof RECHAZO_DEL_TOKEN = 'dte'): HttpException {
 	const status = axios.isAxiosError(error) ? error.response?.status : undefined;
 
-	if (status === 400 || status === 401 || status === 403) {
-		return new BadGatewayException(
-			'El servicio de facturación no autorizó a Sapira para emitir documentos tributarios: el cliente OAuth de api-sapira necesita los alcances factura:dte:read y factura:dte:write'
-		);
-	}
+	if (status === 400 || status === 401 || status === 403) return new BadGatewayException(RECHAZO_DEL_TOKEN[uso]);
 	if (!axios.isAxiosError(error)) {
 		return new BadGatewayException(`No se pudo autenticar con el servicio de facturación: ${(error as Error)?.message ?? 'error desconocido'}`);
 	}

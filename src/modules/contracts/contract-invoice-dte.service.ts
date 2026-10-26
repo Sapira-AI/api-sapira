@@ -38,6 +38,8 @@ import {
 	DTE_VALID_STATUSES,
 	dteAmounts,
 	type DteAmounts,
+	dteExportAmounts,
+	type DteExportInput,
 	type DteOriginal,
 	type DteReceptor,
 	dteReferencesOf,
@@ -46,14 +48,17 @@ import {
 	dteStatusFromResultado,
 	type DteTipo,
 	type EmitDtePlan,
+	EXPORT_CURRENCIES,
 	isDteRejected,
+	isExportDte,
 	mapInvoiceToDteBody,
 	planDebitNote,
 	planEmitDte,
 	receptorEmailOf,
+	roundTo,
 } from './invoice-dte';
 
-import type { CreateDebitNoteDto } from './dtos/contract-invoice-dte.dto';
+import type { ContractExportDetailsDto, CreateDebitNoteDto, InvoiceExportDetailsDto } from './dtos/contract-invoice-dte.dto';
 
 type Row = Record<string, unknown>;
 type Queryable = Pick<DataSource, 'query'> | QueryRunner;
@@ -99,6 +104,8 @@ interface DtePreparation {
 	body: Record<string, unknown> | null;
 	issue_date: string;
 	note: boolean;
+	/** Documento de exportación (110, 111, 112): moneda y equivalente en pesos. */
+	exportacion: DteExportInput | null;
 }
 
 /**
@@ -188,7 +195,11 @@ export class ContractInvoiceDteService {
 						? `Reemitida porque el SII rechazó el documento N° ${prepared.invoice.invoice_number ?? prepared.invoice.dte_folio ?? '—'}. `
 						: ''
 				}Emitida como documento tributario electrónico (folio ${created.folio}, TrackId ${trackId}) el ${prepared.issue_date}${
-					prepared.amounts ? ` por $${prepared.amounts.total.toLocaleString('es-CL')}` : ''
+					prepared.amounts
+						? prepared.exportacion && prepared.exportacion.currency !== 'CLP'
+							? ` por ${prepared.amounts.total.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${prepared.exportacion.currency}`
+							: ` por $${prepared.amounts.total.toLocaleString('es-CL')}`
+						: ''
 				}`,
 				effective_date: prepared.issue_date,
 				invoice_id: prepared.invoice.id,
@@ -210,6 +221,7 @@ export class ContractInvoiceDteService {
 						: null,
 					fx: prepared.fx,
 					valuated: prepared.valuate,
+					export: prepared.exportacion ? { currency: prepared.exportacion.currency, clp_rate: prepared.exportacion.clp_rate } : null,
 					warnings: prepared.plan.warnings.map((warning) => warning.code),
 				},
 			});
@@ -670,6 +682,57 @@ export class ContractInvoiceDteService {
 		};
 	}
 
+	// ---------------------------------------------------------------- datos de exportación
+
+	/** Guarda los datos de exportación del contrato (`contracts.export_details`). Sin campos con valor, queda NULL. */
+	async updateContractExportDetails(idOrNumber: string, holdingId: string, dto: ContractExportDetailsDto) {
+		const contract = await this.contracts.resolveContract(idOrNumber, holdingId);
+		const details = cleanExportDetails(dto as Record<string, unknown>);
+
+		await this.transaction(contract.id, holdingId, async (runner) => {
+			await runner.query(`UPDATE contracts SET export_details = $3::jsonb WHERE id = $1 AND holding_id = $2`, [
+				contract.id,
+				holdingId,
+				details ? JSON.stringify(details) : null,
+			]);
+		});
+
+		return { contract_id: contract.id, export_details: details };
+	}
+
+	/**
+	 * Guarda los datos del embarque de una factura de exportación (`invoices.export_details`) antes de emitirla: solo una Por Emitir que
+	 * todavía no tiene DTE (después, el documento ya los lleva).
+	 */
+	async updateInvoiceExportDetails(idOrNumber: string, invoiceId: string, holdingId: string, dto: InvoiceExportDetailsDto) {
+		const contract = await this.contracts.resolveContract(idOrNumber, holdingId);
+		const details = cleanExportDetails(dto as Record<string, unknown>);
+
+		const updated = await this.transaction(contract.id, holdingId, async (runner) => {
+			const [row] = (await runner.query(
+				`SELECT status, dte_id, dte_status FROM invoices WHERE id = $1 AND holding_id = $2 AND contract_id = $3`,
+				[invoiceId, holdingId, contract.id]
+			)) as Row[];
+
+			if (!row) throw new NotFoundException('Factura no encontrada');
+			if (row.status !== PENDING_STATUS || (row.dte_id && row.dte_status !== 'rechazado')) {
+				throw new ConflictException({
+					message: 'Los datos del embarque se editan antes de emitir la factura',
+					code: 'invoice_not_pending',
+				});
+			}
+			await runner.query(`UPDATE invoices SET export_details = $3::jsonb WHERE id = $1 AND holding_id = $2`, [
+				invoiceId,
+				holdingId,
+				details ? JSON.stringify(details) : null,
+			]);
+
+			return details;
+		});
+
+		return { invoice_id: invoiceId, export_details: updated };
+	}
+
 	// ---------------------------------------------------------------- preparar
 
 	private async prepare(db: Queryable, contractId: string, invoiceId: string, holdingId: string, today: string): Promise<DtePreparation> {
@@ -679,7 +742,8 @@ export class ContractInvoiceDteService {
 			`SELECT i.related_invoice_id, i.credit_type, i.due_date::text AS due_date, t.code AS contract_document_code,
 				EXISTS (SELECT 1 FROM sii_configurations s WHERE s.company_id = i.company_id AND s.holding_id = i.holding_id AND s.is_enabled = true) AS has_electronic_invoicing,
 				ce.tax_id, ce.legal_name AS receptor_legal_name, ce.economic_activity, ce.legal_address, ce.commune, ce.email,
-				i.client_entity_id
+				ce.country_code, ce.city, i.client_entity_id, i.export_type, c.export_details AS contract_export_details,
+				i.export_details AS invoice_export_details
 			FROM invoices i
 			LEFT JOIN contracts c ON c.id = i.contract_id
 			LEFT JOIN tax_document_types t ON t.id = c.tax_document_type_id
@@ -695,6 +759,8 @@ export class ContractInvoiceDteService {
 					legal_address: toText(extra.legal_address),
 					commune: toText(extra.commune),
 					email: toText(extra.email),
+					country_code: toText(extra.country_code),
+					city: toText(extra.city),
 				}
 			: null;
 		const tipoContext = {
@@ -707,6 +773,8 @@ export class ContractInvoiceDteService {
 		// Reemisión de un DTE rechazado: se planea como si la factura volviera a estar Por Emitir y sin folio (el rechazado no vale).
 		const planned = isDteRejected(invoice) ? asReissued(invoice, note) : invoice;
 		const original = note && extra?.related_invoice_id ? await this.loadOriginal(db, String(extra.related_invoice_id), holdingId) : null;
+		// Exportación: la factura lo es (`export_type = 1`, que copian sus NC y ND) o la nota corrige un documento de exportación.
+		const exportDocument = Number(extra?.export_type) === 1 || isExportDte(original?.dte_tipo);
 		const pendingNote =
 			note &&
 			creditNotePendingEmission({
@@ -739,24 +807,31 @@ export class ContractInvoiceDteService {
 		const valuation = note ? { fx: invoice.fx_contract_to_invoice, valuate: false, blocker: null } : await this.valuation(invoice, lines, today);
 
 		if (valuation.blocker) base.push(valuation.blocker);
-		if (invoice.tax_rate === null && !note) {
+		if (invoice.tax_rate === null && !note && !exportDocument) {
 			base.push({
 				code: 'tax_rate_missing',
 				message: 'La factura no tiene tasa de IVA',
 				next_step: 'Completa la tasa de impuesto de la compañía',
 			});
 		}
-		const plan = planEmitDte(invoice, tipoContext, { receptor, base_blockers: base, original, pending_note: pendingNote });
+		const plan = planEmitDte(invoice, tipoContext, {
+			receptor,
+			base_blockers: base,
+			original,
+			pending_note: pendingNote,
+			export_document: exportDocument,
+		});
 		const issueDate = today;
+		const exportacion = isExportDte(plan.tipo) ? await this.exportInput(invoice, extra, today, plan) : null;
 		let amounts: DteAmounts | null = null;
 		let body: Record<string, unknown> | null = null;
 
 		if (plan.tipo && (valuation.fx !== null || !isMultiCurrency(invoice) || note || !valuation.valuate)) {
-			amounts = dteAmounts(
-				this.sourceLines(invoice, lines, valuation.fx, valuation.valuate),
-				invoice.tax_rate ?? 19,
-				plan.tipo === DTE_TYPES.exempt_invoice
-			);
+			const source = this.sourceLines(invoice, lines, valuation.fx, valuation.valuate);
+
+			amounts = exportacion
+				? dteExportAmounts(source, invoice.invoice_currency)
+				: dteAmounts(source, invoice.tax_rate ?? 19, plan.tipo === DTE_TYPES.exempt_invoice);
 			body = mapInvoiceToDteBody({
 				tipo: plan.tipo as DteTipo,
 				issue_date: issueDate,
@@ -770,12 +845,16 @@ export class ContractInvoiceDteService {
 					email: null,
 				},
 				amounts,
-				references: await this.loadReferences(db, invoice.id, holdingId, original, note),
+				references: [
+					...(await this.loadReferences(db, invoice.id, holdingId, original, note)),
+					...(exportacion && !note ? dusReference(exportacion, issueDate) : []),
+				],
 				// Nota del tipo de cambio en cada línea (contrato en UF u otra moneda); las notas de crédito y débito no la llevan.
 				fx:
 					!note && isMultiCurrency(invoice) && valuation.fx
 						? { rate: valuation.fx, currency: invoice.contract_currency!, date: valuation.fxDate ?? null }
 						: null,
+				exportacion,
 			});
 			if (amounts.total <= 0) plan.blockers.push({ code: 'dte_zero_total', message: 'El documento tiene total 0', next_step: null });
 			plan.can_apply = plan.blockers.length === 0;
@@ -795,7 +874,41 @@ export class ContractInvoiceDteService {
 			body,
 			issue_date: issueDate,
 			note,
+			exportacion,
 		};
+	}
+
+	/**
+	 * Lo que agrega un documento de exportación: la moneda, los datos de exportación del contrato y del embarque, y el tipo de cambio a
+	 * pesos de `OtraMoneda` (obligatorio en moneda extranjera): el dólar observado del día de emisión (o el último anterior) y, para el euro,
+	 * EUR → USD × dólar observado. Sin tasa, bloquea la emisión.
+	 */
+	private async exportInput(invoice: ContractInvoiceRow, extra: Row | undefined, today: string, plan: EmitDtePlan): Promise<DteExportInput> {
+		const currency = (invoice.invoice_currency ?? '').toUpperCase();
+		const input: DteExportInput = {
+			currency,
+			clp_rate: null,
+			contract: (extra?.contract_export_details as DteExportInput['contract']) ?? null,
+			invoice: (extra?.invoice_export_details as DteExportInput['invoice']) ?? null,
+		};
+
+		if (currency === 'CLP' || !EXPORT_CURRENCIES[currency]) return input;
+		try {
+			const usdClp = (await this.exchangeRates.getExchangeRateWithFallback('USD', 'CLP', today))?.rate;
+			const crossUsd = currency === 'USD' ? 1 : (await this.exchangeRates.getExchangeRateWithFallback(currency, 'USD', today))?.rate;
+
+			if (usdClp > 0 && crossUsd > 0) return { ...input, clp_rate: roundTo(usdClp * crossUsd, 4) };
+		} catch (error) {
+			this.logger.warn(`Sin tipo de cambio ${currency} → CLP al ${today} para la factura de exportación ${invoice.id}: ${errorText(error)}`);
+		}
+		plan.blockers.push({
+			code: 'dte_export_fx_missing',
+			message: `No hay dólar observado${currency === 'USD' ? '' : ` ni tasa ${currency} → USD`} para la fecha de emisión: el documento de exportación lleva su equivalente en pesos`,
+			next_step: 'Revisa la carga de tipos de cambio del Banco Central',
+		});
+		plan.can_apply = false;
+
+		return input;
 	}
 
 	/**
@@ -931,7 +1044,7 @@ export class ContractInvoiceDteService {
 		);
 
 		if (!note || !original?.invoice_number) return references;
-		const toOriginal = references.find((reference) => ['33', '34', '56', '61'].includes(reference.document_type_code));
+		const toOriginal = references.find((reference) => ['33', '34', '56', '61', '110', '111', '112'].includes(reference.document_type_code));
 
 		if (toOriginal) {
 			toOriginal.document_number = original.invoice_number;
@@ -986,7 +1099,24 @@ export class ContractInvoiceDteService {
 									giro: prepared.receptor.economic_activity,
 									address: prepared.receptor.legal_address,
 									commune: prepared.receptor.commune,
+									city: prepared.receptor.city ?? null,
+									country_code: prepared.receptor.country_code ?? null,
 									email: receptorEmailOf(prepared.receptor),
+								}
+							: null,
+						// Moneda del documento (en exportación, la de la factura) y, en moneda extranjera, el equivalente en pesos (OtraMoneda).
+						currency: prepared.exportacion?.currency ?? 'CLP',
+						export: prepared.exportacion
+							? {
+									services: prepared.exportacion.contract?.kind !== 'bienes',
+									clp_rate: prepared.exportacion.clp_rate,
+									total_clp:
+										prepared.exportacion.clp_rate && amounts ? Math.round(amounts.total * prepared.exportacion.clp_rate) : null,
+									aduana:
+										((prepared.body?.Encabezado as Record<string, any> | undefined)?.Transporte?.Aduana as Record<
+											string,
+											unknown
+										>) ?? null,
 								}
 							: null,
 						lines: amounts?.lines.map((line) => ({ description: line.description, quantity: line.quantity, amount: line.monto })) ?? [],
@@ -1131,4 +1261,28 @@ function dteRowOf(row: Row): DteRow {
 		dte_receptor_error: toText(row.dte_receptor_error),
 		receptor_email: toText(row.receptor_email),
 	};
+}
+
+/** Referencia al DUS (documento único de salida, código 807) de una factura de exportación, si el embarque lo trae. */
+function dusReference(exportacion: DteExportInput, issueDate: string) {
+	const number = exportacion.invoice?.dus_number?.trim();
+
+	return number
+		? [
+				{
+					document_type_code: '807',
+					document_number: number,
+					reference_date: exportacion.invoice?.dus_date ?? issueDate,
+					reference_code: null,
+					reason: 'DUS',
+				},
+			]
+		: [];
+}
+
+/** Datos de exportación sin los campos vacíos; null si no queda ninguno. */
+export function cleanExportDetails(details: Record<string, unknown>): Record<string, unknown> | null {
+	const clean = Object.fromEntries(Object.entries(details).filter(([, value]) => value !== null && value !== undefined && value !== ''));
+
+	return Object.keys(clean).length ? clean : null;
 }

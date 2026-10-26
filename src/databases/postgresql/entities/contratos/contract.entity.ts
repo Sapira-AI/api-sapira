@@ -257,6 +257,14 @@ export class Contract {
 	payment_terms?: PaymentTerms | null;
 
 	@Column({
+		type: 'jsonb',
+		nullable: true,
+		comment:
+			'Datos de exportación del contrato para la factura de exportación (DTE 110): {kind: servicios|bienes, sale_modality, sale_clause, payment_form, transport_route, carrier_name, port_of_loading, port_of_unloading, destination_country}, con los códigos de Aduana. Todos opcionales. NULL = sin datos de exportación',
+	})
+	export_details?: Record<string, unknown> | null;
+
+	@Column({
 		type: 'text',
 		nullable: true,
 		comment:

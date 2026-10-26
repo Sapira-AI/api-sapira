@@ -260,7 +260,7 @@ export class Invoice {
 	})
 	dte_id?: string | null;
 
-	@Column({ type: 'integer', nullable: true, comment: 'Tipo SII del DTE emitido (33, 34, 56, 61)' })
+	@Column({ type: 'integer', nullable: true, comment: 'Tipo SII del DTE emitido (33, 34, 56, 61, 110, 111, 112)' })
 	dte_tipo?: number | null;
 
 	@Column({ type: 'integer', nullable: true, comment: 'Folio del DTE asignado por el SII (CAF); se copia a invoice_number' })
@@ -289,6 +289,14 @@ export class Invoice {
 
 	@Column({ type: 'text', nullable: true, comment: 'Último error al enviar el DTE al receptor (NULL si se envió o no se intentó)' })
 	dte_receptor_error?: string | null;
+
+	@Column({
+		type: 'jsonb',
+		nullable: true,
+		comment:
+			'Datos del embarque de una factura de exportación de bienes (DTE 110): {total_packages, package_type, gross_weight, net_weight, weight_unit, freight, insurance, sale_clause_total, dus_number, dus_date}. Pisan los del contrato. NULL = sin datos',
+	})
+	export_details?: Record<string, unknown> | null;
 
 	@Column({
 		type: 'uuid',
