@@ -1127,7 +1127,7 @@ describe('billing_conditions (fase A)', () => {
 			['apply_to_pending']
 		);
 	});
-	it('emisión automática exige envío al ERP (S6-10); emisión y referencias se propagan a las PE desde la fecha efectiva', () => {
+	it('emisión automática exige envío al ERP (S6-10) y se propaga a las PE desde la fecha efectiva; Requiere OC/HES va a TODAS las PE vivas (Domi 26-10)', () => {
 		expect(fields(() => planChange(context(), request({ type: 'billing_conditions', auto_invoice: true })))).toEqual(['change.auto_invoice']);
 		const plan = planChange(
 			context(),
@@ -1137,13 +1137,79 @@ describe('billing_conditions (fase A)', () => {
 			)
 		);
 
+		// Emisión automática: solo inv-12 (desde la fecha efectiva). OC/HES: las tres Por Emitir, también las anteriores a la fecha.
 		expect(ops(plan, 'update_invoices_fields')).toEqual([
-			{ kind: 'update_invoices_fields', invoice_ids: ['inv-12'], set: { auto_invoice: true, requires_references_for_billing: true } },
+			{ kind: 'update_invoices_fields', invoice_ids: ['inv-12'], set: { auto_invoice: true } },
+			{ kind: 'update_invoices_fields', invoice_ids: ['inv-10', 'inv-11', 'inv-12'], set: { requires_references_for_billing: true } },
 		]);
 		expect(ops(plan, 'update_contract')[0]).toMatchObject({
 			set: { auto_send_to_odoo: true, auto_invoice: true, requires_references_for_billing: true },
 		});
-		expect(plan.preview.invoices.updated).toHaveLength(1);
+		expect(plan.preview.invoices.updated.map((invoice) => [invoice.id, invoice.change])).toEqual([
+			['inv-12', 'emisión automática'],
+			['inv-10', 'exige OC/HES'],
+			['inv-11', 'exige OC/HES'],
+			['inv-12', 'exige OC/HES'],
+		]);
+		// Al encenderla avisa cuáles quedan sin referencia (ninguna de las fixtures tiene).
+		expect(plan.preview.warnings).toEqual([
+			{ code: 'pending_invoices_without_reference', message: expect.stringContaining('3 facturas por emitir quedan sin referencia') },
+		]);
+	});
+
+	it('Requiere OC/HES apagada: libera todas las PE vivas (también las atrasadas) sin aviso; con referencias cargadas no avisa al encender', () => {
+		const ctx = context({ contract: contractRow({ requires_references_for_billing: true }) });
+		const off = planChange(
+			ctx,
+			request({ type: 'billing_conditions', requires_references_for_billing: false }, { effective_date: '2026-12-01' })
+		);
+
+		expect(ops(off, 'update_invoices_fields')).toEqual([
+			{ kind: 'update_invoices_fields', invoice_ids: ['inv-10', 'inv-11', 'inv-12'], set: { requires_references_for_billing: false } },
+		]);
+		expect(off.preview.warnings).toEqual([]);
+		expect(off.preview.invoices.updated.every((invoice) => invoice.change === 'deja de exigir OC/HES')).toBe(true);
+		expect(off.event).toMatchObject({
+			type: 'CONDITIONS_UPDATED',
+			metadata: expect.objectContaining({ changed_fields: ['requires_references_for_billing'] }),
+		});
+
+		const withReferences = context({ invoices: context().invoices.map((invoice) => ({ ...invoice, references_count: 1 })) });
+
+		expect(planChange(withReferences, request({ type: 'billing_conditions', requires_references_for_billing: true })).preview.warnings).toEqual(
+			[]
+		);
+	});
+
+	it('marcas Multiempresa y Multimoneda desde las condiciones (Domi 26-10): Multiempresa solo contrato e Historial; apagar Multimoneda con ítems en otra moneda se bloquea', () => {
+		const company = planChange(context(), request({ type: 'billing_conditions', requires_multicompany_billing: true }));
+
+		expect(ops(company, 'update_contract')[0].set).toEqual({ requires_multicompany_billing: true });
+		expect(ops(company, 'update_invoices_fields')).toEqual([]);
+		expect(company.event.metadata).toMatchObject({
+			changed_fields: ['requires_multicompany_billing'],
+			fields_before: { requires_multicompany_billing: false },
+		});
+		// Sin diferencia con el valor actual → 400 "sin diferencias".
+		expect(fields(() => planChange(context(), request({ type: 'billing_conditions', requires_multicompany_billing: false })))).toEqual([
+			'change',
+		]);
+
+		const on = planChange(context(), request({ type: 'billing_conditions', requires_multicurrency_billing: true }));
+
+		expect(ops(on, 'set_multicurrency')).toEqual([{ kind: 'set_multicurrency', enabled: true }]);
+		expect(on.event.metadata).toMatchObject({
+			changed_fields: ['requires_multicurrency_billing'],
+			fields_after: { requires_multicurrency_billing: true },
+		});
+
+		const blocked = planChange(
+			context({ contract: contractRow({ requires_multicurrency_billing: true }), items: [itemRow({ currency: 'USD' })] }),
+			request({ type: 'billing_conditions', requires_multicurrency_billing: false })
+		);
+
+		expect(blocked.preview.blockers.map((blocker) => blocker.code)).toEqual(['foreign_currency_items_present']);
+		expect(ops(blocked, 'set_multicurrency')).toEqual([]);
 	});
 	it('moneda y política FX de facturación: fijo con tasa valoriza las PE; UF bloquea; sin tasa para un período bloquea', () => {
 		const plan = planChange(

@@ -325,6 +325,26 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 			).toBe(false);
 		});
 
+		it('Requiere OC/HES apagada en contrato y factura (Domi 26-10): una PE sin referencia se emite sin bloqueo; con cualquiera de las dos encendida, bloquea', () => {
+			const off = planSendNow(
+				invoice({ fx_contract_to_invoice: 950, requires_references: false, auto_invoice: true }),
+				context({ contract_requires_references: false })
+			);
+
+			expect(codes(off.blockers)).not.toContain('needs_reference');
+			expect(codes(off.warnings)).not.toContain('needs_reference');
+			expect(off.can_apply).toBe(true);
+			expect(
+				codes(
+					planSendNow(invoice({ fx_contract_to_invoice: 950, auto_invoice: true }), context({ contract_requires_references: true }))
+						.blockers
+				)
+			).toContain('needs_reference');
+			expect(
+				codes(planSendNow(invoice({ fx_contract_to_invoice: 950, requires_references: true, auto_invoice: true }), context()).blockers)
+			).toContain('needs_reference');
+		});
+
 		it('la fecha pasada y el spot no bloquean: avisan (la usuaria decide)', () => {
 			const plan = planSendNow(invoice({ issue_date: '2026-08-01' }), context());
 

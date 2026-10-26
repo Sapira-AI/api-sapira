@@ -19,9 +19,14 @@ const contract = (id: string, number: string, autoSend: boolean | null, autoInvo
 	contract_number: number,
 	auto_send_to_odoo: autoSend,
 	auto_invoice: autoInvoice,
+	requires_references_for_billing: false,
+	requires_multicurrency_billing: false,
+	requires_multicompany_billing: false,
 	currency_mismatch: false,
+	foreign_currencies: null,
 	...extra,
 });
+const FLAGS_OFF = { requires_references_for_billing: false, requires_multicurrency_billing: false, requires_multicompany_billing: false };
 
 const build = (rows: unknown[], handler: Handler = () => undefined) => {
 	const route = async (sql: string, params: unknown[] = []) => {
@@ -65,6 +70,7 @@ describe('ContractBulkService.updateSettings', () => {
 			bulk_id: expect.any(String),
 			updated: 1,
 			unchanged: 1,
+			blocked: 0,
 			results: [
 				{ id: A, contract_number: 'CTR-A', changed: true },
 				{ id: B, contract_number: 'CTR-B', changed: false },
@@ -76,7 +82,7 @@ describe('ContractBulkService.updateSettings', () => {
 		expect(selectSql).toContain('c.deleted_at IS NULL');
 		expect(selectSql).toContain('FOR UPDATE OF c');
 		expect(selectParams).toEqual([[A, B], 'h-1']);
-		expect(calls(runner.query, 'UPDATE contracts').map(([, params]) => params)).toEqual([[A, 'h-1', true, false]]);
+		expect(calls(runner.query, 'UPDATE contracts').map(([, params]) => params)).toEqual([[A, 'h-1', true, false, false, false, false]]);
 
 		const events = calls(runner.query, `'SETTINGS_CHANGED'`);
 
@@ -88,8 +94,8 @@ describe('ContractBulkService.updateSettings', () => {
 			source: 'api_v2',
 			bulk: true,
 			bulk_id: result.bulk_id,
-			before: { auto_send_to_odoo: false, auto_invoice: false },
-			after: { auto_send_to_odoo: true, auto_invoice: false },
+			before: { auto_send_to_odoo: false, auto_invoice: false, ...FLAGS_OFF },
+			after: { auto_send_to_odoo: true, auto_invoice: false, ...FLAGS_OFF },
 		});
 		expect(runner.commitTransaction).toHaveBeenCalledTimes(1);
 	});
@@ -180,6 +186,71 @@ describe('ContractBulkService.updateSettings', () => {
 		expect(noUser.runner.startTransaction).not.toHaveBeenCalled();
 	});
 
+	it('marcas del contrato (Domi 26-10): Requiere OC/HES va al contrato y a todas sus Por Emitir vivas, con el conteo en el resumen y el evento', async () => {
+		const { service, runner } = build(
+			[contract(A, 'CTR-A', false, false, { requires_references_for_billing: true }), contract(B, 'CTR-B', false, false)],
+			(sql) => (sql.includes('UPDATE invoices SET requires_references_for_billing') ? [{ id: 'inv-1' }, { id: 'inv-2' }] : undefined)
+		);
+
+		const result = await service.updateSettings({ ids: [A, B], requires_references_for_billing: false }, 'h-1', 'auth-1');
+
+		expect(result).toMatchObject({
+			updated: 1,
+			unchanged: 1,
+			blocked: 0,
+			results: [
+				{ id: A, contract_number: 'CTR-A', changed: true, pending_invoices_updated: 2 },
+				{ id: B, contract_number: 'CTR-B', changed: false },
+			],
+		});
+		expect(calls(runner.query, 'UPDATE contracts').map(([, params]) => params)).toEqual([[A, 'h-1', false, false, false, false, false]]);
+		const [[invoicesSql, invoicesParams]] = calls(runner.query, 'UPDATE invoices SET requires_references_for_billing');
+
+		// Todas las Por Emitir vivas del contrato, sin mirar la fecha de emisión; ni unificadas ni NC/ND ni históricas.
+		expect(invoicesSql).toContain("status = 'Por Emitir' AND is_active AND COALESCE(is_legacy, false) = false");
+		expect(invoicesSql).toContain("invoice_type IS DISTINCT FROM 'Unificada'");
+		expect(invoicesSql).not.toContain('issue_date');
+		expect(invoicesParams).toEqual([A, 'h-1', false]);
+		const [, , title, , , metadata] = calls(runner.query, `'SETTINGS_CHANGED'`)[0][1] as unknown[];
+
+		expect(title).toBe('Requiere OC/HES desactivado');
+		expect(JSON.parse(metadata as string)).toMatchObject({
+			before: { requires_references_for_billing: true },
+			after: { requires_references_for_billing: false },
+			pending_invoices_updated: 2,
+		});
+	});
+
+	it('marcas del contrato: apagar Multimoneda con ítems en otra moneda queda bloqueado en el resumen (la acción sigue con los demás); Multiempresa solo contrato y evento', async () => {
+		const { service, runner } = build([
+			contract(A, 'CTR-A', false, false, { requires_multicurrency_billing: true, currency_mismatch: true, foreign_currencies: 'USD, UF' }),
+			contract(B, 'CTR-B', false, false, { requires_multicurrency_billing: true }),
+		]);
+
+		const result = await service.updateSettings({ ids: [A, B], requires_multicurrency_billing: false }, 'h-1', 'auth-1');
+
+		expect(result).toMatchObject({
+			updated: 1,
+			unchanged: 0,
+			blocked: 1,
+			results: [
+				{ id: A, changed: false, blocked: 'CTR-A: no se puede desactivar multimoneda, tiene ítems en USD, UF' },
+				{ id: B, changed: true },
+			],
+		});
+		expect(calls(runner.query, 'UPDATE contracts').map(([, params]) => params)).toEqual([[B, 'h-1', false, false, false, false, false]]);
+		expect(calls(runner.query, 'UPDATE invoices')).toHaveLength(0);
+		expect(calls(runner.query, `'SETTINGS_CHANGED'`)[0][1]).toContain('Multimoneda desactivada');
+
+		const company = build([contract(A, 'CTR-A', false, false, { currency_mismatch: true })]);
+
+		// Las marcas no disparan el trigger de moneda: con ítems en otra moneda, Multiempresa se cambia igual.
+		await expect(company.service.updateSettings({ ids: [A], requires_multicompany_billing: true }, 'h-1', 'auth-1')).resolves.toMatchObject({
+			updated: 1,
+		});
+		expect(calls(company.runner.query, `'SETTINGS_CHANGED'`)[0][1]).toContain('Multiempresa activada');
+	});
+
 	it('títulos del evento en español y sin nombres de proveedor', () => {
 		const off = { auto_send_to_odoo: false, auto_invoice: false };
 
@@ -188,6 +259,12 @@ describe('ContractBulkService.updateSettings', () => {
 			'Envío automático al ERP desactivado · Emisión automática desactivada'
 		);
 		expect(settingsChangeTitle(off, off)).not.toMatch(/odoo/i);
+		expect(
+			settingsChangeTitle(
+				{ ...off, ...FLAGS_OFF },
+				{ ...off, ...FLAGS_OFF, requires_references_for_billing: true, requires_multicompany_billing: true }
+			)
+		).toBe('Requiere OC/HES activado · Multiempresa activada');
 	});
 });
 
