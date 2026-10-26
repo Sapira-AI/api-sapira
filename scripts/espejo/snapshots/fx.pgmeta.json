@@ -2,7 +2,7 @@
  "exchange_rates": {
   "name": "public.exchange_rates",
   "rls_enabled": true,
-  "rows": 8284,
+  "rows": 8955,
   "columns": [
    {
     "name": "rate_date",
@@ -351,7 +351,7 @@
  "contract_fx_period_rates": {
   "name": "public.contract_fx_period_rates",
   "rls_enabled": true,
-  "rows": 6,
+  "rows": 11,
   "columns": [
    {
     "name": "id",

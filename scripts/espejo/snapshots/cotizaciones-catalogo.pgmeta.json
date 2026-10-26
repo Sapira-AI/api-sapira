@@ -2,7 +2,7 @@
  "quotes": {
   "name": "public.quotes",
   "rls_enabled": true,
-  "rows": 424,
+  "rows": 456,
   "columns": [
    {
     "name": "id",
@@ -952,7 +952,7 @@
  "quote_events": {
   "name": "public.quote_events",
   "rls_enabled": true,
-  "rows": 17,
+  "rows": 27,
   "columns": [
    {
     "name": "id",

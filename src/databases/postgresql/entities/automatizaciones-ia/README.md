@@ -1,7 +1,7 @@
-# Módulo 11 · Automatizaciones, IA, notificaciones y correo — 14 tablas de prod (2026-10-19)
+# Módulo 11 · Automatizaciones, IA, notificaciones y correo — 14 tablas de prod (2026-10-26)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-19 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/automatizaciones-ia.{pgmeta,catalog}.json`); metadata real de las entities existentes en `automatizaciones-ia.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-26 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/automatizaciones-ia.{pgmeta,catalog}.json`); metadata real de las entities existentes en `automatizaciones-ia.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (4) — no se tocaron ni se duplicaron
 
@@ -9,8 +9,8 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
-| `app_notifications` (71) | `src/databases/postgresql/entities/automatizaciones-ia/app-notification.entity.ts` · `AppNotification` | ⚠️ difiere de prod | — | — | — | nombre de PK `app_notifications_pkey`<br>CHECK `app_notifications_severity_check`<br>CHECK `app_notifications_status_check`<br>índice con expresión `app_notifications_holding_resource_created_idx`<br>índice con expresión `app_notifications_holding_status_created_idx` |
-| `app_notification_recipients` (405) | `src/databases/postgresql/entities/automatizaciones-ia/app-notification-recipient.entity.ts` · `AppNotificationRecipient` | ⚠️ difiere de prod | — | — | — | nombre de PK `app_notification_recipients_pkey`<br>índice con expresión `app_notification_recipients_user_unread_idx` |
+| `app_notifications` (72) | `src/databases/postgresql/entities/automatizaciones-ia/app-notification.entity.ts` · `AppNotification` | ⚠️ difiere de prod | — | — | — | nombre de PK `app_notifications_pkey`<br>CHECK `app_notifications_severity_check`<br>CHECK `app_notifications_status_check`<br>índice con expresión `app_notifications_holding_resource_created_idx`<br>índice con expresión `app_notifications_holding_status_created_idx` |
+| `app_notification_recipients` (420) | `src/databases/postgresql/entities/automatizaciones-ia/app-notification-recipient.entity.ts` · `AppNotificationRecipient` | ⚠️ difiere de prod | — | — | — | nombre de PK `app_notification_recipients_pkey`<br>índice con expresión `app_notification_recipients_user_unread_idx` |
 | `notification_role_subscriptions` (246) | `src/databases/postgresql/entities/automatizaciones-ia/notification-role-subscription.entity.ts` · `NotificationRoleSubscription` | ⚠️ difiere de prod | — | — | — | nombre de PK `notification_role_subscriptions_pkey` |
 | `holding_inbound_email_domains` (0) | `src/databases/postgresql/entities/automatizaciones-ia/holding-inbound-email-domain.entity.ts` · `HoldingInboundEmailDomain` | ⚠️ difiere de prod | — | — | — | nombre de PK `holding_inbound_email_domains_pkey`<br>CHECK `holding_inbound_email_domains_status_check` |
 

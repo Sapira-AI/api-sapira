@@ -525,6 +525,17 @@
      "updatable"
     ],
     "comment": "Comuna de la dirección legal (CmnaRecep del DTE chileno, hasta 20 caracteres). NULL = sin comuna"
+   },
+   {
+    "name": "city",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Ciudad de la dirección legal (CiudadRecep del DTE, hasta 20 caracteres): obligatoria en la factura de exportación. NULL = sin ciudad"
    }
   ],
   "primary_keys": [
