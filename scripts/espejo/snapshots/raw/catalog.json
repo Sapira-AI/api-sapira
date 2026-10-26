@@ -6900,6 +6900,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Comuna de la dirección legal (CmnaRecep del DTE chileno, hasta 20 caracteres). NULL = sin comuna"
+				},
+				{
+					"column": "city",
+					"attnum": 27,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Ciudad de la dirección legal (CiudadRecep del DTE, hasta 20 caracteres): obligatoria en la factura de exportación. NULL = sin ciudad"
 				}
 			],
 			"constraints": [
@@ -17514,6 +17530,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Plantilla de descripción de las líneas de factura {separator?, blocks: [{type, format?, text?}]} (spec facturas §3.6). NULL = glosa estándar PRODUCTO Cuenta X - Periodo dd/mm/aaaa a dd/mm/aaaa"
+				},
+				{
+					"column": "export_details",
+					"attnum": 65,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Datos de exportación del contrato para la factura de exportación (DTE 110): {kind: servicios|bienes, sale_modality, sale_clause, payment_form, transport_route, carrier_name, port_of_loading, port_of_unloading, destination_country}, con los códigos de Aduana. Todos opcionales. NULL = sin datos de exportación"
 				}
 			],
 			"constraints": [
@@ -18849,6 +18881,450 @@
 					"with_check": null
 				}
 			]
+		},
+		"erp_exports": {
+			"comment": "Cola e historial de envíos de facturas y asientos a un ERP contable (Kame). Solo la API",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "company_id",
+					"attnum": 3,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "system",
+					"attnum": 4,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "ERP de destino: kame"
+				},
+				{
+					"column": "environment",
+					"attnum": 5,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Ambiente del ERP al que se envió: pruebas o produccion"
+				},
+				{
+					"column": "object",
+					"attnum": 6,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "invoice (factura emitida) o journal (asientos de devengo de un mes)"
+				},
+				{
+					"column": "invoice_id",
+					"attnum": 7,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Factura enviada (object = invoice)"
+				},
+				{
+					"column": "period",
+					"attnum": 8,
+					"data_type": "date",
+					"udt": "date",
+					"type": "date",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Mes de los asientos, día 1 (object = journal)"
+				},
+				{
+					"column": "status",
+					"attnum": 9,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'pending'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "pending, sending, sent, error, simulated (dry run) o skipped"
+				},
+				{
+					"column": "attempts",
+					"attnum": 10,
+					"data_type": "integer",
+					"udt": "int4",
+					"type": "integer",
+					"char_len": null,
+					"num_prec": 32,
+					"num_scale": 0,
+					"notnull": true,
+					"default": "0",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Intentos de envío hechos"
+				},
+				{
+					"column": "next_attempt_at",
+					"attnum": 11,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Cuándo puede volver a intentarse (espera creciente tras un error)"
+				},
+				{
+					"column": "external_id",
+					"attnum": 12,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Id del registro en el ERP (IdVenta / comprobante)"
+				},
+				{
+					"column": "external_folio",
+					"attnum": 13,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Folio del registro en el ERP"
+				},
+				{
+					"column": "last_error",
+					"attnum": 14,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Último error (traducido para el usuario)"
+				},
+				{
+					"column": "request_payload",
+					"attnum": 15,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Cuerpo enviado (o que se enviaría, en simulación)"
+				},
+				{
+					"column": "response",
+					"attnum": 16,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Respuesta del ERP"
+				},
+				{
+					"column": "sent_at",
+					"attnum": 17,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Cuándo quedó registrado en el ERP"
+				},
+				{
+					"column": "requested_by",
+					"attnum": 18,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Usuario que lo envió a mano (null = job)"
+				},
+				{
+					"column": "created_at",
+					"attnum": 19,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_at",
+					"attnum": 20,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "erp_exports_company_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "erp_exports_environment_check",
+					"type": "c",
+					"def": "CHECK ((environment = ANY (ARRAY['pruebas'::text, 'produccion'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "erp_exports_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "erp_exports_invoice_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "erp_exports_object_check",
+					"type": "c",
+					"def": "CHECK ((object = ANY (ARRAY['invoice'::text, 'journal'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "erp_exports_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "erp_exports_status_check",
+					"type": "c",
+					"def": "CHECK ((status = ANY (ARRAY['pending'::text, 'sending'::text, 'sent'::text, 'error'::text, 'simulated'::text, 'skipped'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "erp_exports_system_check",
+					"type": "c",
+					"def": "CHECK ((system = ANY (ARRAY['kame'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "erp_exports_target_check",
+					"type": "c",
+					"def": "CHECK ((((object = 'invoice'::text) AND (invoice_id IS NOT NULL) AND (period IS NULL)) OR ((object = 'journal'::text) AND (invoice_id IS NULL) AND (period IS NOT NULL))))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "erp_exports_invoice_key",
+					"def": "CREATE UNIQUE INDEX erp_exports_invoice_key ON public.erp_exports USING btree (system, environment, invoice_id) WHERE (object = 'invoice'::text)",
+					"unique": true,
+					"primary": false
+				},
+				{
+					"name": "erp_exports_journal_key",
+					"def": "CREATE UNIQUE INDEX erp_exports_journal_key ON public.erp_exports USING btree (system, environment, company_id, period) WHERE (object = 'journal'::text)",
+					"unique": true,
+					"primary": false
+				},
+				{
+					"name": "erp_exports_pkey",
+					"def": "CREATE UNIQUE INDEX erp_exports_pkey ON public.erp_exports USING btree (id)",
+					"unique": true,
+					"primary": true
+				},
+				{
+					"name": "idx_erp_exports_due",
+					"def": "CREATE INDEX idx_erp_exports_due ON public.erp_exports USING btree (status, next_attempt_at)",
+					"unique": false,
+					"primary": false
+				},
+				{
+					"name": "idx_erp_exports_holding",
+					"def": "CREATE INDEX idx_erp_exports_holding ON public.erp_exports USING btree (holding_id, created_at)",
+					"unique": false,
+					"primary": false
+				}
+			],
+			"triggers": [],
+			"policies": []
 		},
 		"exchange_rates": {
 			"comment": "Tipos de cambio diarios. Los promedios mensuales se calculan mediante el servicio ExchangeRatesService del backend, no por triggers automáticos.",
@@ -21369,7 +21845,7 @@
 				{
 					"name": "holding_integration_settings_integration_check",
 					"type": "c",
-					"def": "CHECK ((integration = ANY (ARRAY['odoo'::text, 'salesforce'::text, 'bigquery'::text, 'stripe'::text])))",
+					"def": "CHECK ((integration = ANY (ARRAY['odoo'::text, 'salesforce'::text, 'bigquery'::text, 'stripe'::text, 'kame'::text])))",
 					"deferrable": false,
 					"deferred": false,
 					"ondelete": " ",
@@ -28474,7 +28950,7 @@
 					"identity": "NO",
 					"generated": "NEVER",
 					"gen_expr": null,
-					"comment": "Tipo SII del DTE emitido (33, 34, 56, 61)"
+					"comment": "Tipo SII del DTE emitido (33, 34, 56, 61, 110, 111, 112)"
 				},
 				{
 					"column": "dte_folio",
@@ -28619,6 +29095,22 @@
 					"generated": "NEVER",
 					"gen_expr": null,
 					"comment": "Último error al enviar el DTE al receptor (NULL si se envió o no se intentó)"
+				},
+				{
+					"column": "export_details",
+					"attnum": 75,
+					"data_type": "jsonb",
+					"udt": "jsonb",
+					"type": "jsonb",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Datos del embarque de una factura de exportación de bienes (DTE 110): {total_packages, package_type, gross_weight, net_weight, weight_unit, freight, insurance, sale_clause_total, dus_number, dus_date}. Pisan los del contrato. NULL = sin datos"
 				}
 			],
 			"constraints": [
@@ -29729,6 +30221,563 @@
 					"with_check": null
 				}
 			]
+		},
+		"kame_company_settings": {
+			"comment": "Uso de Kame por compañía: ambiente activo e interruptores de envío. Solo la API",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "company_id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "active_environment",
+					"attnum": 3,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "'pruebas'::text",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Ambiente al que se envía: pruebas o produccion"
+				},
+				{
+					"column": "enabled",
+					"attnum": 4,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "false",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Conexión de la compañía activa: apagada no se encola ni se envía nada"
+				},
+				{
+					"column": "send_invoices",
+					"attnum": 5,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "false",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Registrar en Kame las facturas emitidas en Sapira"
+				},
+				{
+					"column": "send_journal",
+					"attnum": 6,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "false",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Enviar a Kame los asientos de devengo de los meses cerrados"
+				},
+				{
+					"column": "dry_run",
+					"attnum": 7,
+					"data_type": "boolean",
+					"udt": "bool",
+					"type": "boolean",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "true",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Simulación: arma y guarda el envío sin llamar a Kame"
+				},
+				{
+					"column": "invoices_from",
+					"attnum": 8,
+					"data_type": "date",
+					"udt": "date",
+					"type": "date",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Se registran las facturas emitidas desde esta fecha (null = desde que se activó)"
+				},
+				{
+					"column": "journal_from",
+					"attnum": 9,
+					"data_type": "date",
+					"udt": "date",
+					"type": "date",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Primer mes (día 1) cuyos asientos se envían"
+				},
+				{
+					"column": "updated_by",
+					"attnum": 10,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Usuario (public.users.id) que la cambió por última vez"
+				},
+				{
+					"column": "created_at",
+					"attnum": 11,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_at",
+					"attnum": 12,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "kame_company_settings_company_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "kame_company_settings_environment_check",
+					"type": "c",
+					"def": "CHECK ((active_environment = ANY (ARRAY['pruebas'::text, 'produccion'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "kame_company_settings_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "kame_company_settings_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (company_id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "kame_company_settings_pkey",
+					"def": "CREATE UNIQUE INDEX kame_company_settings_pkey ON public.kame_company_settings USING btree (company_id)",
+					"unique": true,
+					"primary": true
+				}
+			],
+			"triggers": [],
+			"policies": []
+		},
+		"kame_connections": {
+			"comment": "Credencial de Kame de una compañía por ambiente (pruebas o producción). Solo la API",
+			"rls": true,
+			"rls_forced": false,
+			"columns": [
+				{
+					"column": "id",
+					"attnum": 1,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "gen_random_uuid()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "holding_id",
+					"attnum": 2,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "company_id",
+					"attnum": 3,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "environment",
+					"attnum": 4,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "pruebas (empresa de pruebas de Kame) o produccion (la empresa real)"
+				},
+				{
+					"column": "client_id",
+					"attnum": 5,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Client ID de la API de Kame (datos de empresa en Kame)"
+				},
+				{
+					"column": "client_secret_encrypted",
+					"attnum": 6,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Client secret cifrado con EncryptionService (iv:hex). Nunca se devuelve al front"
+				},
+				{
+					"column": "user_email",
+					"attnum": 7,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Correo de un usuario de la empresa en Kame: va en el campo Usuario de cada envío"
+				},
+				{
+					"column": "kame_company_rut",
+					"attnum": 8,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "RUT de la empresa en Kame (sin puntos, con guion): resguardo contra enviar a otra empresa"
+				},
+				{
+					"column": "business_unit",
+					"attnum": 9,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Unidad de negocio de Kame (centro de costo) para las líneas de venta y los asientos"
+				},
+				{
+					"column": "branch",
+					"attnum": 10,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Sucursal de Kame; vacía = casa matriz"
+				},
+				{
+					"column": "tested_at",
+					"attnum": 11,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Última prueba de conexión exitosa"
+				},
+				{
+					"column": "test_error",
+					"attnum": 12,
+					"data_type": "text",
+					"udt": "text",
+					"type": "text",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Error de la última prueba de conexión (null si salió bien)"
+				},
+				{
+					"column": "updated_by",
+					"attnum": 13,
+					"data_type": "uuid",
+					"udt": "uuid",
+					"type": "uuid",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": false,
+					"default": null,
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": "Usuario (public.users.id) que la cambió por última vez"
+				},
+				{
+					"column": "created_at",
+					"attnum": 14,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				},
+				{
+					"column": "updated_at",
+					"attnum": 15,
+					"data_type": "timestamp with time zone",
+					"udt": "timestamptz",
+					"type": "timestamp with time zone",
+					"char_len": null,
+					"num_prec": null,
+					"num_scale": null,
+					"notnull": true,
+					"default": "now()",
+					"identity": "NO",
+					"generated": "NEVER",
+					"gen_expr": null,
+					"comment": null
+				}
+			],
+			"constraints": [
+				{
+					"name": "kame_connections_company_environment_key",
+					"type": "u",
+					"def": "UNIQUE (company_id, environment)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "kame_connections_company_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "kame_connections_environment_check",
+					"type": "c",
+					"def": "CHECK ((environment = ANY (ARRAY['pruebas'::text, 'produccion'::text])))",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				},
+				{
+					"name": "kame_connections_holding_id_fkey",
+					"type": "f",
+					"def": "FOREIGN KEY (holding_id) REFERENCES company_holdings(id) ON DELETE CASCADE",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": "c",
+					"onupdate": "a"
+				},
+				{
+					"name": "kame_connections_pkey",
+					"type": "p",
+					"def": "PRIMARY KEY (id)",
+					"deferrable": false,
+					"deferred": false,
+					"ondelete": " ",
+					"onupdate": " "
+				}
+			],
+			"indexes": [
+				{
+					"name": "kame_connections_company_environment_key",
+					"def": "CREATE UNIQUE INDEX kame_connections_company_environment_key ON public.kame_connections USING btree (company_id, environment)",
+					"unique": true,
+					"primary": false
+				},
+				{
+					"name": "kame_connections_pkey",
+					"def": "CREATE UNIQUE INDEX kame_connections_pkey ON public.kame_connections USING btree (id)",
+					"unique": true,
+					"primary": true
+				}
+			],
+			"triggers": [],
+			"policies": []
 		},
 		"master_data": {
 			"comment": null,
@@ -57817,6 +58866,120 @@
 				"privilege": "UPDATE"
 			}
 		],
+		"erp_exports": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
 		"exchange_rates": [
 			{
 				"grantee": "anon",
@@ -61238,6 +62401,234 @@
 			}
 		],
 		"invoices_legacy": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
+		"kame_company_settings": [
+			{
+				"grantee": "anon",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "anon",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "authenticated",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "postgres",
+				"privilege": "UPDATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "DELETE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "INSERT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "REFERENCES"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "SELECT"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRIGGER"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "TRUNCATE"
+			},
+			{
+				"grantee": "service_role",
+				"privilege": "UPDATE"
+			}
+		],
+		"kame_connections": [
 			{
 				"grantee": "anon",
 				"privilege": "DELETE"
@@ -71336,7 +72727,7 @@
 		{
 			"tipo": "tabla",
 			"firma": "anon:DELETE, anon:INSERT, anon:REFERENCES, anon:SELECT, anon:TRIGGER, anon:TRUNCATE, anon:UPDATE, authenticated:DELETE, authenticated:INSERT, authenticated:REFERENCES, authenticated:SELECT, authenticated:TRIGGER, authenticated:TRUNCATE, authenticated:UPDATE, postgres:DELETE, postgres:INSERT, postgres:REFERENCES, postgres:SELECT, postgres:TRIGGER, postgres:TRUNCATE, postgres:UPDATE, service_role:DELETE, service_role:INSERT, service_role:REFERENCES, service_role:SELECT, service_role:TRIGGER, service_role:TRUNCATE, service_role:UPDATE",
-			"objetos": 152,
+			"objetos": 155,
 			"ejemplos": [
 				"accounting_period_cutoff",
 				"accounting_period_events",

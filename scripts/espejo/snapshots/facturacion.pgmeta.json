@@ -228,7 +228,7 @@
  "invoice_adjustments": {
   "name": "public.invoice_adjustments",
   "rls_enabled": true,
-  "rows": 2,
+  "rows": 5,
   "columns": [
    {
     "name": "id",
@@ -728,7 +728,7 @@
  "invoice_items": {
   "name": "public.invoice_items",
   "rls_enabled": true,
-  "rows": 11988,
+  "rows": 12158,
   "columns": [
    {
     "name": "id",
@@ -1945,7 +1945,7 @@
  "invoices": {
   "name": "public.invoices",
   "rls_enabled": true,
-  "rows": 10044,
+  "rows": 10157,
   "columns": [
    {
     "name": "id",
@@ -2604,7 +2604,7 @@
      "nullable",
      "updatable"
     ],
-    "comment": "Tipo SII del DTE emitido (33, 34, 56, 61)"
+    "comment": "Tipo SII del DTE emitido (33, 34, 56, 61, 110, 111, 112)"
    },
    {
     "name": "dte_folio",
@@ -2704,6 +2704,17 @@
      "updatable"
     ],
     "comment": "Último error al enviar el DTE al receptor (NULL si se envió o no se intentó)"
+   },
+   {
+    "name": "export_details",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Datos del embarque de una factura de exportación de bienes (DTE 110): {total_packages, package_type, gross_weight, net_weight, weight_unit, freight, insurance, sale_clause_total, dus_number, dus_date}. Pisan los del contrato. NULL = sin datos"
    }
   ],
   "primary_keys": [
@@ -2735,6 +2746,17 @@
    {
     "name": "consumption_entries_invoice_id_fkey",
     "source_table": "public.consumption_entries",
+    "source_columns": [
+     "invoice_id"
+    ],
+    "target_table": "public.invoices",
+    "target_columns": [
+     "id"
+    ]
+   },
+   {
+    "name": "erp_exports_invoice_id_fkey",
+    "source_table": "public.erp_exports",
     "source_columns": [
      "invoice_id"
     ],

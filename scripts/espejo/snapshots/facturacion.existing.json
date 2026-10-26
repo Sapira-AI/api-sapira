@@ -2930,6 +2930,17 @@
     "scale": null,
     "array": false
    },
+   "export_details": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "subscription_id": {
     "type": "uuid",
     "nullable": true,

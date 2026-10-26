@@ -596,6 +596,17 @@
     "scale": null,
     "array": false
    },
+   "export_details": {
+    "type": "jsonb",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
    "document_type": {
     "type": "text",
     "nullable": true,
