@@ -1572,6 +1572,7 @@ export class ContractChangesService {
 							'period_start', r.period_start, 'period_end', r.period_end, 'created_at', r.created_at)), '[]'::jsonb)
 						FROM contract_fx_period_rates r WHERE r.contract_id = c.id AND r.holding_id = c.holding_id AND r.purpose = 'item') AS fx_item_rates,
 					COALESCE(c.requires_multicurrency_billing, false) AS requires_multicurrency_billing,
+					COALESCE(c.requires_multicompany_billing, false) AS requires_multicompany_billing,
 					(SELECT COALESCE(jsonb_agg(jsonb_build_object(
 							'id', r.id, 'purpose', r.purpose, 'from_currency', r.from_currency, 'to_currency', r.to_currency, 'rate', r.rate,
 							'period_start', r.period_start, 'period_end', r.period_end, 'created_at', r.created_at)), '[]'::jsonb)
@@ -1602,7 +1603,9 @@ export class ContractChangesService {
 				`SELECT i.id, i.invoice_number, i.status, i.is_active, COALESCE(i.is_legacy, false) AS is_legacy, i.invoice_type, i.document_type, i.export_type,
 					i.issue_date::text AS issue_date, i.due_date::text AS due_date, i.client_entity_id, i.contract_currency, i.invoice_currency,
 					i.fx_contract_to_invoice, i.tax_rate, i.amount_contract_currency, i.vat, i.amount_invoice_currency, i.total_invoice_currency,
-					i.odoo_invoice_id, i.sent_to_odoo_at, i.client_tax_id, i.credit_reason, i.credit_type, i.related_invoice_id, ${voidedSql('i')} AS voided
+					i.odoo_invoice_id, i.sent_to_odoo_at, i.client_tax_id, i.credit_reason, i.credit_type, i.related_invoice_id, ${voidedSql('i')} AS voided,
+					(SELECT COUNT(*) FROM invoice_references r WHERE r.invoice_id = i.id)
+						+ (SELECT COUNT(*) FROM invoice_reference_links rl WHERE rl.invoice_id = i.id) AS references_count
 				FROM invoices i
 				WHERE i.contract_id = $1 AND i.holding_id = $2 AND COALESCE(i.is_legacy, false) = false
 				ORDER BY i.issue_date, i.id`,
@@ -1726,6 +1729,7 @@ export class ContractChangesService {
 			},
 			fx_invoice_rates: (parseJson(contractRow.fx_invoice_rates) as FxPeriodRate[] | null) ?? [],
 			requires_multicurrency_billing: contractRow.requires_multicurrency_billing === true,
+			requires_multicompany_billing: contractRow.requires_multicompany_billing === true,
 			fx_item_rates: (parseJson(contractRow.fx_item_rates) as FxPeriodRate[] | null) ?? [],
 			fx_rates: ((parseJson(contractRow.fx_rates) as ContractFxRateRow[] | null) ?? []).map((rate) => ({
 				...rate,
@@ -1845,6 +1849,7 @@ export class ContractChangesService {
 			lines: linesByInvoice.get(String(row.id)) ?? [],
 			odoo_invoice_id: toNullableNumber(row.odoo_invoice_id),
 			sent_to_odoo_at: row.sent_to_odoo_at instanceof Date ? row.sent_to_odoo_at.toISOString() : toText(row.sent_to_odoo_at),
+			references_count: toNumber(row.references_count),
 			voided: row.voided === true,
 			client_tax_id: toText(row.client_tax_id),
 			credit_reason: toText(row.credit_reason),

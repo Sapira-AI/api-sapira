@@ -134,6 +134,8 @@ export interface ChangeContractRow {
 	fx_invoice_rates: FxPeriodRate[];
 	/** Multimoneda: `contracts.requires_multicurrency_billing`. */
 	requires_multicurrency_billing?: boolean;
+	/** Multiempresa: `contracts.requires_multicompany_billing` (marca informativa; se edita desde `billing_conditions`). */
+	requires_multicompany_billing?: boolean;
 	/** Multimoneda: tasas pactadas ítem → contrato (`purpose = 'item'`), para MRR/TCV y el encabezado en moneda de contrato. */
 	fx_item_rates?: FxPeriodRate[];
 	/** Cierre de períodos de la compañía (`get_cutoff_date`), o null. */
@@ -320,6 +322,8 @@ export interface ChangeInvoiceRow {
 	amount_invoice: number | null;
 	total_invoice: number | null;
 	lines: ChangeInvoiceLineRow[];
+	/** Referencias cargadas (propias o vinculadas desde el contrato): el aviso al encender "Requiere OC/HES" nombra las que no tienen. */
+	references_count?: number;
 	/** Borrador en el ERP (`odoo_invoice_id` / `sent_to_odoo_at`): no bloquea, pero la modificación avisa `erp_draft_stale`. */
 	odoo_invoice_id?: number | null;
 	sent_to_odoo_at?: string | null;
@@ -4969,10 +4973,6 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 		track('auto_invoice', contract.auto_invoice, invoiceAfter);
 		invoiceFields.auto_invoice = invoiceAfter;
 	}
-	if (has('requires_references_for_billing') && change.requires_references_for_billing !== contract.requires_references_for_billing) {
-		track('requires_references_for_billing', contract.requires_references_for_billing, change.requires_references_for_billing);
-		invoiceFields.requires_references_for_billing = change.requires_references_for_billing;
-	}
 	if (Object.keys(invoiceFields).length && pendingIds.length) {
 		p.ops.push({ kind: 'update_invoices_fields', invoice_ids: pendingIds, set: invoiceFields });
 		for (const invoice of pending) {
@@ -4983,10 +4983,72 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 				lines_changed: 0,
 				subtotal_before: invoice.subtotal,
 				subtotal_after: invoice.subtotal,
-				change: Object.keys(invoiceFields)
-					.map((key) => (key === 'auto_invoice' ? 'emisión automática' : 'referencias obligatorias'))
-					.join(' · '),
+				change: 'emisión automática',
 			});
+		}
+	}
+	// Requiere OC/HES (Domi 26-10, caso NUR SRL): la marca no depende del período, así que va a TODAS las Por Emitir vivas, también las
+	// atrasadas (apagarla las libera; encenderla las vuelve a exigir). Las emitidas no se tocan; un borrador en el ERP sí recibe la marca,
+	// porque no viaja al ERP: decide si la factura se emite.
+	if (has('requires_references_for_billing') && change.requires_references_for_billing !== contract.requires_references_for_billing) {
+		const requires = change.requires_references_for_billing === true;
+		const allPending = ctx.invoices.filter(isEditablePending);
+
+		track('requires_references_for_billing', contract.requires_references_for_billing, requires);
+		if (allPending.length) {
+			p.ops.push({
+				kind: 'update_invoices_fields',
+				invoice_ids: allPending.map((invoice) => invoice.id),
+				set: { requires_references_for_billing: requires },
+			});
+			for (const invoice of allPending) {
+				p.updatedInvoices.push({
+					id: invoice.id,
+					invoice_number: invoice.invoice_number,
+					issue_date: invoice.issue_date,
+					lines_changed: 0,
+					subtotal_before: invoice.subtotal,
+					subtotal_after: invoice.subtotal,
+					change: requires ? 'exige OC/HES' : 'deja de exigir OC/HES',
+				});
+			}
+			const withoutReference = allPending.filter((invoice) => (invoice.references_count ?? 0) === 0);
+
+			if (requires && withoutReference.length)
+				p.warn(
+					'pending_invoices_without_reference',
+					`${withoutReference.length === 1 ? '1 factura por emitir queda' : `${withoutReference.length} facturas por emitir quedan`} sin referencia y no se ${
+						withoutReference.length === 1 ? 'emitirá' : 'emitirán'
+					} hasta tener una: ${withoutReference
+						.slice(0, 8)
+						.map((invoice) => invoice.invoice_number ?? invoice.issue_date ?? invoice.id)
+						.join(', ')}${withoutReference.length > 8 ? '…' : ''}`
+				);
+		}
+	}
+	// Multiempresa: marca informativa (lista, filtro y chip del 360); solo contrato e Historial.
+	if (has('requires_multicompany_billing') && change.requires_multicompany_billing !== (contract.requires_multicompany_billing === true)) {
+		track('requires_multicompany_billing', contract.requires_multicompany_billing === true, change.requires_multicompany_billing === true);
+	}
+	// Multimoneda desde las condiciones: misma regla que `planMulticurrency` (apagar con ítems en otra moneda se bloquea).
+	if (has('requires_multicurrency_billing') && change.requires_multicurrency_billing !== (contract.requires_multicurrency_billing === true)) {
+		const enabled = change.requires_multicurrency_billing === true;
+		const contractCode = upperCode(contract.contract_currency);
+		const foreign = enabled ? [] : ctx.items.filter((item) => (upperCode(item.currency) || contractCode) !== contractCode);
+
+		if (foreign.length)
+			p.block(
+				MULTICURRENCY_CODES.foreign_currency_items_present,
+				`No se puede desactivar multimoneda: ${foreign.length === 1 ? 'el ítem' : 'los ítems'} ${foreign
+					.map((item) => `"${item.product_name ?? item.id}" (${upperCode(item.currency)})`)
+					.join(', ')} ${foreign.length === 1 ? 'está' : 'están'} en otra moneda que la del contrato (${contractCode})`,
+				'Los ítems en otra moneda (vigentes o históricos) mantienen el contrato multimoneda'
+			);
+		else {
+			before.requires_multicurrency_billing = contract.requires_multicurrency_billing === true;
+			after.requires_multicurrency_billing = enabled;
+			p.multicurrencyAfter = enabled;
+			p.ops.push({ kind: 'set_multicurrency', enabled });
 		}
 	}
 	if (has('group_invoices_by_period') && change.group_invoices_by_period !== contract.group_invoices_by_period) {
@@ -5165,7 +5227,19 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 	// Un documento cambiado solo ya quedó bloqueado (`tax_document_requires_party_change`): se informa el bloqueo, no "sin diferencias".
 	const documentBlocked = p.blockers.some((blocker) => blocker.code === TAX_DOCUMENT_REQUIRES_PARTY_CHANGE);
 
-	if (!p.errors.length && !documentBlocked && !Object.keys(p.contractSet).length && !newRates.length && !autoRenewItems.length) {
+	// Multimoneda desde las condiciones: encendida/apagada (op) o apagado bloqueado por ítems en otra moneda (se informa el bloqueo).
+	const multicurrencyToggled =
+		p.ops.some((op) => op.kind === 'set_multicurrency') ||
+		p.blockers.some((blocker) => blocker.code === MULTICURRENCY_CODES.foreign_currency_items_present);
+
+	if (
+		!p.errors.length &&
+		!documentBlocked &&
+		!Object.keys(p.contractSet).length &&
+		!newRates.length &&
+		!autoRenewItems.length &&
+		!multicurrencyToggled
+	) {
 		p.error('change', 'Indica qué condición cambiar: no hay diferencias con las condiciones actuales');
 	}
 	const changed = Object.keys(before);

@@ -179,6 +179,11 @@ export class QueryContractsDto {
 	@IsOptional()
 	multicurrency?: 'true' | 'false';
 
+	@ApiPropertyOptional({ enum: BOOL, description: 'Requiere OC/HES para facturar (`requires_references_for_billing`, Domi 26-10)' })
+	@IsIn(BOOL)
+	@IsOptional()
+	requiresReferences?: 'true' | 'false';
+
 	@ApiPropertyOptional({ description: 'Segmento del cliente comercial (clients.segment); varios separados por coma' })
 	@Matches(CLIENT_TEXT_LIST, { message: 'segment debe ser uno o varios segmentos separados por coma' })
 	@IsOptional()

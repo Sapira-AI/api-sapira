@@ -22,6 +22,8 @@
 
 **Lectura para Sapira.** Es el competidor con el mismo discurso (multi-país, asistente, cierre continuo, rev rec desde contratos) y con prensa YC, pero sin producto profundo. Sapira ya tiene lo que Sintropix promete en ingresos (contratos, pricing, facturación, DTE nativo, devengo, 9.000 facturas reales); le falta el libro. Sintropix tiene el libro (al menos en el landing) y le falta todo lo demás.
 
+**Seguimiento de releases.** 27-10-2026: anuncian **Email Intake** (Erwin busca en el correo de la empresa el contexto y los comprobantes que faltan para conciliar). Análisis y mapeo a nuestro roadmap en [ideas-y-aprendizajes.md §2](ideas-y-aprendizajes.md). Cada release nuevo de Sintropix se anota ahí.
+
 ## 2. DualEntry (dualentry.com) · Nueva York, Serie A 90 M USD
 
 | Campo | Dato |

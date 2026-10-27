@@ -304,7 +304,8 @@ describe('item_update · corregir la fecha de fin (caso S02762, decisión 07-10)
 	it('valida: fecha real, ≥ inicio, sola (sin inicio ni valor en el mismo paso), ítem con fin y un ajuste no termina después que su original', () => {
 		expect(fields(() => moveEnd(s02762(), '2027-02-30'))).toEqual(['change.items.0.end_date']);
 		expect(fields(() => moveEnd(s02762(), '2026-07-31'))).toEqual(['change.items.0.end_date']);
-		expect(fields(() => moveEnd(s02762(), '2027-07-20', { start_date: '2026-08-21' }))).toEqual(['change.items']);
+		// Desde el 22-10 inicio y fin del MISMO ítem se corrigen juntos (Domi, caso CTR-2026-191): ya no es 400; con cantidad o precio sí.
+		expect(() => moveEnd(s02762(), '2027-07-20', { start_date: '2026-08-21' })).not.toThrow();
 		expect(fields(() => moveEnd(s02762(), '2027-07-20', { quantity: 2 }))).toEqual(['change.items']);
 		expect(fields(() => moveEnd(s02762(upsell({ end_date: null })), '2027-07-20'))).toEqual(['change.items.0.end_date']);
 		expect(fields(() => moveEnd(s02762(upsell({ churn_date: '2027-03-01' })), '2027-07-20'))).toEqual(['change.items.0.end_date']);
