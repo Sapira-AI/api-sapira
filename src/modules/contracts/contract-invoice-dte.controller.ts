@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { SupabaseAuthGuard } from '@/auth/strategies/supabase-auth.guard';
@@ -6,7 +6,13 @@ import { HoldingId } from '@/decorators/holding-id.decorator';
 import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 
 import { ContractInvoiceDteService } from './contract-invoice-dte.service';
-import { CreateDebitNoteDto, DteDocumentQueryDto, SendDteToReceptorDto } from './dtos/contract-invoice-dte.dto';
+import {
+	ContractExportDetailsDto,
+	CreateDebitNoteDto,
+	DteDocumentQueryDto,
+	InvoiceExportDetailsDto,
+	SendDteToReceptorDto,
+} from './dtos/contract-invoice-dte.dto';
 
 type AuthRequest = { user?: { sub?: string; id?: string } };
 const authIdOf = (req: AuthRequest) => String(req.user?.sub ?? req.user?.id ?? '');
@@ -15,7 +21,8 @@ const CONTRACT_PARAM = { name: 'id', type: String, description: 'UUID del contra
 
 /**
  * Documentos tributarios electrónicos (DTE) de las facturas del contrato, con el servicio de facturación electrónica: emitir facturas
- * (33/34) y notas (61/56), consultar su estado en el SII, enviarlas al cliente, descargar el PDF o XML y crear notas de débito
+ * (33/34/110) y notas (61/56/112/111), consultar su estado en el SII, enviarlas al cliente, descargar el PDF o XML, crear notas de débito
+ * y guardar los datos de exportación del contrato y del embarque
  * (`contract-invoice-dte.service.ts`). Holding por `HoldingScopeGuard` + `@HoldingId()`.
  */
 @ApiTags('Contracts')
@@ -173,5 +180,35 @@ export class ContractInvoiceDteController {
 		@Request() req: AuthRequest
 	) {
 		return await this.contractInvoiceDteService.createDebitNote(id, invoiceId, body, holdingId, authIdOf(req));
+	}
+
+	@Patch(':id/export-details')
+	@ApiOperation({
+		summary: 'Guardar los datos de exportación del contrato',
+		description:
+			'Para la factura de exportación (DTE 110): servicios o bienes, modalidad y cláusula de venta, forma de pago, vía de transporte, puertos y país de destino, con los códigos de las tablas de Aduana. Todos opcionales; sin campos con valor queda NULL',
+	})
+	@ApiParam(CONTRACT_PARAM)
+	@ApiResponse({ status: 200, description: '{ contract_id, export_details }' })
+	async updateContractExportDetails(@Param('id') id: string, @Body() body: ContractExportDetailsDto, @HoldingId() holdingId: string) {
+		return await this.contractInvoiceDteService.updateContractExportDetails(id, holdingId, body);
+	}
+
+	@Patch(':id/invoices/:invoiceId/export-details')
+	@ApiOperation({
+		summary: 'Guardar los datos del embarque de una factura de exportación',
+		description:
+			'Bultos, pesos, flete, seguro, total de la cláusula y DUS de una factura de bienes, antes de emitirla (Por Emitir sin DTE; 409 `invoice_not_pending` si no). Pisan los del contrato',
+	})
+	@ApiParam(CONTRACT_PARAM)
+	@ApiParam(INVOICE_PARAM)
+	@ApiResponse({ status: 200, description: '{ invoice_id, export_details }' })
+	async updateInvoiceExportDetails(
+		@Param('id') id: string,
+		@Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
+		@Body() body: InvoiceExportDetailsDto,
+		@HoldingId() holdingId: string
+	) {
+		return await this.contractInvoiceDteService.updateInvoiceExportDetails(id, invoiceId, holdingId, body);
 	}
 }

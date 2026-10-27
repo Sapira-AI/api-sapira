@@ -713,7 +713,7 @@ export class ContractsService {
 					c.requires_references_for_billing,
 					c.tax_document_type_id, tdt.code AS tax_document_type_code, tdt.name AS tax_document_type_name, tdt.kind AS tax_document_type_kind,
 					tdt.country_code AS tax_document_type_country,
-					c.auto_send_to_odoo, c.auto_invoice, c.group_invoices_by_period, c.invoice_terms_and_conditions, c.notes,
+					c.auto_send_to_odoo, c.auto_invoice, c.group_invoices_by_period, c.invoice_terms_and_conditions, c.notes, c.export_details,
 					q.id AS quote_id, q.quote_number, c.salesforce_opportunity_id, c.created_at,
 					rsm.mrr_system, rsm.mrr_contract, ds.derived_status,
 					-- Multimoneda: tasas pactadas ítem → contrato (MRR, TCV y devengo de los ítems en otra moneda).
@@ -801,6 +801,8 @@ export class ContractsService {
 			billing_anchor_day: toNullableNumber(row.billing_anchor_day),
 			/** Condición de pago propia (misma forma que `client_entities.payment_terms`); `null` = sin condición propia. */
 			payment_terms: (row.payment_terms as Record<string, unknown> | null | undefined) ?? null,
+			/** Datos de exportación para la factura de exportación (DTE 110), con códigos de Aduana; `null` = sin datos. */
+			export_details: (row.export_details as Record<string, unknown> | null | undefined) ?? null,
 			/** Familia del documento que emite el contrato (`FACTURA`, `FACTURA_EXPORTACION`). */
 			document_type: toText(row.document_type),
 			/** Nombre para mostrar: el del documento tributario del catálogo o, sin él, el de la familia. */
@@ -1279,7 +1281,7 @@ export class ContractsService {
 					i.related_invoice_id, i.consolidated_into_invoice_id, i.split_from_invoice_id, i.split_reason,
 					-- Proforma / documento: emisor y receptor como los guarda la factura, con la compañía y la razón social como respaldo.
 					COALESCE(i.issuer_legal_name, co.legal_name) AS issuer_legal_name, COALESCE(i.issuer_tax_id, co.tax_id) AS issuer_tax_id,
-					COALESCE(i.issuer_address, co.legal_address) AS issuer_address, i.fiscal_regime, i.export_type,
+					COALESCE(i.issuer_address, co.legal_address) AS issuer_address, i.fiscal_regime, i.export_type, i.export_details,
 					ce.country AS client_country, ce.legal_address AS client_address, c.contract_number,
 					(SELECT t.name FROM tax_document_types t WHERE t.id = c.tax_document_type_id) AS tax_document_type_name,
 					lines.fx_rate_source,
@@ -1492,6 +1494,8 @@ export class ContractsService {
 			issuer_address: toText(header.issuer_address),
 			fiscal_regime: toText(header.fiscal_regime),
 			export_type: toNullableNumber(header.export_type),
+			/** Datos del embarque de una factura de exportación de bienes (bultos, pesos, flete, seguro, DUS); `null` = sin datos. */
+			export_details: (header.export_details as Record<string, unknown> | null | undefined) ?? null,
 			client_country: toText(header.client_country),
 			client_address: toText(header.client_address),
 			contract_number: toText(header.contract_number),

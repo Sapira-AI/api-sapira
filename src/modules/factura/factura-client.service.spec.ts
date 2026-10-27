@@ -71,6 +71,46 @@ describe('FacturaClientService', () => {
 			);
 		});
 
+		it('si api-factura no da el token de provisión llega un 502 que dice qué revisar, no un 500', async () => {
+			const oauth = {
+				getAccessToken: jest
+					.fn()
+					.mockRejectedValue(
+						Object.assign(new Error('Request failed with status code 401'), { isAxiosError: true, response: { status: 401, data: {} } })
+					),
+			};
+			const service = new FacturaClientService({ get: jest.fn().mockReturnValue('http://localhost:9005') } as any, oauth as any);
+			const post = jest.spyOn(axios, 'post');
+
+			await expect(service.provisionEmpresa({} as any)).rejects.toMatchObject({
+				status: 502,
+				message: expect.stringContaining('factura:empresas:provision'),
+			});
+			await expect(service.registrarCanalCorreo('SG.clave')).rejects.toMatchObject({ status: 502 });
+			expect(post).not.toHaveBeenCalled();
+		});
+
+		it('con el OAuth sin configurar o api-factura caído al pedir el token, el 502 conserva el motivo', async () => {
+			const oauth = { getAccessToken: jest.fn().mockRejectedValue(new Error('OAuth de api-factura no está configurado')) };
+			const service = new FacturaClientService({ get: jest.fn().mockReturnValue('http://localhost:9005') } as any, oauth as any);
+
+			await expect(service.provisionEmpresa({} as any)).rejects.toMatchObject({
+				status: 502,
+				message: 'No se pudo autenticar con el servicio de facturación: OAuth de api-factura no está configurado',
+			});
+		});
+
+		it('sin FACTURA_API_URL responde 503 con el motivo, sin pedir token', async () => {
+			const oauth = { getAccessToken: jest.fn() };
+			const service = new FacturaClientService({ get: jest.fn().mockReturnValue(undefined) } as any, oauth as any);
+
+			await expect(service.provisionEmpresa({} as any)).rejects.toMatchObject({
+				status: 503,
+				message: expect.stringContaining('FACTURA_API_URL'),
+			});
+			expect(oauth.getAccessToken).not.toHaveBeenCalled();
+		});
+
 		it('sin respuesta (caído o sin red) es 502', async () => {
 			reject(axiosError(undefined));
 

@@ -1,7 +1,7 @@
-# Módulo 13 · Emisión fiscal nativa (SII) — 3 tablas de prod (2026-10-19)
+# Módulo 13 · Emisión fiscal nativa (SII) — 3 tablas de prod (2026-10-26)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-19 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/sii.{pgmeta,catalog}.json`); metadata real de las entities existentes en `sii.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-10-26 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/sii.{pgmeta,catalog}.json`); metadata real de las entities existentes en `sii.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (3) — no se tocaron ni se duplicaron
 
@@ -9,7 +9,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
-| `sii_configurations` (1) | `src/databases/postgresql/entities/sii/sii.entity.ts` · `SiiConfiguration` | ⚠️ difiere de prod | — | — | `enabled_document_types`: default `[33, 34, 61]` vs DB `'[33, 34, 61]'::jsonb` | nombre de PK `sii_configurations_pkey` |
+| `sii_configurations` (2) | `src/databases/postgresql/entities/sii/sii.entity.ts` · `SiiConfiguration` | ⚠️ difiere de prod | — | — | `enabled_document_types`: default `[33, 34, 61]` vs DB `'[33, 34, 61]'::jsonb` | nombre de PK `sii_configurations_pkey` |
 | `sii_certificates` (0) | `src/databases/postgresql/entities/sii/sii.entity.ts` · `SiiCertificate` | ⚠️ difiere de prod | — | — | — | nombre de PK `sii_certificates_pkey` |
 | `sii_cafs` (0) | `src/databases/postgresql/entities/sii/sii.entity.ts` · `SiiCaf` | ⚠️ difiere de prod | — | — | — | nombre de PK `sii_cafs_pkey` |
 
