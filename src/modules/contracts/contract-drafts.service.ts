@@ -532,11 +532,14 @@ export class ContractDraftsService {
 		};
 	}
 
-	/** Próximo correlativo de `{prefijo}-{año}-NNN` en el holding (MAX + 1). */
+	/**
+	 * Próximo correlativo de `{prefijo}-{año}-NNN` en el holding (MAX + 1). Sin distinguir mayúsculas (Domi 26-10, punto 4a): un
+	 * "ctr-2026-300" escrito a mano ocupa el 300 igual que "CTR-2026-300".
+	 */
 	private async nextCorrelative(db: Queryable, holdingId: string, prefix: string, year: number): Promise<number> {
 		const [row] = await db.query(
-			`SELECT COALESCE(MAX((substring(contract_number FROM $2))::int), 0) + 1 AS next
-			FROM contracts WHERE holding_id = $1 AND contract_number ~ $2`,
+			`SELECT COALESCE(MAX((regexp_match(contract_number, $2, 'i'))[1]::int), 0) + 1 AS next
+			FROM contracts WHERE holding_id = $1 AND contract_number ~* $2`,
 			[holdingId, correlativePattern(prefix, year)]
 		);
 
@@ -1655,8 +1658,9 @@ export class ContractDraftsService {
 	/**
 	 * UPDATE de un ítem existente del borrador con los valores del formulario, todo explícito (costura): fin, precios derivados
 	 * y la categoría recalculada (`itemCategoriaSql`, con el cliente y el producto ya guardados: cambiar cualquiera de los dos
-	 * en el borrador la actualiza) salvo que el ítem traiga una explícita (`items[].category`); `contracts.term` lo refresca
-	 * `update` al final con `syncContractTerm`.
+	 * en el borrador la actualiza) salvo que el ítem traiga una explícita (`items[].category`) o ya esté en RENEWAL (Domi 26-10,
+	 * punto 4c: la renovación la marcan Datos históricos y el arranque rápido, el motor nunca la calcula, así que editar el
+	 * borrador la conserva); `contracts.term` lo refresca `update` al final con `syncContractTerm`.
 	 */
 	private async updateItem(
 		runner: QueryRunner,
@@ -1674,7 +1678,7 @@ export class ContractDraftsService {
 				price = $15, final_price = $16, currency = $17, billing_frequency = $18, billing_method = $19, start_date = $20, end_date = $21,
 				term_months = $22, is_recurring = $23, quote_item_id = $24, quote_item_number = $25, auto_renew = $26,
 				auto_renew_term_months = $27, booking_date = $28, annual_price = $29, monthly_price = $30, billing_period_price = $31,
-				billing_anchor_day = $32, categoria = COALESCE($33::text, ${itemCategoriaSql(2, 4, 20)})
+				billing_anchor_day = $32, categoria = COALESCE($33::text, CASE WHEN categoria = 'RENEWAL' THEN categoria ELSE ${itemCategoriaSql(2, 4, 20)} END)
 			WHERE id = $1 AND contract_id = $2 AND holding_id = $3`,
 			[itemId, contractId, holdingId, ...ContractDraftsService.itemValues(item, quoteItem, bookingDate), item.dto.category ?? null]
 		);
@@ -2611,21 +2615,26 @@ export class ContractDraftsService {
 	}
 
 	/**
-	 * Número del contrato (S1-1). Manual: 409 si ya existe en el holding (también entre borrados, para que el futuro
-	 * UNIQUE no choque). Automático: `{prefijo}-{año}-{NNN}` = MAX de los que calzan el patrón + 1, con
-	 * `pg_advisory_xact_lock` por (holding, prefijo, año) para que dos creaciones simultáneas no tomen el mismo.
+	 * Número del contrato (S1-1). Manual: 409 si ya existe en el holding sin distinguir mayúsculas (también entre borrados; Domi 26-10:
+	 * "ctr-2026-218" y "CTR-2026-218" convivían en SimpliRoute; el índice `contracts_holding_number_unique` sigue siendo sensible a
+	 * mayúsculas hasta resolver ese par, así que la regla vive aquí). Se guarda tal como se escribió (los manuales mixtos,
+	 * "CTR-2026-Salvador", son legítimos). Automático:
+	 * `{prefijo}-{año}-{NNN}` = MAX de los que calzan el patrón + 1, con `pg_advisory_xact_lock` por (holding, prefijo, año) para que
+	 * dos creaciones simultáneas no tomen el mismo.
 	 */
 	private async reserveNumber(runner: QueryRunner, dto: CreateContractDto, context: DraftContext, holdingId: string, now: Date) {
 		if (dto.contract_number) {
-			await runner.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`contracts:${holdingId}:number:${dto.contract_number}`]);
-			const [existing] = (await runner.query(`SELECT 1 FROM contracts WHERE holding_id = $1 AND contract_number = $2 LIMIT 1`, [
-				holdingId,
-				dto.contract_number,
-			])) as Row[];
+			const number = dto.contract_number.trim();
 
-			if (existing) throw new ConflictException(`Ya existe un contrato con el número ${dto.contract_number}`);
+			await runner.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`contracts:${holdingId}:number:${number.toLowerCase()}`]);
+			const [existing] = (await runner.query(
+				`SELECT contract_number FROM contracts WHERE holding_id = $1 AND lower(contract_number) = lower($2) LIMIT 1`,
+				[holdingId, number]
+			)) as Row[];
 
-			return dto.contract_number;
+			if (existing) throw new ConflictException(`Ya existe un contrato con el número ${toText(existing.contract_number) ?? number}`);
+
+			return number;
 		}
 
 		const prefix = contractPrefix(context.company.contract_prefix);
