@@ -609,10 +609,28 @@ export class ContractChangeDto {
 	@IsOptional()
 	auto_invoice?: boolean;
 
-	@ApiPropertyOptional({ description: 'Exige OC/HES antes de emitir' })
+	@ApiPropertyOptional({
+		description:
+			'Exige OC/HES antes de emitir. Se escribe en el contrato y en TODAS sus Por Emitir vivas (sin mirar la fecha de emisión, Domi 26-10: apagarla libera también las atrasadas); al encenderla el preview avisa cuáles quedan sin referencia',
+	})
 	@IsBoolean({ message: 'requires_references_for_billing debe ser true o false' })
 	@IsOptional()
 	requires_references_for_billing?: boolean;
+
+	@ApiPropertyOptional({
+		description: 'Marca Multiempresa (`requires_multicompany_billing`): informativa, no cambia la facturación. Solo contrato e Historial',
+	})
+	@IsBoolean({ message: 'requires_multicompany_billing debe ser true o false' })
+	@IsOptional()
+	requires_multicompany_billing?: boolean;
+
+	@ApiPropertyOptional({
+		description:
+			'Marca Multimoneda (`requires_multicurrency_billing`) desde las condiciones: misma regla que el cambio `multicurrency` (apagar con ítems en otra moneda queda bloqueado, `foreign_currency_items_present`)',
+	})
+	@IsBoolean({ message: 'requires_multicurrency_billing debe ser true o false' })
+	@IsOptional()
+	requires_multicurrency_billing?: boolean;
 
 	@ApiPropertyOptional({ description: 'Facturas juntas por período (true) o una por ítem (false); rige para lo que se genere después' })
 	@IsBoolean({ message: 'group_invoices_by_period debe ser true o false' })

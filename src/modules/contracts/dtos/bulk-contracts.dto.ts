@@ -16,7 +16,7 @@ export class BulkContractIdsDto {
 	ids!: string[];
 }
 
-/** Body de `PATCH /contracts/bulk-settings`: al menos uno de los dos interruptores. */
+/** Body de `PATCH /contracts/bulk-settings`: al menos un interruptor (automatizaciones o marcas del contrato, Domi 26-10). */
 export class BulkContractSettingsDto extends BulkContractIdsDto {
 	@ApiPropertyOptional({ description: 'Envío automático de las facturas al ERP' })
 	@IsBoolean({ message: 'Envío automático al ERP inválido' })
@@ -27,6 +27,23 @@ export class BulkContractSettingsDto extends BulkContractIdsDto {
 	@IsBoolean({ message: 'Emisión automática inválida' })
 	@IsOptional()
 	auto_invoice?: boolean;
+
+	@ApiPropertyOptional({ description: 'Requiere OC/HES: contrato y todas sus Por Emitir vivas (también las atrasadas)' })
+	@IsBoolean({ message: 'Marca Requiere OC/HES inválida' })
+	@IsOptional()
+	requires_references_for_billing?: boolean;
+
+	@ApiPropertyOptional({
+		description: 'Multimoneda: apagarla con ítems en otra moneda deja el contrato bloqueado en el resumen (no se rechaza la acción)',
+	})
+	@IsBoolean({ message: 'Marca Multimoneda inválida' })
+	@IsOptional()
+	requires_multicurrency_billing?: boolean;
+
+	@ApiPropertyOptional({ description: 'Multiempresa: marca informativa' })
+	@IsBoolean({ message: 'Marca Multiempresa inválida' })
+	@IsOptional()
+	requires_multicompany_billing?: boolean;
 }
 
 /** `{ ids }` de `POST /contracts/activate` y `POST /contracts/activate/preview`. */

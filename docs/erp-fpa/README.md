@@ -11,6 +11,7 @@
 5. [Roadmap ERP + FP&A](roadmap-erp-fpa.md) · tesis, 5 fases con agente y oferta por fase, estrategia de ramas y flags, hitos, riesgos, decisiones pendientes.
 6. [Estrategia comercial y pilotos](estrategia-comercial-y-pilotos.md) · posicionamiento, perfil de pilotos por industria, oferta, hipótesis de precio, calendario, métricas.
 7. [Spec corta · Fase 0 Fundaciones](spec-fase-0-fundaciones.md) · plan de cuentas, períodos por mes y libro, `document_events`, contrapartes, permisos, laboratorio con flag por holding; sus 5 decisiones ya tomadas (§9), a la espera del OK de arranque en noviembre.
+8. [Ideas y aprendizajes](ideas-y-aprendizajes.md) · bitácora viva: señales de competidores (Sintropix Email Intake), material externo como input de agentes (IA en conciliación), y la regla base-del-sistema vs configurable por holding para los pilotos que comparten datos.
 
 ## Resumen ejecutivo
 
