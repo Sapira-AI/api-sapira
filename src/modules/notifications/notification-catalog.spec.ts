@@ -150,6 +150,14 @@ describe('catálogo de notificaciones', () => {
 		});
 	});
 
+	it('"Qué hacemos nosotros" propio del productor (metadata.what_we_do) le gana a la plantilla; vacío o ausente cae a la plantilla', () => {
+		const own = 'No la reintentamos solos: el borrador ya existe en el ERP.';
+
+		expect(resolveTexts({ type: 'invoice_odoo_failure', message: 'x', recommendation: 'y', metadata: { what_we_do: own } }).what_we_do).toBe(own);
+		expect(resolveTexts({ type: 'invoice_odoo_failure', message: 'x', recommendation: 'y', metadata: { what_we_do: '  ' } }).what_we_do).toMatch(/^Si la factura no llegó a crearse en el ERP/);
+		expect(resolveTexts({ type: 'invoice_odoo_failure', message: 'x', recommendation: 'y' }).what_we_do).toMatch(/^Si la factura no llegó a crearse en el ERP/);
+	});
+
 	it('migración de la fase 2 (N4–N7): aditiva, RLS activada sin políticas en el registro de correos', () => {
 		const n = read('migrations/1790900000000-NotificationsPhase2.ts');
 

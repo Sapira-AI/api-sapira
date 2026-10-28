@@ -175,9 +175,10 @@ export interface EditLineRow {
 	visible_line_id?: string | null;
 	/**
 	 * Multimoneda (spec-multimoneda §4; solo en contratos con `requires_multicurrency_billing`, ausente en los demás): moneda de la línea
-	 * (`invoice_items.contract_currency` = moneda del ítem), su tasa a la moneda de factura y el origen de la tasa.
+	 * (`invoice_items.contract_currency` = moneda del ítem). Solo con `currency` la línea entra en la rama multimoneda de `stateOf`.
 	 */
 	currency?: string | null;
+	/** Tasa a la moneda de factura y origen propios de la línea (`invoice_items.fx_contract_to_invoice` / `fx_rate_source`); la reemisión los copia. */
 	fx?: number | null;
 	fx_rate_source?: string | null;
 }

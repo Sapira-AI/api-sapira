@@ -149,6 +149,17 @@ del switch**, no una tarea del usuario. La tarea `invoices_blocked` excluye ese 
 
 ## 5. Cierre automático, escalamiento y destinatarios
 
+- **`invoice_odoo_failure` agrupada por causa (28-10, `docs/cambios/errores-emision-erp-28-10.md` §B):** las facturas de la misma compañía
+  emisora que fallan el mismo día de negocio, en la misma etapa y por la misma causa traducida comparten un aviso
+  (`deduplication_key = invoice-odoo-failure:<company_id>:<YYYY-MM-DD>:<etapa>:<categoría>:<hash del mensaje>`). Con una factura: título
+  "No se pudo enviar la factura <folio> de <cliente>", `resource_id` = la factura, acción `open_contract`. Con varias: "No se pudieron
+  enviar N facturas de <compañía> al ERP", sin acción ni `resource_id` (`company_id` siempre viene). `metadata`: `invoices[]`
+  (`{ id, invoice_number, client_name, contract_id, odoo_invoice_id, issue_date }`, tope 200), `invoice_count`, `technical_detail` (frase del
+  ERP limpia, para el "Ver detalle técnico"; la traza queda solo en `error_details`), `what_we_do` (texto según la etapa: solo antes de
+  crear el borrador hay reintento automático; `resolveTexts` lo prefiere a la plantilla del catálogo) y los campos de siempre
+  (`failure_stage`, `error_type`, `error_message`, `erp_error`, `client_name` solo si todas son del mismo cliente, `company_name`).
+  Al enviar bien una factura sale de la lista (`updateContent`) y el aviso se resuelve cuando queda vacío. El Estado de Integraciones ›
+  ERP ("Factura enviada" con subestado `send_error`) encuentra el aviso por `resource_id` o por contención en `metadata.invoices`.
 - **Cierres**: `invoice_odoo_failure` al enviar bien la factura (todas las etapas de esa factura); `salesforce_sync_failure`
   con la siguiente corrida buena del holding; `contract_renewal_proposed` al confirmar u omitir la propuesta;
   `contract_renewal_reminder` cuando ya no queda ningún ítem sin decisión con ese fin (renovar, dar de baja o terminar);

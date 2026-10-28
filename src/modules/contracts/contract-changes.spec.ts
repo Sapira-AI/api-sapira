@@ -878,6 +878,109 @@ describe('item_change (M1 precio/cantidad)', () => {
 		expect(plan.preview.contract).toMatchObject({ before: { mrr: 1200 }, after: { mrr: 1400 } });
 		expect(plan.preview.items.groups_after.find((group) => group.product_name === 'Licencia')).toMatchObject({ quantity: 12, mrr: 1200 });
 	});
+	describe('upsell dentro de un período ya emitido (soporte SimpliRoute 28-10, S06870 / Carelis)', () => {
+		const MONTHS_ALL = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+		/** Octubre ya emitido (como S06870 el 28-10), noviembre y diciembre Por Emitir; hoy 20-10. PATHFINDER+ 8 × 48,40 mensual anticipado. */
+		const octubreEmitido = (lineOverrides: (mm: string) => Record<string, unknown> = () => ({})) =>
+			context({
+				today: '2026-10-20',
+				items: [itemRow({ product_name: 'PATHFINDER+', quantity: 8, unit_price: 48.4, monthly_price: 387.2, final_price: 4646.4 }), soporteRow()],
+				invoices: MONTHS_ALL.map((mm) => {
+					const row = invoiceRow(mm, mm === '10' ? { status: 'Emitida', invoice_number: 'F-10' } : {});
+
+					return { ...row, lines: row.lines.map((line) => (line.contract_item_id === LICENCIA ? { ...line, ...lineOverrides(mm) } : line)) };
+				}),
+			});
+		const cambio = (items: Array<Record<string, unknown>>, change: Record<string, unknown> = {}, effective = '2026-10-15') =>
+			planChange(octubreEmitido(), request({ type: 'item_change', ...change, items } as never, { effective_date: effective, reason: 'ok' }));
+
+		it('+4 desde el 15-10 con "Cobrar ahora": sin bloqueo, factura suelta 15–31 oct por 17/31 × 193,60 = 106,17; nov y dic suman +193,60; la emitida no se toca', () => {
+			const plan = cambio([{ item_id: LICENCIA, quantity: 12, unit_price: 48.4 }], { first_period_invoice: 'immediate' });
+
+			expect(plan.preview.blockers).toEqual([]);
+			expect(plan.preview.warnings.find((warning) => warning.code === 'upsell_within_issued_period')?.message).toBe(
+				'"PATHFINDER+" ya está facturado hasta el 2026-10-31: la diferencia del 2026-10-15 al 2026-10-31 se prorratea por días y va en una factura aparte; la factura emitida no se toca'
+			);
+			expect(inserted(plan)[0]).toMatchObject({ categoria: 'UPSELL', quantity: 4, unit_price: 48.4, start_date: '2026-10-15', end_date: '2026-12-31', related_item_id: LICENCIA });
+			const [create] = ops(plan, 'create_invoices') as Array<{
+				invoices: Array<{ issue_date: string; billing_period_start: string; lines: Array<{ subtotal: number; billing_period_start: string; billing_period_end: string }> }>;
+				merge_into: Array<string | null>;
+			}>;
+
+			expect(create.invoices.map((invoice) => [invoice.issue_date, invoice.lines.map((line) => line.subtotal)])).toEqual([
+				['2026-10-15', [106.17]],
+				['2026-11-01', [193.6]],
+				['2026-12-01', [193.6]],
+			]);
+			expect(create.invoices[0].lines[0]).toMatchObject({ billing_period_start: '2026-10-15', billing_period_end: '2026-10-31' });
+			expect(create.merge_into).toEqual([null, 'inv-11', 'inv-12']);
+			expect(plan.preview.invoices.created).toHaveLength(1);
+			expect(plan.ops.some((op) => JSON.stringify(op).includes('inv-10'))).toBe(false);
+			expect(plan.event).toMatchObject({ type: 'UPSELL', subtype: 'quantity', amount_delta: 193.6 });
+			expect(plan.preview.items.groups_after.find((group) => group.product_name === 'PATHFINDER+')).toMatchObject({ quantity: 12 });
+		});
+
+		it('misma cotización en ciclo: el tramo 15–31 oct se suma a la factura de noviembre junto con su +193,60', () => {
+			const plan = cambio([{ item_id: LICENCIA, quantity: 12, unit_price: 48.4 }]);
+			const [create] = ops(plan, 'create_invoices') as Array<{ invoices: Array<{ lines: Array<{ subtotal: number }> }>; merge_into: Array<string | null> }>;
+
+			expect(plan.preview.blockers).toEqual([]);
+			expect(create.invoices.map((invoice) => invoice.lines.map((line) => line.subtotal))).toEqual([[106.17, 193.6], [193.6]]);
+			expect(create.merge_into).toEqual(['inv-11', 'inv-12']);
+			expect(plan.preview.invoices.created).toEqual([]);
+		});
+
+		it('upsell por precio (sube el unitario) y por los dos ejes: tampoco bloquean', () => {
+			const precio = cambio([{ item_id: LICENCIA, quantity: 8, unit_price: 60 }]);
+
+			expect(precio.preview.blockers).toEqual([]);
+			expect(precio.preview.warnings.map((warning) => warning.code)).toContain('upsell_within_issued_period');
+			expect(precio.event).toMatchObject({ type: 'UPSELL', subtype: 'price', amount_delta: 92.8 });
+
+			const ambos = cambio([{ item_id: LICENCIA, quantity: 10, unit_price: 50 }]);
+
+			expect(ambos.preview.blockers).toEqual([]);
+			expect(ambos.event).toMatchObject({ type: 'UPSELL', subtype: 'RENEGOTIATION', amount_delta: 112.8 });
+		});
+
+		it('downsell: rige desde el próximo período (01-11, sin bloqueo); si aun así cae en lo emitido, sigue el bloqueo con fecha sugerida', () => {
+			const siguiente = cambio([{ item_id: LICENCIA, quantity: 6, unit_price: 48.4 }]);
+
+			expect(siguiente.preview.blockers).toEqual([]);
+			expect(siguiente.preview.warnings.map((warning) => warning.code)).toEqual(['downsell_from_next_period']);
+			expect(inserted(siguiente)[0]).toMatchObject({ categoria: 'DOWNSELL', start_date: '2026-11-01' });
+
+			const bloqueado = cambio([{ item_id: LICENCIA, quantity: 6, unit_price: 48.4 }], {}, '2026-09-15');
+
+			expect(bloqueado.preview.blockers[0]).toMatchObject({ code: 'issued_after_effective_date', next_step: expect.stringContaining('2026-11-01') });
+		});
+
+		it('upsell como línea neta (consumo registrado en una PE): no bloquea, rige desde el día siguiente a lo emitido', () => {
+			const plan = planChange(
+				octubreEmitido((mm) => (mm === '11' ? { quantity_source: 'consumption' } : {})),
+				request({ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 12, unit_price: 48.4 }] }, { effective_date: '2026-10-15', reason: 'ok' })
+			);
+
+			expect(plan.preview.blockers).toEqual([]);
+			expect(plan.preview.warnings.map((warning) => warning.code)).toEqual(expect.arrayContaining(['upsell_net_line_from_next_period', 'consumption_quantity_kept']));
+			expect(inserted(plan)[0]).toMatchObject({ categoria: 'UPSELL', start_date: '2026-11-01' });
+			expect(ops(plan, 'create_invoices')).toEqual([]);
+		});
+
+		it('mes vencido: el tramo prorrateado se cobra con la factura que cierra ese período, sin bloqueo', () => {
+			const plan = planChange(
+				context({ items: [itemRow({ billing_method: 'Vencido' }), soporteRow()] }),
+				request({ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 12, unit_price: 100 }] }, { effective_date: '2026-09-15', reason: 'ok' })
+			);
+			const [create] = ops(plan, 'create_invoices') as Array<{ invoices: Array<{ issue_date: string; lines: Array<{ subtotal: number }> }> }>;
+
+			expect(plan.preview.blockers).toEqual([]);
+			expect(plan.preview.warnings.map((warning) => warning.code)).toContain('upsell_within_issued_period');
+			expect(create.invoices[0].lines[0].subtotal).toBe(106.67);
+			expect(create.invoices[0].issue_date >= '2026-09-30').toBe(true);
+		});
+	});
+
 	it('downsell rige desde el próximo inicio de período sin prorrateo (S3-5/6) y reescribe la línea base al neto (S3-14)', () => {
 		const plan = planChange(
 			context(),
@@ -921,13 +1024,23 @@ describe('item_change (M1 precio/cantidad)', () => {
 		expect(plan.event).toMatchObject({ type: 'UPSELL', subtype: 'RENEGOTIATION', amount_delta: 51.2 });
 		expect(plan.preview.items.groups_after.find((group) => group.product_name === 'Licencia')).toMatchObject({ quantity: 140, mrr: 2240 });
 	});
-	it('bloquea si ya está facturado en firme después de la fecha (con fecha sugerida) y rechaza fin, sin cambio y 100 % (la frecuencia es §9.3.7)', () => {
-		const blocked = planChange(
+	it('upsell con fecha dentro del período emitido NO bloquea (28-10): prorratea por días hasta lo emitido con aviso; rechaza fin, sin cambio y 100 % (la frecuencia es §9.3.7)', () => {
+		const upsell = planChange(
 			context(),
 			request({ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 12, unit_price: 100 }] }, { effective_date: '2026-09-15' })
 		);
 
-		expect(blocked.preview.blockers[0]).toMatchObject({ code: 'issued_after_effective_date', next_step: expect.stringContaining('2026-10-01') });
+		expect(upsell.preview.blockers).toEqual([]);
+		expect(upsell.preview.warnings.map((warning) => warning.code)).toContain('upsell_within_issued_period');
+		expect(upsell.preview.warnings.find((warning) => warning.code === 'upsell_within_issued_period')?.message).toBe(
+			'"Licencia" ya está facturado hasta el 2026-09-30: la diferencia del 2026-09-15 al 2026-09-30 se prorratea por días y se suma a la factura del próximo ciclo; la factura emitida no se toca'
+		);
+		const [create] = ops(upsell, 'create_invoices') as Array<{ invoices: Array<{ lines: Array<{ subtotal: number }> }>; merge_into: Array<string | null> }>;
+
+		// Tramo 15-09 → 30-09 (16/30 × 200 = 106,67) en la factura del ciclo 01-10 → PE de octubre; nov y dic +200 en sus PE. F-09 no se toca.
+		expect(create.invoices.map((invoice) => invoice.lines.map((line) => line.subtotal))).toEqual([[106.67, 200], [200], [200]]);
+		expect(create.merge_into).toEqual(['inv-10', 'inv-11', 'inv-12']);
+		expect(upsell.ops.some((op) => JSON.stringify(op).includes('inv-09'))).toBe(false);
 		expect(
 			fields(() =>
 				planChange(

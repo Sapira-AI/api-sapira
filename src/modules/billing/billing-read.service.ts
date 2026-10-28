@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
 import { holdingTimezone } from '@/core/utils/holding-preferences';
@@ -12,6 +12,8 @@ import {
 	contractInvoiceRowOf,
 } from '@/modules/contracts/contract-invoices.service';
 import { ContractsService } from '@/modules/contracts/contracts.service';
+import { InvoiceSchedulerService } from '@/modules/invoices/invoice-scheduler.service';
+import type { LastSendAttempt } from '@/modules/invoices/last-send-attempt';
 import { isUnifiedType, UNIFIED_READ_SQL, unifiedReadFields } from '@/modules/contracts/invoice-consolidation-read';
 
 import {
@@ -126,7 +128,11 @@ const paginated = <T>(data: T[], total: number, page: number, limit: number) => 
  */
 @Injectable()
 export class BillingReadService {
-	constructor(private readonly dataSource: DataSource) {}
+	constructor(
+		private readonly dataSource: DataSource,
+		/** Último intento de envío al ERP de las Por Emitir con borrador ("Error al emitir: …", C 28-10). Opcional para los tests. */
+		@Optional() private readonly scheduler?: InvoiceSchedulerService
+	) {}
 
 	/** "Hoy" del holding en su zona horaria (`holding_settings.timezone`, ronda 4 de Configuración; default America/Santiago). */
 	async today(now = new Date(), holdingId?: string | null): Promise<string> {
@@ -387,6 +393,10 @@ export class BillingReadService {
 			ids,
 		])) as Row[];
 		const contractIds = [...new Set(invoiceRows.map((row) => text(row.contract_id)).filter((id): id is string => !!id))];
+		// Por Emitir con borrador en el ERP: si el último intento de envío falló (p. ej. sin folios CAF al publicar), el bloqueo
+		// `sent_to_erp_draft` dice "Error al emitir en el ERP: <motivo>" en vez del texto genérico (C, Domi 28-10). Una consulta por página.
+		const draftIds = invoiceRows.filter((row) => row.odoo_invoice_id !== null && row.odoo_invoice_id !== undefined).map((row) => String(row.id));
+		const sendErrors = draftIds.length && this.scheduler ? await this.scheduler.lastSendErrors(holdingId, draftIds) : new Map<string, LastSendAttempt>();
 		const contextRows = contractIds.length
 			? ((await this.dataSource.query(
 					`${CONTRACT_CONTEXT_SELECT} WHERE c.holding_id = $1 AND c.id = ANY($2::uuid[]) AND c.deleted_at IS NULL`,
@@ -430,9 +440,14 @@ export class BillingReadService {
 				const issuePath: IssuePath = context.auto_send_to_erp && context.has_erp_integration ? 'erp' : 'external';
 				const { blockers: sendBlockers, warnings } = draftReferenceByPath(plan, issuePath);
 				// Sin `period_closed`: el cierre de períodos protege contratos e ítems, no facturas (Domi 03-10).
+				const sendError = sendErrors.get(id);
 				const blockers = queueBlockers(
 					[...sendBlockers, erpDraftBlocker(invoice)].filter((blocker): blocker is NonNullable<typeof blocker> => !!blocker),
 					issuePath
+				).map((blocker) =>
+					sendError && blocker.code === 'sent_to_erp_draft'
+						? { ...blocker, message: `Error al emitir en el ERP: ${sendError.message}`, next_step: sendError.next_step ?? blocker.next_step }
+						: blocker
 				);
 
 				return {

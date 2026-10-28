@@ -61,7 +61,7 @@ import {
 	spliceOf,
 	STATUS_PRIORITY_SQL,
 } from './onboarding-lines';
-import { OnboardingRegisterService, type RegisterPlan, type ReplaceOptions } from './onboarding-register.service';
+import { lineAmountKey, OnboardingRegisterService, type RegisterPlan, type ReplaceOptions } from './onboarding-register.service';
 
 import type {
 	CloseHistoryLineDto,
@@ -92,7 +92,10 @@ const REGISTER_WARNING_MESSAGES: Record<string, string> = {
 };
 const REGISTER_ERROR_MESSAGES: Record<string, string> = {
 	not_found: 'La factura no existe',
+	adopted: 'La factura ya es una factura del contrato',
 	invoice_without_items: 'La factura no tiene líneas',
+	item_not_found: 'La línea no es de esta factura',
+	duplicate_line: 'La línea de factura está repetida',
 	invalid_period: 'Período inválido (hasta antes de desde o más de 36 meses)',
 	invalid_amount: 'El monto en moneda de contrato no es válido',
 	product_not_found: 'Un producto no está en el catálogo',
@@ -261,11 +264,11 @@ export class OnboardingHistoryService {
 		const line = lineDto(row);
 		const record = recordRows(parts);
 		const keyParams = [holdingId, ...record.params];
-		const [months, invoices, candidates, events, productIds] = await Promise.all([
+		const [months, invoices, items, candidates, events, productIds] = await Promise.all([
 			this.dataSource.query(
 				`WITH ${legacyFirstRsmCte('$1')}
 				SELECT m.id, to_char(m.period_month, 'YYYY-MM') AS period_month, m.product_name, m.subtotal_contract_currency, m.mrr_legacy,
-					m.mrr_legacy_system_currency, m.term, m.is_recurring, m.invoice_number, m.invoice_legacy_id, m.migrated_to_contract_id,
+					m.mrr_legacy_system_currency, m.term, m.is_recurring, m.invoice_number, m.invoice_legacy_id, m.invoice_item_legacy_id, m.migrated_to_contract_id,
 					m.invoice_currency, m.allocated_invoice_currency, m.fx_contract_to_invoice, m.fx_contract_to_system,
 					m.skip_activation, ${legacySkipCodeSql('m')} AS skip_code,
 					(${legacyCountedConditions().join(' AND ')}) AS counted
@@ -275,12 +278,22 @@ export class OnboardingHistoryService {
 				keyParams
 			) as Promise<Row[]>,
 			this.dataSource.query(
-				`SELECT il.id, il.invoice_number, il.issue_date, il.invoice_currency, il.total_invoice_currency, il.status, il.contract_id
+				`SELECT il.id, il.invoice_number, il.issue_date, il.invoice_currency, il.amount_invoice_currency, il.total_invoice_currency, il.status,
+					il.contract_id
 				FROM invoices_legacy il
 				WHERE il.holding_id = $1 AND il.id IN (
 					SELECT m.invoice_legacy_id FROM mrr_legacy m
 					WHERE m.holding_id = $1 AND ${record.where.join(' AND ')})
 				ORDER BY il.issue_date, il.invoice_number`,
+				keyParams
+			) as Promise<Row[]>,
+			// Líneas de esas facturas (el registro es por línea de factura, Domi 28-10).
+			this.dataSource.query(
+				`SELECT ii.id, ii.invoices_legacy_id, ii.description, ii.subtotal, ii.currency FROM invoice_items_legacy ii
+				WHERE ii.invoices_legacy_id IN (
+					SELECT m.invoice_legacy_id FROM mrr_legacy m
+					WHERE m.holding_id = $1 AND ${record.where.join(' AND ')})
+				ORDER BY ii.created_at, ii.id`,
 				keyParams
 			) as Promise<Row[]>,
 			this.candidateRows(holdingId, parts.client_id),
@@ -332,6 +345,7 @@ export class OnboardingHistoryService {
 				const own = months
 					.filter((month) => String(month.invoice_legacy_id) === String(invoice.id))
 					.map((month) => ({
+						item_id: str(month.invoice_item_legacy_id),
 						period: String(month.period_month),
 						product_name: str(month.product_name),
 						subtotal: num(month.subtotal_contract_currency),
@@ -339,24 +353,45 @@ export class OnboardingHistoryService {
 						is_recurring: month.is_recurring === true,
 						skip_code: str(month.skip_code),
 					}));
-				const registration = invoiceRegistration(own);
-				// Un producto por nombre con su parte del monto (Σ subtotal ÷ plazo de sus filas), para prellenar "Editar línea" (Domi 14-10).
-				const products = [...new Set(own.map((month) => month.product_name ?? ''))].map((name) => ({
-					product_id: productIdOf(name),
-					product_name: name,
-					amount_contract_currency: invoiceRegistration(own.filter((month) => (month.product_name ?? '') === name))
-						.amount_contract_currency,
-				}));
+				// Registro actual de un grupo de filas: período, monto y un producto por nombre con su parte (Σ subtotal ÷ plazo de sus filas),
+				// para prellenar "Editar línea" (Domi 14-10).
+				const registrationOf = (rows: typeof own) => ({
+					...invoiceRegistration(rows),
+					contract_currency: line.currency,
+					products: [...new Set(rows.map((month) => month.product_name ?? ''))].map((name) => ({
+						product_id: productIdOf(name),
+						product_name: name,
+						amount_contract_currency: invoiceRegistration(rows.filter((month) => (month.product_name ?? '') === name))
+							.amount_contract_currency,
+					})),
+				});
 
 				return {
 					id: String(invoice.id),
 					invoice_number: str(invoice.invoice_number),
 					issue_date: isoDate(invoice.issue_date),
 					currency: str(invoice.invoice_currency),
+					amount: num(invoice.amount_invoice_currency),
 					total: num(invoice.total_invoice_currency),
 					status: str(invoice.status),
 					contract_id: str(invoice.contract_id),
-					registration: { ...registration, contract_currency: line.currency, products },
+					/** Registro de la factura entera (todas sus líneas juntas). */
+					registration: registrationOf(own),
+					// Por línea de factura (Domi 28-10): las que tienen filas en este registro traen su registro; las demás, `null`.
+					lines: items
+						.filter((item) => String(item.invoices_legacy_id) === String(invoice.id))
+						.map((item, index) => {
+							const rows = own.filter((month) => month.item_id === String(item.id));
+
+							return {
+								item_id: String(item.id),
+								item_index: index + 1,
+								description: str(item.description),
+								subtotal: num(item.subtotal),
+								currency: str(item.currency),
+								registration: rows.length ? registrationOf(rows) : null,
+							};
+						}),
 				};
 			}),
 			splice,
@@ -452,7 +487,7 @@ export class OnboardingHistoryService {
 	private async editRows(db: Queryable, holdingId: string, parts: LineKeyParts, lock: boolean): Promise<Array<LineEditRow & EditCarry>> {
 		const record = recordRows(parts);
 		const rows = (await db.query(
-			`SELECT m.id, m.invoice_legacy_id, m.invoice_number, to_char(m.period_month, 'YYYY-MM') AS period, m.product_name, m.subtotal_contract_currency,
+			`SELECT m.id, m.invoice_legacy_id, m.invoice_item_legacy_id, m.invoice_number, to_char(m.period_month, 'YYYY-MM') AS period, m.product_name, m.subtotal_contract_currency,
 				m.term, m.is_recurring, m.mrr_legacy, m.mrr_legacy_system_currency, m.fx_contract_to_system, m.allocated_invoice_currency,
 				m.fx_contract_to_invoice, m.invoice_currency, m.migrated_to_contract_id, m.migrated_at, m.migrated_by, m.skip_activation_reason,
 				m.skip_activation_at, m.skip_activation_by, ${legacySkipCodeSql('m')} AS skip_code
@@ -466,6 +501,7 @@ export class OnboardingHistoryService {
 		return rows.map((row) => ({
 			id: String(row.id),
 			invoice_id: String(row.invoice_legacy_id),
+			item_id: str(row.invoice_item_legacy_id),
 			invoice_number: str(row.invoice_number),
 			period: String(row.period),
 			product_name: str(row.product_name),
@@ -518,21 +554,26 @@ export class OnboardingHistoryService {
 		});
 		if (errors.length) throw validationException(errors);
 		const replaced = rows.filter((row) => seen.has(row.invoice_id));
-		const invoiceAmounts = new Map<string, number>();
+		// Monto en moneda de factura que el registro tenía asignado a cada línea de factura (base del tipo de cambio al volver a registrar).
+		const lineAmounts = new Map<string, number>();
 
-		for (const invoiceId of seen) {
-			const amount = lineInvoiceAmount(replaced.filter((row) => row.invoice_id === invoiceId));
+		for (const key of new Set(replaced.filter((row) => row.item_id).map((row) => lineAmountKey(row.invoice_id, row.item_id!)))) {
+			const amount = lineInvoiceAmount(replaced.filter((row) => row.item_id && lineAmountKey(row.invoice_id, row.item_id) === key));
 
-			if (amount !== 0) invoiceAmounts.set(invoiceId, amount);
+			if (amount !== 0) lineAmounts.set(key, amount);
 		}
-		const replace = { clientId: parts.client_id, excludeRowIds: replaced.map((row) => row.id!), invoiceAmounts };
-		const plans = await this.register.plan(db, holdingId, dto.invoices, lock, replace);
+		const replace = { clientId: parts.client_id, excludeRowIds: replaced.map((row) => row.id!), lineAmounts };
+		const plans = await this.register.plan(db, holdingId, dto.invoices, { lock, replace });
 
-		plans.forEach((plan, index) => {
+		for (const plan of plans) {
 			const error = plan.errors[0];
 
-			if (error) errors.push({ field: `invoices.${index}`, message: REGISTER_ERROR_MESSAGES[error] ?? error });
-		});
+			if (error)
+				errors.push({
+					field: `invoices.${plan.position.invoice}.lines.${plan.position.line}`,
+					message: REGISTER_ERROR_MESSAGES[error] ?? error,
+				});
+		}
 		if (errors.length) throw validationException(errors);
 		const keyOf = (currency: string) => rawLineKey({ ...parts, contract_currency: currency });
 		const generated = plans.flatMap((plan) => generatedRows(plan, keyOf));
@@ -676,11 +717,14 @@ export class OnboardingHistoryService {
 			if (ctx.linkedRekey) {
 				throw conflict('line_linked_rekey', 'Hay meses empalmados con un contrato: solo se pueden cambiar período, montos y productos');
 			}
-			const mismatch = ctx.plans.map((plan, index) => ({ plan, index })).filter(({ plan }) => plan.warnings.includes('sum_mismatch'));
+			const mismatch = ctx.plans.filter((plan) => plan.warnings.includes('sum_mismatch'));
 
 			if (mismatch.length) {
 				throw validationException(
-					mismatch.map(({ index }) => ({ field: `invoices.${index}.products`, message: REGISTER_ERROR_MESSAGES.sum_mismatch }))
+					mismatch.map((plan) => ({
+						field: `invoices.${plan.position.invoice}.lines.${plan.position.line}.products`,
+						message: REGISTER_ERROR_MESSAGES.sum_mismatch,
+					}))
 				);
 			}
 			await runner.query(`DELETE FROM mrr_legacy WHERE holding_id = $1 AND id = ANY($2::uuid[])`, [holdingId, ctx.replace.excludeRowIds]);
@@ -733,12 +777,15 @@ export class OnboardingHistoryService {
 					record_key: rawLineKey(parts),
 					invoices: dto.invoices.map((input) => ({
 						invoice_id: input.invoice_id,
-						period_from: input.period_from,
-						period_to: input.period_to,
-						contract_currency: input.contract_currency,
-						amount_contract_currency: input.amount_contract_currency,
-						is_recurring: input.is_recurring !== false,
-						products: input.products,
+						lines: input.lines.map((line) => ({
+							item_id: line.item_id,
+							period_from: line.period_from,
+							period_to: line.period_to,
+							contract_currency: line.contract_currency,
+							amount_contract_currency: line.amount_contract_currency,
+							is_recurring: line.is_recurring !== false,
+							products: line.products,
+						})),
 					})),
 					before: summary(ctx.rows),
 					after: summary([...ctx.remaining, ...ctx.generated.filter((row) => row.line_key === rawLineKey(parts))]),

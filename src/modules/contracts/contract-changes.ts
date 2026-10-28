@@ -4326,11 +4326,6 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 				);
 			start = next;
 		}
-		if (!item.end_date || start > item.end_date) {
-			p.error(`${field}.item_id`, `"${item.product_name}" termina el ${item.end_date}: no queda período por cambiar; renuévalo primero`);
-			continue;
-		}
-		p.assertOpenPeriod(start, `El inicio del cambio de "${item.product_name}"`);
 		const groupIds = new Set(group.item_ids);
 		const frontier = ctx.invoices
 			.filter(isIssued)
@@ -4339,14 +4334,52 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 			.map((line) => line.billing_period_end ?? '')
 			.sort()
 			.reverse()[0];
+		// Consumo registrado en alguna Por Emitir desde `from`: el cambio va como línea neta (la cantidad consumida se conserva).
+		const consumptionFrom = (from: string) =>
+			ctx.invoices
+				.filter(isEditablePending)
+				.some(
+					(invoice) =>
+						!isPartialBilled(invoice) &&
+						invoice.lines.some(
+							(line) => line.contract_item_id && groupIds.has(line.contract_item_id) && (line.billing_period_start ?? '') >= from && isConsumptionLine(line)
+						)
+				);
 
 		if (frontier && start <= frontier) {
-			p.block(
-				'issued_after_effective_date',
-				`"${item.product_name}" ya está facturado en firme hasta el ${frontier}`,
-				`Usa fecha efectiva ${addDays(frontier, 1)} o posterior; lo emitido se corrige con nota de crédito`
-			);
+			if (delta.categoria === 'UPSELL' && !pricedSpec && ref.net_line !== true && !consumptionFrom(start)) {
+				// Soporte SimpliRoute 28-10 (S06870, Carelis): el UPSELL parte el día efectivo aunque el período ya esté emitido. La
+				// diferencia se factura prorrateada por días hasta el fin de lo emitido (S3-5, S3-17), en la factura del próximo ciclo o en
+				// una suelta con "Cobrar ahora"; la factura emitida no se toca. Solo el DOWNSELL exige corregir lo emitido con nota de crédito.
+				p.warn(
+					'upsell_within_issued_period',
+					`"${item.product_name}" ya está facturado hasta el ${frontier}: la diferencia del ${start} al ${frontier} se prorratea por días y ${
+						(req.change.first_period_invoice ?? 'cycle') === 'immediate' ? 'va en una factura aparte' : 'se suma a la factura del próximo ciclo'
+					}; la factura emitida no se toca`
+				);
+			} else if (delta.categoria === 'UPSELL') {
+				// Línea neta (consumo registrado o pedida): reescribe las Por Emitir y no tiene dónde dejar el tramo del período emitido, así que
+				// el cambio rige desde el día siguiente a lo emitido (próximo inicio de período).
+				const next = addDays(frontier, 1);
+
+				p.warn(
+					'upsell_net_line_from_next_period',
+					`"${item.product_name}" ya está facturado hasta el ${frontier} y el cambio va como línea neta: rige desde el ${next}`
+				);
+				start = next;
+			} else {
+				p.block(
+					'issued_after_effective_date',
+					`"${item.product_name}" ya está facturado en firme hasta el ${frontier}`,
+					`Usa fecha efectiva ${addDays(frontier, 1)} o posterior; lo emitido se corrige con nota de crédito`
+				);
+			}
 		}
+		if (!item.end_date || start > item.end_date) {
+			p.error(`${field}.item_id`, `"${item.product_name}" termina el ${item.end_date}: no queda período por cambiar; renuévalo primero`);
+			continue;
+		}
+		p.assertOpenPeriod(start, `El inicio del cambio de "${item.product_name}"`);
 		if (ctx.quantity_override_item_ids.some((id) => groupIds.has(id))) {
 			p.warn(
 				'quantity_overrides_present',
