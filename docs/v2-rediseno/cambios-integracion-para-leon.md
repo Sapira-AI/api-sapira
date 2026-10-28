@@ -510,3 +510,21 @@ restablecer, eliminar el borrador en Odoo y reenviar después del deploy.
 - **DWH** (`recordFromDwh`): el unitario que traiga el almacén ya no se convierte en monto fijado; se guarda solo la cantidad.
 - Hacia adelante: los consumos antiguos con monto lo conservan hasta que se corrijan (la corrección ya no lo lleva). No se cambiaron datos.
 
+## Errores de emisión al ERP legibles y alerta agrupada por causa (28-10, Domi)
+
+Corrida del 28-10 (SimpliRoute, 30 errores): 29 facturas de Chile sin folios CAF (`action_post` falla, el move queda en borrador `/`) y una de
+México publicada pero con el CFDI rechazado por el PAC (CFDI40147). Las usuarias vieron 30 alertas iguales "No se pudo enviar la factura al
+ERP…". Detalle y causa raíz en `docs/cambios/errores-emision-erp-28-10.md`. Lo construido hasta ahora **no cambia la lógica del envío**:
+
+- **Traducción (§9 de esta nota, ampliación de patrones):** `translateErpError` conoce `folios_exhausted` (texto con "CAF": folio y
+  secuencia) y `electronic_rejected` (CFDI/PAC/timbrado, códigos CFDI40142/40143/40145/40147 con su motivo); lo desconocido muestra la
+  primera frase útil del ERP ("El ERP respondió: …") en vez de la frase genérica; `cleanErpMessage` quita "XML-RPC Fault" y "(Code: N)".
+- **Alerta agrupada:** `createOdooFailureNotification` ya no crea una alerta por factura: las que fallan por la misma causa, compañía, etapa y
+  día comparten un aviso (`odoo-failure-alert.ts`, clave `invoice-odoo-failure:<company>:<día>:<etapa>:<categoría>:<hash>`) con la lista de
+  facturas en `metadata.invoices`. "Qué hacemos nosotros" ahora dice la verdad por etapa: solo antes de crear el borrador hay reintento
+  automático (`pendingInvoicesQuery` exige `sent_to_odoo_at IS NULL`); con borrador o publicada no reenviamos. Al enviar bien una factura,
+  sale del grupo (`resolveOdooFailureNotifications`). El Estado de Integraciones › ERP encuentra el aviso por `resource_id` o por la lista.
+- **Pendiente (te avisamos al construirlo):** C) al fallar `action_post` la factura no debe quedar Enviada con el folio provisional (hoy el
+  webhook llega dentro de la transacción de Odoo antes del rollback y el catch del scheduler no revierte `status`/`sent_to_odoo_at`);
+  D) México publicada sin timbre no debe quedar Emitida; E) resumen de la corrida por causa. Esos tres tocan tu scheduler y el webhook.
+

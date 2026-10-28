@@ -518,7 +518,9 @@ export class ErpAdapter implements IntegrationAdapter {
 				LEFT JOIN contracts ct ON ct.id = i.contract_id
 				LEFT JOIN LATERAL (SELECT an.id, an.message, an.updated_at FROM app_notifications an
 					WHERE an.holding_id = i.holding_id AND an.type = 'invoice_odoo_failure' AND an.status = 'open'
-						AND an.resource_type = 'invoice' AND an.resource_id = i.id ORDER BY an.updated_at DESC LIMIT 1) n ON true
+						AND an.resource_type = 'invoice'
+						AND (an.resource_id = i.id OR an.metadata -> 'invoices' @> jsonb_build_array(jsonb_build_object('id', i.id::text)))
+					ORDER BY an.updated_at DESC LIMIT 1) n ON true
 				WHERE i.holding_id = $1 AND i.is_active = true AND i.status <> 'Cancelada' AND (${sent} OR n.id IS NOT NULL)) x`;
 	}
 

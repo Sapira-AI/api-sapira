@@ -35,6 +35,9 @@ describe('InvoiceSchedulerService', () => {
 		const notificationsService = {
 			createOrUpdate: jest.fn(),
 			resolveOpen: jest.fn().mockResolvedValue(1),
+			findOpenByDeduplicationKey: jest.fn().mockResolvedValue(null),
+			findOpenWithMember: jest.fn().mockResolvedValue([]),
+			updateContent: jest.fn().mockResolvedValue(undefined),
 		};
 
 		const service = new InvoiceSchedulerService(
@@ -234,6 +237,102 @@ describe('InvoiceSchedulerService', () => {
 				}),
 			})
 		);
+	});
+
+	it('28-10: las facturas que fallan por la misma causa el mismo día se suman al aviso abierto (una alerta, lista de facturas, sin acción propia)', async () => {
+		const { service, notificationsService } = createService();
+		const CAF =
+			'XML-RPC Fault: No hay CAFs disponible para el folio 28401 en la secuencia de Electronic Invoice. Por favor subo un archivo CAF o solicite uno nuevo en el sitio www.sii.cl (Code: 2)';
+		const invoiceOf = (n: number) => ({
+			id: `invoice-${n}`,
+			holding_id: 'holding-1',
+			contract_id: `contract-${n}`,
+			company_id: 'company-cl',
+			invoice_number: 'FAC 028401',
+			issue_date: new Date('2026-10-28T12:00:00Z'),
+			company: { id: 'company-cl', country: 'Chile', legal_name: 'Simplit SpA' },
+			clientEntity: { legal_name: `Cliente ${n}` },
+		});
+		const failure = (n: number) =>
+			(service as any).createOdooFailureNotification({
+				invoice: invoiceOf(n),
+				stage: 'post_invoice',
+				title: 'Error al publicar factura FAC 028401 en Odoo',
+				message: `Factura creada en Odoo con ID: ${201180 + n}, pero falló la emisión: ${CAF}`,
+				errorType: 'odoo_post_exception',
+				errorMessage: CAF,
+				odooInvoiceId: 201180 + n,
+				schedulerSource: 'automatic',
+				errorDetails: { stack: 'Error: …\n    at …' },
+			});
+
+		await failure(1);
+		const first = notificationsService.createOrUpdate.mock.calls[0][1];
+
+		expect(first.title).toBe('No se pudo enviar la factura FAC 028401 de Cliente 1');
+		expect(first.deduplication_key).toMatch(/^invoice-odoo-failure:company-cl:\d{4}-\d{2}-\d{2}:post_invoice:folios_exhausted:[0-9a-f]{8}$/);
+		expect(first.company_id).toBe('company-cl');
+		expect(first.metadata.what_we_do).toMatch(/^No la reintentamos solos: el borrador ya existe en el ERP/);
+		expect(first.metadata.technical_detail).toBe(
+			'No hay CAFs disponible para el folio 28401 en la secuencia de Electronic Invoice. Por favor subo un archivo CAF o solicite uno nuevo en el sitio www.sii.cl'
+		);
+
+		// Segunda factura con la misma causa: el aviso abierto ya tiene a la primera → se agrupa.
+		notificationsService.findOpenByDeduplicationKey.mockResolvedValueOnce({ id: 'group-1', metadata: first.metadata });
+		await failure(2);
+		const second = notificationsService.createOrUpdate.mock.calls[1][1];
+
+		expect(second.deduplication_key).toBe(first.deduplication_key);
+		expect(second.title).toBe('No se pudieron enviar 2 facturas de Simplit SpA al ERP');
+		expect(second.message).toBe(first.message);
+		expect(second.action_type).toBeUndefined();
+		expect(second.resource_id).toBeUndefined();
+		expect(second.metadata.invoice_count).toBe(2);
+		expect(second.metadata.invoices.map((item: { id: string }) => item.id)).toEqual(['invoice-1', 'invoice-2']);
+		expect(second.metadata.client_name).toBeNull();
+
+		// La misma factura otra vez (reintento manual) no se cuenta dos veces.
+		notificationsService.findOpenByDeduplicationKey.mockResolvedValueOnce({ id: 'group-1', metadata: second.metadata });
+		await failure(2);
+		expect(notificationsService.createOrUpdate.mock.calls[2][1].metadata.invoice_count).toBe(2);
+	});
+
+	it('28-10: al enviar bien una factura sale del aviso agrupado (se achica) y el aviso se resuelve cuando queda vacío', async () => {
+		const { service, notificationsService } = createService();
+		const invoices = (ids: string[]) => ids.map((id) => ({ id, invoice_number: `F-${id}`, client_name: `Cliente ${id}`, contract_id: `ctr-${id}`, odoo_invoice_id: null, issue_date: null }));
+		const metadata = (ids: string[]) => ({
+			failure_stage: 'post_invoice',
+			error_type: 'odoo_post_exception',
+			error_message: 'raw',
+			company_name: 'Simplit SpA',
+			country: 'Chile',
+			scheduler_source: 'automatic',
+			erp_error: { category: 'folios_exhausted', message: 'Se acabaron los folios', next_step: 'Solicita un CAF', action: 'none' },
+			invoices: invoices(ids),
+			invoice_count: ids.length,
+		});
+		notificationsService.findOpenWithMember.mockResolvedValue([
+			{ id: 'group-2', metadata: metadata(['invoice-1', 'invoice-9']) },
+			{ id: 'group-1', metadata: metadata(['invoice-1']) },
+		]);
+
+		await (service as any).resolveOdooFailureNotifications({ id: 'invoice-1', holding_id: 'holding-1' });
+
+		expect(notificationsService.resolveOpen).toHaveBeenCalledWith('holding-1', { type: 'invoice_odoo_failure', resourceId: 'invoice-1' });
+		expect(notificationsService.findOpenWithMember).toHaveBeenCalledWith('holding-1', 'invoice_odoo_failure', 'invoices', 'invoice-1');
+		expect(notificationsService.updateContent).toHaveBeenCalledWith(
+			'holding-1',
+			'group-2',
+			expect.objectContaining({
+				title: 'No se pudo enviar la factura F-invoice-9 de Cliente invoice-9',
+				message: 'Se acabaron los folios. Solicita un CAF.',
+				action_type: 'open_contract',
+				action_payload: { contract_id: 'ctr-invoice-9' },
+				resource_id: 'invoice-9',
+				metadata: expect.objectContaining({ invoice_count: 1, invoices: invoices(['invoice-9']) }),
+			})
+		);
+		expect(notificationsService.resolveOpen).toHaveBeenCalledWith('holding-1', { ids: ['group-1'] });
 	});
 
 	it('lastSendAttempt: lee el último log de la factura y lo traduce; si el log falla devuelve null', async () => {
@@ -929,7 +1028,9 @@ describe('InvoiceSchedulerService', () => {
 					message:
 						'Hay productos sin mapeo en Odoo: Soporte Premium. Relaciona el producto en Integraciones › ERP › Mapeos y vuelve a enviarla.',
 					recommendation: 'Relaciona el producto en Integraciones › ERP › Mapeos y vuelve a enviarla',
-					deduplication_key: 'invoice-odoo-failure:invoice-1:product_mapping:product_without_erp_mapping',
+					// Agrupada por compañía, día de negocio, etapa y causa (28-10); la factura va en la lista.
+					deduplication_key: expect.stringMatching(/^invoice-odoo-failure:company-1:\d{4}-\d{2}-\d{2}:product_mapping:product_without_mapping:[0-9a-f]{8}$/),
+					metadata: expect.objectContaining({ invoice_count: 1, invoices: [expect.objectContaining({ id: 'invoice-1', invoice_number: 'INV-001' })] }),
 				})
 			);
 		});
