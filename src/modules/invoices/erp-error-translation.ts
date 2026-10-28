@@ -14,6 +14,10 @@ export const ERP_ERROR_CATEGORIES = [
 	'period_closed',
 	'duplicate_number',
 	'fx_rate_missing',
+	/** Chile: la secuencia del documento electrónico no tiene folios autorizados (CAF) en Odoo; el borrador queda sin publicar. */
+	'folios_exhausted',
+	/** El timbrador (PAC/SAT en México) rechazó el documento ya publicado en Odoo. */
+	'electronic_rejected',
 	'connection',
 	'validation',
 	'unknown',
@@ -77,7 +81,8 @@ export function cleanErpMessage(raw: string | null | undefined): string {
 			''
 		)
 		.replace(/\b(?:odoo\.exceptions\.)?(?:ValidationError|UserError|AccessError|MissingError|RedirectWarning)\b\s*:?\s*/g, '')
-		.replace(/<Fault[^>]*>|Fault\s*\d*\s*:?/gi, '')
+		.replace(/<Fault[^>]*>|XML-RPC\s*Fault\s*:?|Fault\s*\d*\s*:?/gi, '')
+		.replace(/\s*\(Code:\s*\d+\)\s*$/i, '')
 		.replace(/[\r\n]+/g, ' ')
 		.replace(/\s{2,}/g, ' ')
 		.replace(/^["'\s(]+|["'\s)]+$/g, '')
@@ -89,6 +94,58 @@ export function cleanErpMessage(raw: string | null | undefined): string {
 }
 
 const normalize = (value: string) => value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/** Nombre en Odoo de la secuencia de documentos electrónicos (Chile) → cómo lo decimos. */
+const SEQUENCE_LABELS: Array<[RegExp, string]> = [
+	[/electronic exempt invoice|factura exenta/i, 'facturas exentas electrónicas'],
+	[/electronic export invoice|factura de exportaci/i, 'facturas de exportación electrónicas'],
+	[/electronic credit note|nota de cr/i, 'notas de crédito electrónicas'],
+	[/electronic debit note|nota de d/i, 'notas de débito electrónicas'],
+	[/electronic invoice|factura electr/i, 'facturas electrónicas'],
+];
+
+/**
+ * Folios agotados (Chile): "No hay CAFs disponible para el folio 28401 en la secuencia de Electronic Invoice. Por favor subo un archivo CAF
+ * o solicite uno nuevo en el sitio www.sii.cl". Devuelve el tipo de documento y el folio que faltó, si el texto los trae.
+ */
+export function exhaustedFolios(raw: string | null | undefined): { document: string; next_folio: string | null } | null {
+	const text = String(raw ?? '');
+
+	if (!/\bcafs?\b/i.test(text)) return null;
+	const folio = text.match(/folio\s+(\d+)/i)?.[1] ?? null;
+	const sequence = text.match(/secuencia(?: de)?\s+([^.\n]+?)(?:\.|$| por favor)/i)?.[1]?.trim() ?? null;
+	const document = sequence ? (SEQUENCE_LABELS.find(([pattern]) => pattern.test(sequence))?.[1] ?? `la secuencia ${sequence}`) : 'los documentos electrónicos';
+
+	return { document, next_folio: folio };
+}
+
+/** Códigos del SAT que sabemos decir en palabras; el resto va con el motivo limpio del PAC. */
+const SAT_CODE_MESSAGES: Record<string, string> = {
+	CFDI40147: 'el domicilio fiscal (código postal) del cliente no coincide con el registrado en el SAT para su RFC',
+	CFDI40145: 'el régimen fiscal del cliente no corresponde a su RFC',
+	CFDI40143: 'el nombre o razón social del cliente no coincide con el registrado en el SAT para su RFC',
+	CFDI40142: 'el RFC del cliente no está en la lista de RFC inscritos no cancelados del SAT',
+};
+
+/**
+ * Timbrado rechazado (México): "Ocurrió un error al enviar el CFDI al PAC: - Código: CFDI40147 - El campo DomicilioFiscalReceptor del
+ * receptor, debe encontrarse en la lista de RFC inscritos no cancelados en el SAT." Devuelve el motivo en palabras (código conocido) o el
+ * texto limpio del PAC después del código; null si el texto no es un rechazo del timbrado.
+ */
+export function electronicRejectionReason(raw: string | null | undefined): { code: string | null; reason: string } | null {
+	const text = String(raw ?? '');
+
+	if (!/\b(?:cfdi|pac|timbr|sat)\b/i.test(text)) return null;
+	const code = text.match(/\b(CFDI\d{5})\b/i)?.[1]?.toUpperCase() ?? null;
+	const known = code ? SAT_CODE_MESSAGES[code] : undefined;
+
+	if (known) return { code, reason: known };
+	// Lo que sigue al código ("- Código: CFDI40147 - <motivo>") o, sin código, lo que sigue a "al PAC:".
+	const after = text.match(/CFDI\d{5}\s*[-–:]?\s*([^\n]+)/i)?.[1] ?? text.match(/al PAC\s*:\s*[-–\s]*([^\n]+)/i)?.[1] ?? null;
+	const reason = cleanErpMessage(after ?? text).replace(/^[-–\s]+/, '');
+
+	return { code, reason: reason ? reason.charAt(0).toLowerCase() + reason.slice(1) : 'el documento no cumple una validación del SAT' };
+}
 
 const build = (category: ErpErrorCategory, message: string, next_step: string, action: ErpErrorAction, raw: string | null): ErpErrorTranslation => ({
 	category,
@@ -129,6 +186,29 @@ export function translateErpError(rawInput: string | null | undefined, errorType
 			pairs ? `Falta el tipo de cambio para ${pairs}` : 'Falta el tipo de cambio para valorizar la factura en su moneda',
 			'Confirma la tasa desde Tipo de cambio de la factura y vuelve a enviarla',
 			'fx',
+			raw
+		);
+	}
+	// Casos reales de la corrida del 28-10 (SimpliRoute): van antes de las ramas laxas (impuesto, diario, validación) para que no las pisen.
+	const folios = exhaustedFolios(raw);
+
+	if (folios) {
+		return build(
+			'folios_exhausted',
+			`Se acabaron los folios autorizados por el SII para ${folios.document}${folios.next_folio ? ` (siguiente folio ${folios.next_folio})` : ''}`,
+			'Solicita un CAF nuevo en sii.cl y cárgalo en Odoo; después confirma allí los borradores que quedaron sin folio',
+			'none',
+			raw
+		);
+	}
+	const rejection = type === 'electronic_rejection' || type === 'emit_electronic_exception' || has(/cfdi|al pac|timbr/) ? electronicRejectionReason(raw) : null;
+
+	if (rejection) {
+		return build(
+			'electronic_rejected',
+			`El SAT rechazó el timbrado: ${rejection.reason.replace(/[.\s]+$/, '')}${rejection.code ? ` (${rejection.code})` : ''}`,
+			'Corrige en Odoo los datos fiscales del cliente según su Constancia de Situación Fiscal y vuelve a timbrar desde Odoo',
+			'client_entity',
 			raw
 		);
 	}
@@ -236,7 +316,16 @@ export function translateErpError(rawInput: string | null | undefined, errorType
 		);
 	}
 
-	return build('unknown', 'No se pudo enviar la factura al ERP', 'Revisa el detalle técnico o vuelve a intentarlo en unos minutos', 'none', raw);
+	// Sin categoría: la primera frase útil del error de Odoo (Domi 28-10: el texto real existía y no se veía), no la frase genérica.
+	const clean = cleanErpMessage(raw);
+
+	return build(
+		'unknown',
+		clean ? `El ERP respondió: ${clean}` : 'No se pudo enviar la factura al ERP',
+		'Revisa el detalle técnico o vuelve a intentarlo en unos minutos',
+		'none',
+		raw
+	);
 }
 
 /** Frase completa (mensaje + paso siguiente) para toasts y notificaciones. */

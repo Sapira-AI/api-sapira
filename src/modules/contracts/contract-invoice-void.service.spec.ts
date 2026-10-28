@@ -165,6 +165,8 @@ const itemRow: Row = {
 
 interface Fixture {
 	invoice?: Row;
+	/** Líneas de la emitida (por defecto A 1.000 y B 500 USD a 950). */
+	lines?: Row[];
 	extra?: Row;
 	previous?: Row[];
 	/** Otra NC vigente ya tiene el folio pedido. */
@@ -175,7 +177,7 @@ interface Fixture {
 
 const build = (fixture: Fixture = {}) => {
 	const invoice = fixture.invoice ?? invoiceRow();
-	const lines = [lineRow(LINE_A, 1000), lineRow(LINE_B, 500, { contract_item_id: ITEM })];
+	const lines = fixture.lines ?? [lineRow(LINE_A, 1000), lineRow(LINE_B, 500, { contract_item_id: ITEM })];
 	let lineSeq = 0;
 	const route = (sql: string): Row[] => {
 		if (sql.includes('FROM users WHERE auth_id')) return [{ id: 'user-1' }];
@@ -315,6 +317,26 @@ describe('ContractInvoiceVoidService (spec facturas §3.8 y §8)', () => {
 		expect(sql.some((statement) => statement.includes('updated_at') && /UPDATE invoices\b/.test(statement))).toBe(false);
 		expect(result).toMatchObject({ applied: true, credit_note_id: 'nc-1', reissue_invoice_id: 'reissue-1' });
 		expect(runner.commitTransaction).toHaveBeenCalled();
+	});
+
+	it('reemisión por línea (Alicorp 28-10): cada línea copiada lleva su propia tasa y su fecha de tasa, no la del encabezado; una línea sin tasa propia toma la del encabezado', async () => {
+		// Encabezado a 950; la línea B se valorizó a 940 (tasa manual): la copia debe conservar 940 y sus montos, no revalorizar a 950.
+		const { service, runner } = build({
+			lines: [
+				lineRow(LINE_A, 1000, { line_fx: null, line_fx_rate_source: null }),
+				lineRow(LINE_B, 500, { contract_item_id: ITEM, subtotal_invoice_currency: '470000', line_fx: '940', line_fx_rate_source: 'manual' }),
+			],
+		});
+
+		await service.voidInvoice(CONTRACT_ID, INV, { reason: 'issue_error', reissue: true } as VoidInvoiceDto, HOLDING, 'auth-1', TODAY);
+		const reissueLines = calls(runner.query, 'INSERT INTO invoice_items').filter(([, params]) => (params as unknown[])[0] === 'reissue-1');
+
+		expect(reissueLines.map(([, params]) => [(params as unknown[])[12], (params as unknown[])[17], (params as unknown[])[23]])).toEqual([
+			[950000, 950, LINE_A],
+			[470000, 940, LINE_B],
+		]);
+		// La fecha de la tasa se copia de la línea origen cuando la tasa es la misma; si no, hoy.
+		expect(reissueLines[0][0]).toContain('o.fx_rate_date FROM invoice_items o WHERE o.id = $24::uuid AND o.fx_contract_to_invoice = $18::numeric');
 	});
 
 	it('anular sin reemitir: los consumos del período quedan libres (invoice_id NULL) y un solo evento INVOICE_VOIDED', async () => {

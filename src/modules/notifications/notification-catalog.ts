@@ -116,7 +116,9 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 			what_happened: 'La factura no llegó al ERP: el ERP la rechazó o no respondió.',
 			what_to_do:
 				'Corrige el dato que indica el mensaje en el contrato o en la factura y vuelve a enviarla. Si falta relacionar un producto, hazlo en Integraciones › ERP › Mapeos.',
-			what_we_do: 'Reintentamos en la próxima corrida automática y cerramos este aviso cuando la factura se envía bien.',
+			// Plantilla para avisos sin `metadata.what_we_do` (anteriores al 28-10); el scheduler manda el texto según la etapa en que falló.
+			what_we_do:
+				'Si la factura no llegó a crearse en el ERP, la reintentamos en la próxima corrida automática y cerramos este aviso cuando se envía bien. Si ya existe allá como borrador o publicada, no la reenviamos.',
 		},
 	}),
 	entry({
@@ -414,12 +416,19 @@ export function defaultSubscriptions(): Array<{ type: string; role_name: string 
 }
 
 /** Textos resueltos del detalle: los del productor mandan; la plantilla del catálogo completa. */
-export function resolveTexts(notification: { type: string; message?: string | null; recommendation?: string | null }) {
+export function resolveTexts(notification: {
+	type: string;
+	message?: string | null;
+	recommendation?: string | null;
+	metadata?: Record<string, unknown> | null;
+}) {
 	const texts = BY_TYPE.get(notification.type)?.texts;
+	// "Qué hacemos nosotros" propio del productor (p. ej. el envío al ERP, que depende de la etapa en que falló); si no, la plantilla.
+	const ownWhatWeDo = notification.metadata?.what_we_do;
 
 	return {
 		what_happened: notification.message?.trim() || texts?.what_happened || '',
 		what_to_do: notification.recommendation?.trim() || texts?.what_to_do || '',
-		what_we_do: texts?.what_we_do ?? null,
+		what_we_do: (typeof ownWhatWeDo === 'string' && ownWhatWeDo.trim()) || texts?.what_we_do || null,
 	};
 }

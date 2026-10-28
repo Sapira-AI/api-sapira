@@ -26,11 +26,11 @@ import {
 } from './onboarding-common';
 import { type HistoryLine, LINE_JOINS, lineCtes, lineDto, lineSelect } from './onboarding-lines';
 
-import type { RegisterHistoryDto, RegisterHistoryInvoiceDto } from './dtos/onboarding.dto';
+import type { RegisterHistoryDto, RegisterHistoryInvoiceDto, RegisterHistoryLineDto } from './dtos/onboarding.dto';
 
-/** Tope del período que cubre una factura (meses). */
+/** Tope del período que cubre una línea (meses). */
 export const REGISTER_MAX_MONTHS = 36;
-/** Tolerancia de la suma por producto contra el monto de la factura en moneda de contrato (§3.2b). */
+/** Tolerancia de la suma por producto contra el monto de la línea en moneda de contrato (§3.2b). */
 export const SUM_TOLERANCE = 0.01;
 /** Diferencia contra el tipo de cambio de referencia del holding que se marca como rara. */
 export const FX_OUTLIER_TOLERANCE = 0.2;
@@ -74,12 +74,14 @@ export function fxWarningsOf(
 
 	return warnings;
 }
-/** Motivos por los que una factura no se registra (vista previa: `errors[]`; aplicar: `skipped[].reason`). */
+/** Motivos por los que una línea no se registra (vista previa: `errors[]`; aplicar: `skipped[].reason`). */
 export type RegisterError =
 	| 'not_found'
 	| 'adopted'
 	| 'already_registered'
 	| 'invoice_without_items'
+	| 'item_not_found'
+	| 'duplicate_line'
 	| 'invalid_period'
 	| 'invalid_amount'
 	| 'product_not_found'
@@ -90,46 +92,71 @@ export type RegisterError =
 	| 'target_not_found'
 	| 'target_mismatch';
 
+/** Clave de una línea de factura en los mapas de montos (`invoice_id|item_id`). */
+export const lineAmountKey = (invoiceId: string, itemId: string) => `${invoiceId}|${itemId}`;
+
+/** Plan de **una línea** de una factura (Domi 28-10: el MRR histórico se registra por línea de factura). */
 export interface RegisterPlan {
 	invoice_id: string;
 	invoice_number: string | null;
 	client_id: string | null;
 	invoice_currency: string | null;
+	/** Neto de la factura en su moneda. */
 	amount_invoice_currency: number | null;
+	/** Línea de la factura (`invoice_items_legacy.id`); `null` si la línea pedida no es de la factura. */
+	item_id: string | null;
+	/** Posición de la línea en la factura (1 = primera), para nombrarla. */
+	item_index: number | null;
+	item_description: string | null;
+	/** Subtotal de la línea en moneda de factura (columna `subtotal` de las filas). */
+	item_subtotal: number | null;
+	/** Monto de la línea en moneda de factura con que se calcula el tipo de cambio (su subtotal, o el asignado al volver a registrar). */
+	item_amount_invoice_currency: number | null;
+	item_currency: string | null;
 	months: Month[];
 	mrr_per_month: number;
 	fx_contract_to_invoice: number | null;
 	products: Array<{ product_id: string; product_name: string | null; amount: number; mrr_per_month: number; covered: Month[] }>;
 	warnings: RegisterWarning[];
 	errors: RegisterError[];
-	/** Registro pendiente al que se suma la factura (`target_key` propio o global), ya validado; `null` = nace un registro nuevo. */
+	/** Registro pendiente al que se suma la línea (`target_key` propio, de la factura o global), ya validado; `null` = nace un registro nuevo. */
 	target: LineKeyParts | null;
-	input: RegisterHistoryInvoiceDto;
+	/** Lo que la usuaria completó para la línea. */
+	input: RegisterHistoryLineDto;
+	/** Posición en el body (`invoices.<invoice>.lines.<line>`), para los errores con campo. */
+	position: { invoice: number; line: number };
 	invoice: Row | null;
 }
 
 /**
  * Volver a registrar facturas que ya tienen MRR histórico ("Editar línea", Domi 14-10): no rige `already_registered`, el cliente es el de
  * la línea, los meses de las filas que se reemplazan no cuentan como cubiertos y el tipo de cambio parte del monto en moneda de factura
- * que la línea tenía asignado (no del neto completo de la factura, que puede repartirse en otras líneas).
+ * que la línea tenía asignado (no del subtotal de la línea de factura, que puede repartirse en otros registros).
  */
 export interface ReplaceOptions {
 	clientId: string;
 	/** Filas que se reemplazan (en la vista previa siguen en la base). */
 	excludeRowIds: string[];
-	/** Monto en moneda de factura de la parte de la línea, por factura. */
-	invoiceAmounts: Map<string, number>;
+	/** Monto en moneda de factura asignado a cada línea de factura (`lineAmountKey`). */
+	lineAmounts: Map<string, number>;
+}
+
+/** Opciones del plan: lock de las facturas, modo `replace`, `target_key` global y montos en moneda de factura por línea (`lineAmountKey`). */
+export interface PlanOptions {
+	lock?: boolean;
+	replace?: ReplaceOptions;
+	targetKey?: string;
+	/** Monto en moneda de factura con que se calcula el tipo de cambio de una línea, en vez de su subtotal (arranque rápido: el neto). */
+	lineAmounts?: Map<string, number>;
 }
 
 /**
  * Opciones del registro: el arranque rápido (filas ya empalmadas al contrato recién creado), "Editar línea" (`replace` + `batchId` = el
- * registro que se edita conserva su `batch_id`) y `targetKey` (registro pendiente al que se suman todas las facturas que no traen el suyo).
+ * registro que se edita conserva su `batch_id`) y `targetKey` (registro pendiente al que se suman todas las líneas que no traen el suyo).
  */
-export interface RegisterOptions {
+export interface RegisterOptions extends PlanOptions {
 	contractId?: string | null;
 	batchId?: string;
-	replace?: ReplaceOptions;
-	targetKey?: string;
 }
 
 /** Resultado de `registerInTx`. */
@@ -141,49 +168,80 @@ export interface RegisterResult {
 	records_touched: string[];
 	/** `batch_id` distintos usados (uno por cliente × moneda, o el del `target_key` / `batchId`). */
 	batch_ids: string[];
-	skipped: Array<{ invoice_id: string; reason: RegisterError }>;
+	skipped: Array<{ invoice_id: string; item_id: string | null; reason: RegisterError }>;
 }
 
 /**
- * Registrar histórico desde facturas previas (§3.2b): la usuaria indica por factura el período que cubre, el monto en moneda de
- * contrato y los productos con su parte; esto crea las filas de `mrr_legacy` (una por producto × mes: `subtotal_contract_currency` =
- * parte del producto por todo el período, `term` = meses, `mrr_legacy` = parte ÷ meses, `fx_contract_to_invoice` = monto de factura ÷
- * monto de contrato) y marca la factura `reconciliation_status = 'mrr_legacy'`. `mrr_legacy` no tiene `product_id`: se guarda el nombre
- * del catálogo (`product_name`). Un mes ya cubierto por el mismo cliente × producto × moneda no se repite.
+ * Registrar histórico desde facturas previas (§3.2b), **por línea de factura** (Domi 28-10, como la carga inicial y el front anterior): la
+ * usuaria indica por línea el período que cubre, el monto en moneda de contrato y los productos con su parte (una línea puede dividirse
+ * en varios productos); esto crea las filas de `mrr_legacy` (una por producto × mes: `subtotal_contract_currency` = parte del producto por
+ * todo el período, `term` = meses, `mrr_legacy` = parte ÷ meses, `fx_contract_to_invoice` = subtotal de la línea ÷ monto de contrato,
+ * `invoice_item_legacy_id` = la línea, `split_index` = posición del producto después de los ya usados en esa línea) y marca la factura
+ * `reconciliation_status = 'mrr_legacy'`. `mrr_legacy` no tiene `product_id`: se guarda el nombre del catálogo (`product_name`). Un mes ya
+ * cubierto por el mismo cliente × producto × moneda no se repite.
+ *
+ * **Registro parcial** (Domi 28-10): una línea con filas (o una factura cuyas filas ya cubren su neto, como las registradas por factura
+ * antes de esta regla) está `already_registered`; las demás líneas de la factura se pueden registrar después.
  *
  * **Registro (Domi 18-10)**: las filas nacen con un `batch_id` por cliente × moneda de contrato dentro de una misma aplicación (como el
- * modal del front anterior), salvo `target_key` (por factura o global): un registro pendiente existente del mismo cliente y moneda al que
- * se suman ("continuar un registro"). El arranque rápido y la importación con histórico siguen la misma regla; "Editar línea" conserva el
- * `batch_id` del registro.
+ * modal del front anterior), salvo `target_key` (por línea, por factura o global): un registro pendiente existente del mismo cliente y
+ * moneda al que se suman ("continuar un registro"). El arranque rápido y la importación con histórico siguen la misma regla; "Editar
+ * línea" conserva el `batch_id` del registro.
  */
 @Injectable()
 export class OnboardingRegisterService {
 	constructor(private readonly dataSource: DataSource) {}
 
 	async preview(holdingId: string, dto: RegisterHistoryDto) {
-		const plans = await this.plan(this.dataSource, holdingId, dto.invoices, false, undefined, dto.target_key);
+		const plans = await this.plan(this.dataSource, holdingId, dto.invoices, { targetKey: dto.target_key });
 		const records = await this.recordsOf(this.dataSource, holdingId, plans);
+		const lineRows = plans.map((plan, index) => ({
+			item_id: plan.item_id ?? plan.input.item_id,
+			item_index: plan.item_index,
+			item_description: plan.item_description,
+			item_amount_invoice_currency: plan.item_amount_invoice_currency,
+			contract_currency: plan.input.contract_currency,
+			amount_contract_currency: plan.input.amount_contract_currency,
+			is_recurring: plan.input.is_recurring !== false,
+			months: plan.months,
+			mrr_per_month: plan.mrr_per_month,
+			fx_contract_to_invoice: plan.fx_contract_to_invoice,
+			products: plan.products.map((product) => omitKey(product, 'covered')),
+			...records.rows[index],
+			warnings: plan.warnings,
+			errors: plan.errors,
+			blocked: this.blockerOf(plan) !== null,
+		}));
+		const rows = dto.invoices.map((input, invoiceIndex) => {
+			const own = plans.map((plan, index) => ({ plan, index })).filter(({ plan }) => plan.position.invoice === invoiceIndex);
+			const first = own[0]?.plan;
+
+			return {
+				invoice_id: input.invoice_id,
+				invoice_number: first?.invoice_number ?? null,
+				invoice_currency: first?.invoice_currency ?? null,
+				amount_invoice_currency: first?.amount_invoice_currency ?? null,
+				lines: own.map(({ index }) => lineRows[index]),
+				/** Meses distintos de todas sus líneas (para contar). */
+				months: [...new Set(own.flatMap(({ plan }) => plan.months))].sort(),
+				warnings: [...new Set(own.flatMap(({ plan }) => plan.warnings))],
+				errors: [...new Set(own.flatMap(({ plan }) => plan.errors))],
+			};
+		});
+		const applicable = plans.filter((plan) => !this.blockerOf(plan));
 
 		return {
-			rows: plans.map((plan, index) => ({
-				invoice_id: plan.invoice_id,
-				invoice_number: plan.invoice_number,
-				invoice_currency: plan.invoice_currency,
-				amount_invoice_currency: plan.amount_invoice_currency,
-				months: plan.months,
-				mrr_per_month: plan.mrr_per_month,
-				fx_contract_to_invoice: plan.fx_contract_to_invoice,
-				products: plan.products.map((product) => omitKey(product, 'covered')),
-				...records.rows[index],
-				warnings: plan.warnings,
-				errors: plan.errors,
-			})),
+			rows,
 			summary: {
-				invoices: plans.length,
-				ready: plans.filter((plan) => !this.blockerOf(plan)).length,
+				invoices: rows.length,
+				lines: plans.length,
+				/** Líneas listas para registrar. */
+				ready: applicable.length,
+				/** Facturas con al menos una línea lista. */
+				invoices_ready: new Set(applicable.map((plan) => plan.invoice_id)).size,
 				with_warnings: plans.filter((plan) => plan.warnings.length).length,
 				with_errors: plans.filter((plan) => this.blockerOf(plan)).length,
-				rows_to_create: plans.filter((plan) => !this.blockerOf(plan)).reduce((sum, plan) => sum + this.rowsOf(plan), 0),
+				rows_to_create: applicable.reduce((sum, plan) => sum + this.rowsOf(plan), 0),
 				records_touched: records.touched,
 				records_to_create: records.to_create,
 			},
@@ -196,6 +254,18 @@ export class OnboardingRegisterService {
 		);
 	}
 
+	/** Primera línea de cada factura (`invoice_id` → `item_id`), para registrar una factura entera como una sola línea (arranque rápido). */
+	async firstItemIds(db: Queryable, invoiceIds: string[]): Promise<Map<string, string>> {
+		if (!invoiceIds.length) return new Map();
+		const rows = (await db.query(
+			`SELECT DISTINCT ON (invoices_legacy_id) invoices_legacy_id, id FROM invoice_items_legacy
+			WHERE invoices_legacy_id = ANY($1::uuid[]) ORDER BY invoices_legacy_id, created_at, id`,
+			[invoiceIds]
+		)) as Row[];
+
+		return new Map(rows.map((row) => [String(row.invoices_legacy_id), String(row.id)]));
+	}
+
 	/** Registro dentro de una transacción abierta (con la marca ya fijada). Lo usan también el arranque rápido, la importación y Editar línea. */
 	async registerInTx(
 		runner: Queryable,
@@ -204,11 +274,11 @@ export class OnboardingRegisterService {
 		actor: OnboardingActor,
 		options: RegisterOptions = {}
 	): Promise<RegisterResult> {
-		const plans = await this.plan(runner, holdingId, invoices, true, options.replace, options.targetKey);
-		// Al volver a registrar, la línea de factura puede tener filas de otros registros: los `split_index` nuevos van después de los usados.
-		const itemIds = [...new Set(plans.map((plan) => str(plan.invoice?.item_id)).filter(Boolean))] as string[];
+		const plans = await this.plan(runner, holdingId, invoices, { ...options, lock: true });
+		// Una línea de factura puede tener filas de otros registros (otra parte, un registro anterior): los `split_index` nuevos van después.
+		const itemIds = [...new Set(plans.map((plan) => plan.item_id).filter(Boolean))] as string[];
 		const splitBase = new Map(
-			options.replace && itemIds.length
+			itemIds.length
 				? (
 						(await runner.query(
 							`SELECT invoice_item_legacy_id AS item_id, MAX(split_index) AS max_split FROM mrr_legacy
@@ -218,17 +288,18 @@ export class OnboardingRegisterService {
 					).map((row) => [String(row.item_id), num(row.max_split)])
 				: []
 		);
-		const skipped: Array<{ invoice_id: string; reason: RegisterError }> = [];
+		const skipped: RegisterResult['skipped'] = [];
 		const records = new Set<string>();
 		const batches = new Map<string, string>();
 		const createdIds: string[] = [];
+		const marked = new Set<string>();
 		let created = 0;
 
 		for (const plan of plans) {
 			const blocker = this.blockerOf(plan);
 
 			if (blocker) {
-				skipped.push({ invoice_id: plan.invoice_id, reason: blocker });
+				skipped.push({ invoice_id: plan.invoice_id, item_id: plan.item_id ?? plan.input.item_id, reason: blocker });
 				continue;
 			}
 			// Un registro (`batch_id`) por cliente × moneda en esta aplicación; el del `target_key` si se continúa uno; el dado al editar.
@@ -236,16 +307,10 @@ export class OnboardingRegisterService {
 			const batchId = options.batchId ?? plan.target?.batch_id ?? batches.get(group) ?? randomUUID();
 
 			batches.set(group, batchId);
-			const inserted = await this.insertRows(
-				runner,
-				holdingId,
-				plan,
-				actor,
-				batchId,
-				options.contractId ?? null,
-				splitBase.get(String(plan.invoice?.item_id)) ?? 0
-			);
+			const base = splitBase.get(plan.item_id!) ?? 0;
+			const inserted = await this.insertRows(runner, holdingId, plan, actor, batchId, options.contractId ?? null, base);
 
+			splitBase.set(plan.item_id!, base + plan.products.length);
 			created += inserted.count;
 			createdIds.push(...inserted.ids);
 			records.add(
@@ -256,11 +321,14 @@ export class OnboardingRegisterService {
 					contract_id: options.contractId ?? null,
 				})
 			);
-			await runner.query(
-				`UPDATE invoices_legacy SET reconciliation_status = 'mrr_legacy'${options.contractId ? ', contract_id = COALESCE(contract_id, $3)' : ''}
-				WHERE id = $1 AND holding_id = $2`,
-				options.contractId ? [plan.invoice_id, holdingId, options.contractId] : [plan.invoice_id, holdingId]
-			);
+			if (!marked.has(plan.invoice_id)) {
+				marked.add(plan.invoice_id);
+				await runner.query(
+					`UPDATE invoices_legacy SET reconciliation_status = 'mrr_legacy'${options.contractId ? ', contract_id = COALESCE(contract_id, $3)' : ''}
+					WHERE id = $1 AND holding_id = $2`,
+					options.contractId ? [plan.invoice_id, holdingId, options.contractId] : [plan.invoice_id, holdingId]
+				);
+			}
 			await insertOnboardingEvent(runner, holdingId, actor.userId, {
 				type: 'history_registered',
 				lineKey: `${batchId}|${plan.client_id}|${plan.input.contract_currency}`,
@@ -268,6 +336,9 @@ export class OnboardingRegisterService {
 				entityId: plan.invoice_id,
 				payload: {
 					batch_id: batchId,
+					item_id: plan.item_id,
+					item_index: plan.item_index,
+					item_description: plan.item_description,
 					period_from: plan.input.period_from,
 					period_to: plan.input.period_to,
 					contract_currency: plan.input.contract_currency,
@@ -316,10 +387,10 @@ export class OnboardingRegisterService {
 	}
 
 	/**
-	 * Registro de destino de cada factura (Domi 18-10): `record_key` = el registro pendiente al que se suma (su `target_key`, validado) o
+	 * Registro de destino de cada línea (Domi 18-10): `record_key` = el registro pendiente al que se suma (su `target_key`, validado) o
 	 * `null` si nace un registro nuevo al aplicar (su `batch_id` no existe aún); `record_exists` = se suma a uno existente;
 	 * `existing_records[]` = registros pendientes del mismo cliente y moneda que podrían continuarse (con sus productos y meses). `touched` =
-	 * claves distintas de los registros existentes que recibirían filas (sin las facturas bloqueadas); `to_create` = registros nuevos (cliente
+	 * claves distintas de los registros existentes que recibirían filas (sin las líneas bloqueadas); `to_create` = registros nuevos (cliente
 	 * × moneda sin destino). Solo lectura.
 	 */
 	async recordsOf(db: Queryable, holdingId: string, plans: RegisterPlan[]) {
@@ -358,8 +429,8 @@ export class OnboardingRegisterService {
 	}
 
 	/**
-	 * Registros de destino (`target_key` por factura o global): clave → partes si es un registro **pendiente** del holding (sin contrato y
-	 * con filas sin marcar); una clave que no decodifica es 400 con su campo. Solo lectura.
+	 * Registros de destino (`target_key` por línea, por factura o global): clave → partes si es un registro **pendiente** del holding (sin
+	 * contrato y con filas sin marcar); una clave que no decodifica es 400 con su campo. Solo lectura.
 	 */
 	private async resolveTargets(
 		db: Queryable,
@@ -373,6 +444,10 @@ export class OnboardingRegisterService {
 		inputs.forEach((input, index) => {
 			if (input.target_key && !wanted.has(input.target_key))
 				wanted.set(input.target_key, decodeLineKey(input.target_key, `invoices.${index}.target_key`));
+			input.lines.forEach((line, lineIndex) => {
+				if (line.target_key && !wanted.has(line.target_key))
+					wanted.set(line.target_key, decodeLineKey(line.target_key, `invoices.${index}.lines.${lineIndex}.target_key`));
+			});
 		});
 		const parts = [...wanted.values()].filter((target) => !target.contract_id);
 		const pending = parts.length
@@ -398,39 +473,58 @@ export class OnboardingRegisterService {
 		return new Map([...wanted].map(([key, target]) => [key, !target.contract_id && pending.has(rawLineKey(target)) ? target : null]));
 	}
 
-	/** Valida y arma el plan de cada factura. `targetKey` = registro pendiente global al que se suman las facturas sin `target_key` propio. */
-	async plan(
-		db: Queryable,
-		holdingId: string,
-		inputs: RegisterHistoryInvoiceDto[],
-		lock = false,
-		replace?: ReplaceOptions,
-		targetKey?: string
-	): Promise<RegisterPlan[]> {
+	/**
+	 * Valida y arma el plan de **cada línea** de cada factura. `targetKey` = registro pendiente global al que se suman las líneas sin
+	 * `target_key` propio ni de su factura. `lineAmounts` (o los de `replace`) reemplazan el subtotal de la línea como monto en moneda de
+	 * factura.
+	 */
+	async plan(db: Queryable, holdingId: string, inputs: RegisterHistoryInvoiceDto[], options: PlanOptions = {}): Promise<RegisterPlan[]> {
+		const { lock = false, replace, targetKey } = options;
+		const lineAmounts = replace?.lineAmounts ?? options.lineAmounts ?? new Map<string, number>();
 		const invoiceIds = [...new Set(inputs.map((input) => input.invoice_id))];
-		const productIds = [...new Set(inputs.flatMap((input) => input.products.map((product) => product.product_id)))];
+		const productIds = [...new Set(inputs.flatMap((input) => input.lines.flatMap((line) => line.products.map((product) => product.product_id))))];
 		const targets = await this.resolveTargets(db, holdingId, inputs, targetKey);
-		const [invoices, products, currencies, fxRef] = await Promise.all([
+		const [invoices, items, registered, products, currencies, fxRef] = await Promise.all([
 			db.query(
 				`SELECT il.id, il.invoice_number, il.issue_date, il.company_id, il.client_tax_id, il.legal_client_name, il.invoice_currency,
 					il.amount_invoice_currency, il.total_invoice_currency, il.vat, il.status, ce.tax_id AS entity_tax_id,
-					COALESCE(il.client_id, ce.client_id) AS client_id, it.id AS item_id, it.subtotal AS item_subtotal, it.description AS item_description,
-					it.currency AS item_currency, EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id) AS has_history,
-					il.reconciled_invoice_id
+					COALESCE(il.client_id, ce.client_id) AS client_id, il.reconciled_invoice_id
 				FROM invoices_legacy il
 				LEFT JOIN client_entities ce ON ce.id = il.client_entity_id
-				LEFT JOIN LATERAL (
-					SELECT ii.id, ii.subtotal, ii.description, ii.currency FROM invoice_items_legacy ii
-					WHERE ii.invoices_legacy_id = il.id ORDER BY ii.created_at, ii.id LIMIT 1
-				) it ON true
 				WHERE il.holding_id = $1 AND il.id = ANY($2::uuid[])${lock ? '\n\t\t\t\tFOR UPDATE OF il' : ''}`,
 				[holdingId, invoiceIds]
+			) as Promise<Row[]>,
+			db.query(
+				`SELECT ii.id, ii.invoices_legacy_id, ii.subtotal, ii.description, ii.currency FROM invoice_items_legacy ii
+				WHERE ii.invoices_legacy_id = ANY($1::uuid[]) ORDER BY ii.created_at, ii.id`,
+				[invoiceIds]
+			) as Promise<Row[]>,
+			// Lo ya registrado por línea de factura: una fila por línea × parte, con el monto en moneda de factura que cubre (igual en todos sus meses).
+			db.query(
+				`SELECT m.invoice_legacy_id, m.invoice_item_legacy_id AS item_id, m.split_index, MAX(m.allocated_invoice_currency) AS allocated
+				FROM mrr_legacy m WHERE m.invoice_legacy_id = ANY($1::uuid[]) GROUP BY m.invoice_legacy_id, m.invoice_item_legacy_id, m.split_index`,
+				[invoiceIds]
 			) as Promise<Row[]>,
 			db.query(`SELECT id, name FROM products WHERE holding_id = $1 AND id = ANY($2::uuid[])`, [holdingId, productIds]) as Promise<Row[]>,
 			db.query(`SELECT code FROM currencies WHERE is_active = true`) as Promise<Row[]>,
 			loadFxReferences(db, holdingId),
 		]);
 		const invoiceById = new Map(invoices.map((row) => [String(row.id), row]));
+		const itemsByInvoice = new Map<string, Row[]>();
+
+		for (const item of items) {
+			const key = String(item.invoices_legacy_id);
+
+			itemsByInvoice.set(key, [...(itemsByInvoice.get(key) ?? []), item]);
+		}
+		const registeredItems = new Set(registered.map((row) => String(row.item_id)));
+		const coveredByInvoice = new Map<string, number>();
+
+		for (const row of registered) {
+			const key = String(row.invoice_legacy_id);
+
+			coveredByInvoice.set(key, (coveredByInvoice.get(key) ?? 0) + num(row.allocated));
+		}
 		const productById = new Map(products.map((row) => [String(row.id), str(row.name)]));
 		const known = new Set(currencies.map((row) => String(row.code)));
 		const clientIds = replace ? [replace.clientId] : ([...new Set(invoices.map((row) => str(row.client_id)).filter(Boolean))] as string[]);
@@ -444,82 +538,106 @@ export class OnboardingRegisterService {
 			: [];
 		const coverage = new Set(covered.map((row) => `${row.client_id}|${row.product_name}|${row.contract_currency}|${row.period}`));
 
-		return inputs.map((input) => {
+		return inputs.flatMap((input, invoiceIndex) => {
 			const invoice = invoiceById.get(input.invoice_id) ?? null;
-			const errors: RegisterError[] = [];
-			const warnings: RegisterWarning[] = [];
-			const validPeriod =
-				monthsBetween(input.period_from, input.period_to) >= 0 && monthsBetween(input.period_from, input.period_to) < REGISTER_MAX_MONTHS;
-			const months = validPeriod ? monthRange(input.period_from, input.period_to) : [];
+			const invoiceItems = itemsByInvoice.get(input.invoice_id) ?? [];
+			const invoiceAmount = num(invoice?.amount_invoice_currency);
+			// Registrada entera (por factura, antes de la regla por línea): sus filas cubren el neto (±1 %) → ninguna línea se vuelve a registrar.
+			const coveredAmount = coveredByInvoice.get(input.invoice_id);
+			const fullyRegistered =
+				coveredAmount !== undefined &&
+				(invoiceAmount === 0 || Math.abs(coveredAmount) >= Math.abs(invoiceAmount) * (1 - SUM_TOLERANCE) - 0.005);
 			const clientId = replace ? replace.clientId : str(invoice?.client_id);
-			const invoiceAmount = replace?.invoiceAmounts.get(input.invoice_id) ?? num(invoice?.amount_invoice_currency);
-			const fx = input.amount_contract_currency !== 0 ? invoiceAmount / input.amount_contract_currency : null;
+			const seenItems = new Set<string>();
 
-			if (!invoice) errors.push('not_found');
-			// Adoptada como factura del contrato (§4.5): su MRR vive en el devengo del contrato, no en el histórico.
-			else if (invoice.reconciled_invoice_id) errors.push('adopted');
-			else if (invoice.has_history === true && !replace) errors.push('already_registered');
-			else if (!invoice.item_id) errors.push('invoice_without_items');
-			if (!validPeriod) errors.push('invalid_period');
-			if ((fx === null && invoiceAmount !== 0) || (fx !== null && fx <= 0)) errors.push('invalid_amount');
-			if (known.size && !known.has(input.contract_currency)) errors.push('currency_not_enabled');
-			if (input.products.some((product) => !productById.has(product.product_id))) errors.push('product_not_found');
-			if (new Set(input.products.map((product) => product.product_id)).size !== input.products.length) errors.push('duplicate_product');
-			if (invoice && !clientId) {
-				warnings.push('no_client');
-				errors.push('no_client');
-			}
-			// Continuar un registro (Domi 18-10): debe ser un registro pendiente del mismo cliente y moneda.
-			const wantedKey = input.target_key ?? targetKey ?? null;
-			const target = wantedKey ? (targets.get(wantedKey) ?? null) : null;
+			return input.lines.map((line, lineIndex) => {
+				const itemIndex = invoiceItems.findIndex((item) => String(item.id) === line.item_id);
+				const item = itemIndex >= 0 ? invoiceItems[itemIndex] : null;
+				const errors: RegisterError[] = [];
+				const warnings: RegisterWarning[] = [];
+				const validPeriod =
+					monthsBetween(line.period_from, line.period_to) >= 0 && monthsBetween(line.period_from, line.period_to) < REGISTER_MAX_MONTHS;
+				const months = validPeriod ? monthRange(line.period_from, line.period_to) : [];
+				const lineAmount = item ? (lineAmounts.get(lineAmountKey(input.invoice_id, line.item_id)) ?? num(item.subtotal)) : null;
+				const fx = lineAmount !== null && line.amount_contract_currency !== 0 ? lineAmount / line.amount_contract_currency : null;
 
-			if (wantedKey && !target) errors.push('target_not_found');
-			else if (target && clientId && (target.client_id !== clientId || target.contract_currency !== input.contract_currency)) {
-				errors.push('target_mismatch');
-			}
-			const sum = input.products.reduce((total, product) => total + product.amount_contract_currency, 0);
+				if (!invoice) errors.push('not_found');
+				// Adoptada como factura del contrato (§4.5): su MRR vive en el devengo del contrato, no en el histórico.
+				else if (invoice.reconciled_invoice_id) errors.push('adopted');
+				else if (!invoiceItems.length) errors.push('invoice_without_items');
+				else if (!item) errors.push('item_not_found');
+				else if (seenItems.has(line.item_id)) errors.push('duplicate_line');
+				else if (!replace && (registeredItems.has(line.item_id) || fullyRegistered)) errors.push('already_registered');
+				seenItems.add(line.item_id);
+				if (!validPeriod) errors.push('invalid_period');
+				if (item && ((fx === null && lineAmount !== 0) || (fx !== null && fx <= 0))) errors.push('invalid_amount');
+				if (known.size && !known.has(line.contract_currency)) errors.push('currency_not_enabled');
+				if (line.products.some((product) => !productById.has(product.product_id))) errors.push('product_not_found');
+				if (new Set(line.products.map((product) => product.product_id)).size !== line.products.length) errors.push('duplicate_product');
+				if (invoice && !clientId) {
+					warnings.push('no_client');
+					errors.push('no_client');
+				}
+				// Continuar un registro (Domi 18-10): debe ser un registro pendiente del mismo cliente y moneda.
+				const wantedKey = line.target_key ?? input.target_key ?? targetKey ?? null;
+				const target = wantedKey ? (targets.get(wantedKey) ?? null) : null;
 
-			if (Math.abs(sum - input.amount_contract_currency) > Math.abs(input.amount_contract_currency) * SUM_TOLERANCE + 0.005)
-				warnings.push('sum_mismatch');
-			if (invoice) warnings.push(...fxWarningsOf(str(invoice.invoice_currency), input.contract_currency, fx, fxRef));
-			const planProducts = input.products.map((product) => {
-				const name = productById.get(product.product_id) ?? null;
-				const productCovered =
-					clientId && name ? months.filter((month) => coverage.has(`${clientId}|${name}|${input.contract_currency}|${month}`)) : [];
+				if (wantedKey && !target) errors.push('target_not_found');
+				else if (target && clientId && (target.client_id !== clientId || target.contract_currency !== line.contract_currency)) {
+					errors.push('target_mismatch');
+				}
+				const sum = line.products.reduce((total, product) => total + product.amount_contract_currency, 0);
+
+				if (Math.abs(sum - line.amount_contract_currency) > Math.abs(line.amount_contract_currency) * SUM_TOLERANCE + 0.005)
+					warnings.push('sum_mismatch');
+				if (invoice) warnings.push(...fxWarningsOf(str(invoice.invoice_currency), line.contract_currency, fx, fxRef));
+				const planProducts = line.products.map((product) => {
+					const name = productById.get(product.product_id) ?? null;
+					const productCovered =
+						clientId && name ? months.filter((month) => coverage.has(`${clientId}|${name}|${line.contract_currency}|${month}`)) : [];
+
+					return {
+						product_id: product.product_id,
+						product_name: name,
+						amount: product.amount_contract_currency,
+						mrr_per_month: months.length ? round2(product.amount_contract_currency / months.length) : 0,
+						covered: productCovered,
+					};
+				});
+
+				if (planProducts.some((product) => product.covered.length)) warnings.push('month_already_covered');
 
 				return {
-					product_id: product.product_id,
-					product_name: name,
-					amount: product.amount_contract_currency,
-					mrr_per_month: months.length ? round2(product.amount_contract_currency / months.length) : 0,
-					covered: productCovered,
+					invoice_id: input.invoice_id,
+					invoice_number: str(invoice?.invoice_number),
+					client_id: clientId,
+					invoice_currency: str(invoice?.invoice_currency),
+					amount_invoice_currency: invoice ? invoiceAmount : null,
+					item_id: item ? String(item.id) : null,
+					item_index: item ? itemIndex + 1 : null,
+					item_description: str(item?.description),
+					item_subtotal: item ? num(item.subtotal) : null,
+					item_amount_invoice_currency: lineAmount,
+					item_currency: str(item?.currency),
+					months,
+					mrr_per_month: months.length ? round2(line.amount_contract_currency / months.length) : 0,
+					fx_contract_to_invoice: fx === null ? null : round6(fx),
+					products: planProducts,
+					warnings: [...new Set(warnings)],
+					errors: [...new Set(errors)],
+					target: errors.length ? null : target,
+					input: line,
+					position: { invoice: invoiceIndex, line: lineIndex },
+					invoice,
 				};
 			});
-
-			if (planProducts.some((product) => product.covered.length)) warnings.push('month_already_covered');
-
-			return {
-				invoice_id: input.invoice_id,
-				invoice_number: str(invoice?.invoice_number),
-				client_id: clientId,
-				invoice_currency: str(invoice?.invoice_currency),
-				amount_invoice_currency: invoice ? invoiceAmount : null,
-				months,
-				mrr_per_month: months.length ? round2(input.amount_contract_currency / months.length) : 0,
-				fx_contract_to_invoice: fx === null ? null : round6(fx),
-				products: planProducts,
-				warnings: [...new Set(warnings)],
-				errors: [...new Set(errors)],
-				target: errors.length ? null : target,
-				input,
-				invoice,
-			};
 		});
 	}
 
 	/**
-	 * Una fila por producto × mes no cubierto (`split_index` = `splitBase` + posición del producto). Un solo INSERT por factura. `count` =
-	 * filas enviadas; `ids` = las que la base devolvió (`RETURNING id`; menos si `ON CONFLICT` saltó alguna).
+	 * Una fila por producto × mes no cubierto (`split_index` = `splitBase` + posición del producto), colgadas de la línea de factura del
+	 * plan. Un solo INSERT por línea. `count` = filas enviadas; `ids` = las que la base devolvió (`RETURNING id`; menos si `ON CONFLICT`
+	 * saltó alguna).
 	 */
 	private async insertRows(
 		db: Queryable,
@@ -543,7 +661,7 @@ export class OnboardingRegisterService {
 				const row = [
 					holdingId,
 					plan.invoice_id,
-					invoice.item_id,
+					plan.item_id,
 					splitBase + index + 1,
 					invoice.company_id,
 					str(invoice.client_tax_id) ?? str(invoice.entity_tax_id) ?? '',
@@ -555,9 +673,9 @@ export class OnboardingRegisterService {
 					num(invoice.total_invoice_currency),
 					invoice.vat ?? null,
 					invoice.status,
-					str(invoice.item_description) ?? product.product_name,
-					str(invoice.item_currency) ?? invoice.invoice_currency,
-					num(invoice.item_subtotal),
+					plan.item_description ?? product.product_name,
+					plan.item_currency ?? invoice.invoice_currency,
+					plan.item_subtotal ?? 0,
 					round2(product.amount * fx),
 					plan.client_id,
 					plan.input.contract_currency,

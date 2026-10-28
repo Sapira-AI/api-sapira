@@ -15,6 +15,8 @@ import type { RegisterPlan } from './onboarding-register.service';
 export interface LineEditRow {
 	id: string | null;
 	invoice_id: string;
+	/** Línea de factura de la fila (`invoice_item_legacy_id`); null en filas antiguas sin línea. */
+	item_id: string | null;
 	invoice_number: string | null;
 	period: Month;
 	subtotal: number;
@@ -41,7 +43,7 @@ export const isRemovedRow = (row: { skip_code: string | null }) => (REMOVED_REAS
 const monthlyOf = (row: { subtotal: number; term: number }) => row.subtotal / (row.term || 1);
 
 /**
- * Registro actual de una factura en la línea (para prellenar "Editar línea"): período = primer y último mes de sus filas, monto en moneda
+ * Registro actual de una factura (o de una de sus líneas) en el registro (para prellenar "Editar línea"): período = primer y último mes de sus filas, monto en moneda
  * de contrato = Σ subtotal ÷ plazo (cada fila es la parte de un mes), recurrente si todas lo son. Ignora las filas quitadas salvo que no
  * haya otras.
  */
@@ -77,6 +79,7 @@ export function generatedRows(plan: RegisterPlan, rawKeyOf: (contractCurrency: s
 			.map((month) => ({
 				id: null,
 				invoice_id: plan.invoice_id,
+				item_id: plan.item_id,
 				invoice_number: plan.invoice_number,
 				period: month,
 				subtotal: product.amount,

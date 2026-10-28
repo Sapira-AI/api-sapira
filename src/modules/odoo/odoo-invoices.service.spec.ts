@@ -121,6 +121,54 @@ describe('OdooInvoicesService', () => {
 		);
 	});
 
+	const PAC_FAULT =
+		'XML-RPC Fault: Ocurrió un error al enviar el CFDI al PAC: - Código: CFDI40147 - El campo DomicilioFiscalReceptor del receptor, debe encontrarse en la lista de RFC inscritos no cancelados en el SAT.';
+	const conexion = { url: 'https://odoo.example.com', database_name: 'odoo', username: 'api@example.com', api_key: 'api-key' };
+
+	it('readInvoiceState: lee state, name y edi_state; sin account_edi vuelve a leer sin el campo; id desconocido → null', async () => {
+		const commonClient = { methodCall: jest.fn().mockResolvedValue(7) };
+		const objectClient = {
+			methodCall: jest
+				.fn()
+				.mockRejectedValueOnce(new Error('Invalid field edi_state'))
+				.mockResolvedValueOnce([{ state: 'draft', name: '/' }])
+				.mockResolvedValueOnce([{ state: 'posted', name: 'A10166', edi_state: 'sent' }])
+				.mockResolvedValueOnce([]),
+		};
+		const odooProvider = { createXmlRpcClient: jest.fn().mockReturnValue(commonClient) };
+		odooProvider.createXmlRpcClient.mockImplementation((url: string) => (url.endsWith('/common') ? commonClient : objectClient));
+		const service = new OdooInvoicesService(odooProvider as any, { findOne: jest.fn().mockResolvedValue(conexion) } as any, {} as any, {} as any);
+
+		await expect(service.readInvoiceState('holding-1', 201185)).resolves.toEqual({ state: 'draft', name: '/', edi_state: null });
+		expect(objectClient.methodCall).toHaveBeenNthCalledWith(1, 'execute_kw', expect.arrayContaining(['account.move', 'read', [[201185]], { fields: ['state', 'name', 'edi_state'] }]));
+		expect(objectClient.methodCall).toHaveBeenNthCalledWith(2, 'execute_kw', expect.arrayContaining([{ fields: ['state', 'name'] }]));
+		await expect(service.readInvoiceState('holding-1', 201220)).resolves.toEqual({ state: 'posted', name: 'A10166', edi_state: 'sent' });
+		await expect(service.readInvoiceState('holding-1', 999)).resolves.toBeNull();
+	});
+
+	it('D (28-10): si el wizard de timbre lanza pero el documento quedó publicado, devuelve rechazada con el motivo; si no quedó publicado, lanza', async () => {
+		const commonClient = { methodCall: jest.fn().mockResolvedValue(7) };
+		const objectClient = {
+			methodCall: jest
+				.fn()
+				.mockResolvedValueOnce(45) // wizard create
+				.mockRejectedValueOnce(new Error(PAC_FAULT)) // action_send_and_print
+				.mockResolvedValueOnce([{ state: 'posted', name: 'A10166', edi_state: 'to_send' }]), // relectura
+		};
+		const odooProvider = { createXmlRpcClient: jest.fn((url: string) => (url.endsWith('/common') ? commonClient : objectClient)) };
+		const service = new OdooInvoicesService(odooProvider as any, { findOne: jest.fn().mockResolvedValue(conexion) } as any, {} as any, {} as any);
+
+		const result = await (service as any).emitElectronicInvoiceMexico('holding-1', 201220);
+
+		expect(result).toMatchObject({ success: true, state: 'posted', electronic_status: 'rejected' });
+		expect(result.electronic_errors[0].message).toContain('CFDI40147');
+		expect(result.message).toBe('Factura A10166 publicada en Odoo pero rechazada por SAT/MX EDI');
+
+		objectClient.methodCall.mockReset();
+		objectClient.methodCall.mockResolvedValueOnce(46).mockRejectedValueOnce(new Error('Falló la conexión')).mockResolvedValueOnce([{ state: 'draft', name: '/' }]);
+		await expect((service as any).emitElectronicInvoiceMexico('holding-1', 201221)).rejects.toThrow(/Error emitiendo factura México en Odoo: .*Falló la conexión/);
+	});
+
 	it('falla el envío si el email del cliente es solo espacios', async () => {
 		const commonClient = { methodCall: jest.fn().mockResolvedValue(7) };
 		const objectClient = {

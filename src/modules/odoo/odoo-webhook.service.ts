@@ -1,8 +1,10 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Connection, Model } from 'mongoose';
 import { DataSource } from 'typeorm';
 
 import { Invoice } from '@/databases/postgresql/entities/facturacion/invoice.entity';
+import { detachInvoiceFromOdooFailureAlerts, type OdooFailureAlertStore } from '@/modules/invoices/odoo-failure-alert';
+import { NotificationsService } from '@/modules/notifications/notifications.service';
 
 import {
 	DiagnosticoActualizacionesDto,
@@ -36,7 +38,9 @@ export class OdooWebhookService {
 
 	constructor(
 		@Inject('DbConnectionToken') private connection: Connection,
-		private readonly dataSource: DataSource
+		private readonly dataSource: DataSource,
+		/** Cierre de las alertas de envío al ERP cuando el documento se publica (C, Domi 28-10). Opcional para los tests y módulos sin notificaciones. */
+		@Optional() private readonly notifications?: NotificationsService
 	) {
 		this.webhookLogModel = this.connection.model(OdooWebhookLog.name, OdooWebhookLogSchema);
 		this.invoiceUpdateLogModel = this.connection.model(OdooInvoiceUpdateLog.name, OdooInvoiceUpdateLogSchema);
@@ -387,6 +391,9 @@ export class OdooWebhookService {
 			amountUntaxed: invoiceData.amount_untaxed !== undefined ? Number(invoiceData.amount_untaxed) : undefined,
 			invoiceDate: invoiceData.invoice_date,
 			invoiceName: invoiceData.name,
+			// Estado del timbre (`account_edi`; México también expone `l10n_mx_edi_cfdi_state`). Hoy la acción automatizada no lo manda:
+			// cuando Leon lo agregue, una Enviada pasa a Emitida al llegar `sent` (D, Domi 28-10).
+			ediState: typeof invoiceData.edi_state === 'string' ? invoiceData.edi_state : typeof invoiceData.l10n_mx_edi_cfdi_state === 'string' ? invoiceData.l10n_mx_edi_cfdi_state : null,
 		};
 	}
 
@@ -584,9 +591,11 @@ export class OdooWebhookService {
 				return { updated: false, message: 'No tiene x_sapira_invoice_id' };
 			}
 
-			// Determinar el nuevo estado
-			const newStatus = this.determineInvoiceStatus(fields.state, fields.paymentState);
-			this.logger.debug(`Estado determinado: ${newStatus} (state: ${fields.state}, paymentState: ${fields.paymentState})`);
+			// Determinar el nuevo estado (publicada → Enviada; con el timbre confirmado en el aviso → Emitida, D 28-10)
+			let newStatus = this.determineInvoiceStatus(fields.state, fields.paymentState);
+
+			if (newStatus === 'Enviada' && fields.ediState === 'sent') newStatus = 'Emitida';
+			this.logger.debug(`Estado determinado: ${newStatus} (state: ${fields.state}, paymentState: ${fields.paymentState}, edi: ${fields.ediState ?? '-'})`);
 
 			if (!newStatus) {
 				this.logger.warn(`Estado en Odoo es '${fields.state}', no 'posted'`);
@@ -640,7 +649,8 @@ export class OdooWebhookService {
 				// PostgreSQL acepta strings en formato YYYY-MM-DD para campos de tipo date
 				updateData.issue_date = fields.invoiceDate as any;
 			}
-			if (fields.invoiceName) {
+			// "/" es el nombre de un borrador sin folio en Odoo: nunca se copia como folio (C, Domi 28-10).
+			if (fields.invoiceName && fields.invoiceName.trim() !== '/') {
 				updateData.invoice_number = fields.invoiceName;
 			}
 
@@ -691,6 +701,12 @@ export class OdooWebhookService {
 				// pasados. Si cambió algo que mueve revenue (estado entre Por Emitir y emitida, fecha de emisión o total), se reconstruye el
 				// cronograma del contrato desde el mes más temprano afectado. Un error aquí no deshace la actualización: se registra.
 				await this.rebuildRevenueIfNeeded(invoiceRepository, invoice, updateData);
+				// La factura quedó publicada en el ERP: sus avisos de envío fallido se cierran (o sale del aviso agrupado), C 28-10. Nunca rompe.
+				if (invoice.status === 'Por Emitir' && updateData.status && updateData.status !== 'Por Emitir' && this.notifications) {
+					await detachInvoiceFromOdooFailureAlerts(this.notifications as OdooFailureAlertStore, invoice.holding_id, invoice.id).catch((error: Error) =>
+						this.logger.warn(`No se pudieron cerrar los avisos de envío de la factura ${invoice.id}: ${error.message}`)
+					);
+				}
 
 				this.logger.log(
 					`✓ Factura ${invoice.invoice_number || fields.sapiraInvoiceId} actualizada ` +

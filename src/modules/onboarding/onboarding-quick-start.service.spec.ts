@@ -41,7 +41,7 @@ function build(handlers: Handler[] = [], drafts: Partial<ContractDraftsService> 
 		],
 		['SELECT id, name, product_code FROM products', () => [{ id: PRODUCT, name: 'PATHFINDER+', product_code: 'PF' }]],
 		[
-			'LEFT JOIN LATERAL',
+			'il.id = ANY($2::uuid[])',
 			() => [
 				{
 					id: 'inv-9',
@@ -54,11 +54,15 @@ function build(handlers: Handler[] = [], drafts: Partial<ContractDraftsService> 
 					total_invoice_currency: '1100',
 					status: 'Pagada',
 					client_id: 'cl-1',
-					item_id: 'it-9',
-					item_subtotal: '1000',
-					has_history: false,
+					reconciled_invoice_id: null,
 				},
 			],
+		],
+		// La última factura entera como una sola línea de registro, colgada de su primera línea (Domi 28-10).
+		['SELECT DISTINCT ON (invoices_legacy_id)', () => [{ invoices_legacy_id: 'inv-9', id: 'it-9' }]],
+		[
+			'FROM invoice_items_legacy ii WHERE ii.invoices_legacy_id = ANY',
+			() => [{ id: 'it-9', invoices_legacy_id: 'inv-9', subtotal: '1000', description: null, currency: null }],
 		],
 		['SELECT id, name FROM products', () => [{ id: PRODUCT, name: 'PATHFINDER+' }]],
 		['FROM currencies', () => [{ code: 'BRL' }, { code: 'USD' }]],

@@ -22,9 +22,9 @@ import {
 	type Row,
 	str,
 } from './onboarding-common';
-import { OnboardingRegisterService, type RegisterError, type RegisterWarning } from './onboarding-register.service';
+import { lineAmountKey, OnboardingRegisterService, type RegisterError, type RegisterWarning } from './onboarding-register.service';
 
-import type { QuickStartApplyDto, QuickStartPreviewDto, QuickStartProposalDto } from './dtos/onboarding.dto';
+import type { QuickStartApplyDto, QuickStartPreviewDto, QuickStartProposalDto, RegisterHistoryInvoiceDto } from './dtos/onboarding.dto';
 
 export type QuickStartFlag = 'no_client' | 'no_product' | 'already_has_contract' | 'multi_currency';
 
@@ -81,11 +81,17 @@ export class OnboardingQuickStartService {
 		// Lo que la usuaria ya completó (opcional): mismo motor que al aplicar, para mostrar tipo de cambio, avisos y errores.
 		const completed = new Map((dto.proposals ?? []).map((proposal) => [proposal.entity_id, proposal]));
 		const withInput = invoices.filter((invoice) => completed.has(String(invoice.client_entity_id)));
+		const firstItems = await this.register.firstItemIds(
+			this.dataSource,
+			withInput.map((invoice) => String(invoice.id))
+		);
+		const inputs = withInput.map((invoice) => this.registerInput(completed.get(String(invoice.client_entity_id))!, invoice, firstItems));
 		const plans = withInput.length
 			? await this.register.plan(
 					this.dataSource,
 					holdingId,
-					withInput.map((invoice) => this.registerInput(completed.get(String(invoice.client_entity_id))!, String(invoice.id)))
+					inputs.map((entry) => entry.input),
+					{ lineAmounts: this.lineAmounts(inputs) }
 				)
 			: [];
 		const planByInvoice = new Map(plans.map((plan) => [plan.invoice_id, plan]));
@@ -227,8 +233,11 @@ export class OnboardingQuickStartService {
 				skipped.push({ entity_id: proposal.entity_id, reason: 'no_product', message: 'Elige al menos un producto del catálogo' });
 				continue;
 			}
-			const registerInput = this.registerInput(proposal, String(invoice.id));
-			const [plan] = await this.register.plan(this.dataSource, holdingId, [registerInput]);
+			const firstItems = await this.register.firstItemIds(this.dataSource, [String(invoice.id)]);
+			const entry = this.registerInput(proposal, invoice, firstItems);
+			const registerInput = entry.input;
+			const lineAmounts = this.lineAmounts([entry]);
+			const [plan] = await this.register.plan(this.dataSource, holdingId, [registerInput], { lineAmounts });
 			const blocker = this.register.blockerOf(plan);
 
 			if (blocker) {
@@ -247,7 +256,7 @@ export class OnboardingQuickStartService {
 
 			try {
 				const result = await withApiWriter(this.dataSource, async (runner) => {
-					const registered = await this.register.registerInTx(runner, holdingId, [registerInput], actor, { contractId });
+					const registered = await this.register.registerInTx(runner, holdingId, [registerInput], actor, { contractId, lineAmounts });
 
 					if (!registered.created_rows) throw new Error(registered.skipped[0]?.reason ?? 'no_history_rows');
 					await insertOnboardingEvent(runner, holdingId, actor.userId, {
@@ -282,19 +291,40 @@ export class OnboardingQuickStartService {
 		return { created, skipped };
 	}
 
-	private registerInput(proposal: QuickStartProposalDto, invoiceId: string) {
+	/**
+	 * Lo de Registrar histórico para la última factura **entera** (el arranque rápido reparte el neto por producto, no por línea): una sola
+	 * línea de registro colgada de la primera línea de la factura, con el neto como monto en moneda de factura (`lineAmounts`). Sin líneas,
+	 * `item_id` queda vacío y el motor responde `invoice_without_items`.
+	 */
+	private registerInput(proposal: QuickStartProposalDto, invoice: Row, firstItems: Map<string, string>) {
+		const invoiceId = String(invoice.id);
+		const itemId = firstItems.get(invoiceId) ?? '';
+
 		return {
-			invoice_id: invoiceId,
-			period_from: proposal.period_from,
-			period_to: proposal.period_to,
-			contract_currency: proposal.contract_currency,
-			amount_contract_currency: proposal.amount_contract_currency,
-			is_recurring: true,
-			products: proposal.products.map((product) => ({
-				product_id: product.product_id,
-				amount_contract_currency: product.amount_contract_currency,
-			})),
+			amount: num(invoice.amount_invoice_currency),
+			input: {
+				invoice_id: invoiceId,
+				lines: [
+					{
+						item_id: itemId,
+						period_from: proposal.period_from,
+						period_to: proposal.period_to,
+						contract_currency: proposal.contract_currency,
+						amount_contract_currency: proposal.amount_contract_currency,
+						is_recurring: true,
+						products: proposal.products.map((product) => ({
+							product_id: product.product_id,
+							amount_contract_currency: product.amount_contract_currency,
+						})),
+					},
+				],
+			} satisfies RegisterHistoryInvoiceDto,
 		};
+	}
+
+	/** Neto de cada factura como monto en moneda de factura de su única línea de registro. */
+	private lineAmounts(entries: Array<{ amount: number; input: RegisterHistoryInvoiceDto }>): Map<string, number> {
+		return new Map(entries.map((entry) => [lineAmountKey(entry.input.invoice_id, entry.input.lines[0].item_id), entry.amount]));
 	}
 
 	/**

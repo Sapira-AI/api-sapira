@@ -274,25 +274,22 @@ describe('Onboarding · HTTP (tenancy, permisos, validación)', () => {
 		});
 
 		it('editar línea = volver a registrar sus facturas: vista previa y PATCH validan el registro por factura; solo EDIT escribe', async () => {
-			const body = {
-				invoices: [
-					{
-						invoice_id: INVOICE,
-						period_from: '2026-04',
-						period_to: '2026-06',
-						contract_currency: 'usd',
-						amount_contract_currency: 300,
-						is_recurring: true,
-						products: [{ product_id: INVOICE, amount_contract_currency: 300 }],
-					},
-				],
+			const line = {
+				item_id: INVOICE,
+				period_from: '2026-04',
+				period_to: '2026-06',
+				contract_currency: 'usd',
+				amount_contract_currency: 300,
+				is_recurring: true,
+				products: [{ product_id: INVOICE, amount_contract_currency: 300 }],
 			};
+			const body = { invoices: [{ invoice_id: INVOICE, lines: [line] }] };
 
 			await send('post', `/onboarding/history/lines/${KEY}/edit/preview`, body).expect(200);
 			expect(history.editPreview).toHaveBeenCalledWith(
 				HOLDING,
 				KEY,
-				expect.objectContaining({ invoices: [expect.objectContaining({ contract_currency: 'USD' })] })
+				expect.objectContaining({ invoices: [expect.objectContaining({ lines: [expect.objectContaining({ contract_currency: 'USD' })] })] })
 			);
 			await send('patch', `/onboarding/history/lines/${KEY}`, body).expect(200);
 			expect(history.editLine).toHaveBeenCalledWith(HOLDING, KEY, expect.objectContaining({ invoices: expect.any(Array) }), {
@@ -300,10 +297,12 @@ describe('Onboarding · HTTP (tenancy, permisos, validación)', () => {
 				userId: 'user-editor',
 			});
 			const res = await send('patch', `/onboarding/history/lines/${KEY}`, {
-				invoices: [{ ...body.invoices[0], period_from: '2026-13' }],
+				invoices: [{ invoice_id: INVOICE, lines: [{ ...line, period_from: '2026-13' }] }],
 			}).expect(400);
 
-			expect(res.body.errors[0]).toMatchObject({ field: 'invoices.0.period_from' });
+			expect(res.body.errors[0]).toMatchObject({ field: 'invoices.0.lines.0.period_from' });
+			// El contrato anterior (por factura, sin líneas) ya no existe.
+			await send('patch', `/onboarding/history/lines/${KEY}`, { invoices: [{ ...line, invoice_id: INVOICE }] }).expect(400);
 			// El contrato anterior (meses sueltos) ya no existe.
 			await send('patch', `/onboarding/history/lines/${KEY}`, { months: [] }).expect(400);
 			await send('patch', `/onboarding/history/lines/${KEY}`, { invoices: [] }).expect(400);
@@ -324,24 +323,35 @@ describe('Onboarding · HTTP (tenancy, permisos, validación)', () => {
 		});
 
 		it('registrar histórico acepta target_key por factura y global (continuar un registro)', async () => {
-			const invoice = {
-				invoice_id: INVOICE,
+			const line = {
+				item_id: INVOICE,
 				period_from: '2026-07',
 				period_to: '2026-07',
 				contract_currency: 'USD',
 				amount_contract_currency: 1,
 				products: [{ product_id: INVOICE, amount_contract_currency: 1 }],
 			};
+			const invoice = { invoice_id: INVOICE, lines: [line] };
 
 			await send('post', '/onboarding/previous-invoices/register-history/preview', {
-				invoices: [{ ...invoice, target_key: KEY }],
+				invoices: [{ ...invoice, target_key: KEY, lines: [{ ...line, target_key: KEY }] }],
 				target_key: OTHER_KEY,
 			}).expect(200);
 			expect(register.preview).toHaveBeenCalledWith(
 				HOLDING,
-				expect.objectContaining({ target_key: OTHER_KEY, invoices: [expect.objectContaining({ target_key: KEY })] })
+				expect.objectContaining({
+					target_key: OTHER_KEY,
+					invoices: [expect.objectContaining({ target_key: KEY, lines: [expect.objectContaining({ item_id: INVOICE, target_key: KEY })] })],
+				})
 			);
 			await send('post', '/onboarding/previous-invoices/register-history', { invoices: [invoice], target_key: 'x'.repeat(201) }).expect(400);
+			// Por línea de factura (Domi 28-10): sin `lines` o con una línea sin `item_id` es 400 con su campo.
+			await send('post', '/onboarding/previous-invoices/register-history', { invoices: [{ invoice_id: INVOICE, lines: [] }] }).expect(400);
+			const res = await send('post', '/onboarding/previous-invoices/register-history', {
+				invoices: [{ invoice_id: INVOICE, lines: [{ ...line, item_id: 'x' }] }],
+			}).expect(400);
+
+			expect(res.body.errors[0]).toMatchObject({ field: 'invoices.0.lines.0.item_id' });
 		});
 
 		it('serie del MRR histórico: lectura VIEW_CONFIGURACION; valida moneda, meses, uuids y país', async () => {

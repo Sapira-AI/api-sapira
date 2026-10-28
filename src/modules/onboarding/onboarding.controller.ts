@@ -135,7 +135,7 @@ export class OnboardingController {
 	@ApiOperation({
 		summary: 'Detalle de un registro',
 		description:
-			'Registro + months[] (× producto, con counted U14), invoices[] (con registration por producto), splice, candidates[], events[] (de la raíz); 404 fuera del holding',
+			'Registro + months[] (× producto, con counted U14), invoices[] (con registration por producto y lines[] por línea de factura con su registration), splice, candidates[], events[] (de la raíz); 404 fuera del holding',
 	})
 	line(@HoldingId() holdingId: string, @Param('key') key: string) {
 		return this.history.detail(holdingId, key);
@@ -148,7 +148,7 @@ export class OnboardingController {
 	@ApiOperation({
 		summary: 'Vista previa: editar línea (volver a registrar sus facturas)',
 		description:
-			'Body { invoices[{ invoice_id, period_from, period_to, contract_currency, amount_contract_currency, is_recurring?, products[] }] }. { line{ key, batch_id, currency, products[{ product_name, product_id, mrr_last }], first_month, last_month, months_count }, months[{ period_month, subtotal_contract_currency, mrr_contract_ccy, mrr_system_ccy, fx_contract_to_system, invoice_id, invoice_number, invoice_currency, amount_invoice_currency, fx_contract_to_invoice, is_recurring, products[], status: kept|changed|added|removed }], totals{ mrr_last_contract_ccy, mrr_last_system_ccy, system_currency }, warnings[{ code, invoice_id?, period_month?, message }], rekey{ from, to }|null, lines_touched[] }. No escribe',
+			'Body { invoices[{ invoice_id, lines[{ item_id, period_from, period_to, contract_currency, amount_contract_currency, is_recurring?, products[] }] }] }. { line{ key, batch_id, currency, products[{ product_name, product_id, mrr_last }], first_month, last_month, months_count }, months[{ period_month, subtotal_contract_currency, mrr_contract_ccy, mrr_system_ccy, fx_contract_to_system, invoice_id, invoice_number, invoice_currency, amount_invoice_currency, fx_contract_to_invoice, is_recurring, products[], status: kept|changed|added|removed }], totals{ mrr_last_contract_ccy, mrr_last_system_ccy, system_currency }, warnings[{ code, invoice_id?, period_month?, message }], rekey{ from, to }|null, lines_touched[] }. No escribe',
 	})
 	editPreview(@HoldingId() holdingId: string, @Param('key') key: string, @Body() body: EditHistoryLineDto) {
 		return this.history.editPreview(holdingId, key, body);
@@ -323,7 +323,7 @@ export class OnboardingController {
 	@ApiOperation({
 		summary: 'Vista previa: registrar histórico',
 		description:
-			'Body { invoices[{ …, target_key? }], target_key? } (registro pendiente al que se suman). { rows[{ invoice_id, months[], mrr_per_month, fx_contract_to_invoice, products[], record_key|null, record_exists, existing_records[], warnings[], errors[] }], summary{ …, records_touched[], records_to_create } }. No escribe',
+			'Por línea de factura (Domi 28-10). Body { invoices[{ invoice_id, target_key?, lines[{ item_id, period_from, period_to, contract_currency, amount_contract_currency, is_recurring?, products[{ product_id, amount_contract_currency }], target_key? }] }], target_key? } (registro pendiente al que se suman). { rows[{ invoice_id, invoice_number, invoice_currency, amount_invoice_currency, months[], lines[{ item_id, item_index, item_description, months[], mrr_per_month, fx_contract_to_invoice, products[], record_key|null, record_exists, existing_records[], warnings[], errors[], blocked }], warnings[], errors[] }], summary{ invoices, lines, ready, invoices_ready, with_warnings, with_errors, rows_to_create, records_touched[], records_to_create } }. No escribe',
 	})
 	registerPreview(@HoldingId() holdingId: string, @Body() body: RegisterHistoryDto) {
 		return this.registerHistory.preview(holdingId, body);
@@ -334,7 +334,7 @@ export class OnboardingController {
 	@ApiOperation({
 		summary: 'Registrar histórico',
 		description:
-			'Un registro (batch_id) por cliente × moneda, salvo target_key. { created_rows, records_touched[], batch_ids[], skipped[{ invoice_id, reason }] }',
+			'Un registro (batch_id) por cliente × moneda, salvo target_key; una línea ya registrada se salta (already_registered) y las demás de la factura entran. { created_rows, records_touched[], batch_ids[], skipped[{ invoice_id, item_id, reason }] }',
 	})
 	register(@HoldingId() holdingId: string, @Body() body: RegisterHistoryDto, @Request() req: OnboardingRequest) {
 		return this.registerHistory.register(holdingId, body, actorOf(req));

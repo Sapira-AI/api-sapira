@@ -18,6 +18,7 @@ import { OdooPartnersStg } from '@/databases/postgresql/entities/integraciones/o
 import { OdooProductMapping } from '@/databases/postgresql/entities/integraciones/odoo/odoo-product-mapping.entity';
 import { FieldMapping } from '@/databases/postgresql/entities/integraciones/otras/field-mapping.entity';
 import { EventsModule } from '@/events/events.module';
+import { NotificationsModule } from '@/modules/notifications/notifications.module';
 
 import { FiscalPositionsController } from './fiscal-positions.controller';
 import { InvoiceProcessingController } from './invoice-processing.controller';
@@ -52,6 +53,8 @@ import { TaxMappingService } from './services/tax-mapping.service';
 		PostgreSQLDatabaseModule,
 		HttpModule,
 		EventsModule,
+		// Cierre de las alertas de envío al ERP desde el webhook (C, Domi 28-10).
+		NotificationsModule,
 		MongooseModule.forFeature([{ name: OdooIntegrationLog.name, schema: OdooIntegrationLogSchema }]),
 		TypeOrmModule.forFeature([
 			Company,

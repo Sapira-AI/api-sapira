@@ -276,6 +276,58 @@ export class NotificationsService {
 		return this.create(holdingId, dto);
 	}
 
+	/** La alerta abierta del holding con esa clave de deduplicación (para que el productor lea su metadata antes de actualizarla). */
+	async findOpenByDeduplicationKey(holdingId: string, deduplicationKey: string): Promise<AppNotification | null> {
+		return this.notificationRepository.findOne({ where: { holding_id: holdingId, deduplication_key: deduplicationKey, status: 'open' } });
+	}
+
+	/**
+	 * Alertas abiertas del tipo cuya lista `metadata.<listKey>` (objetos con `id`) contiene `id`: p. ej. los avisos de envío al ERP agrupados
+	 * por causa que incluyen una factura (`metadata.invoices`).
+	 */
+	async findOpenWithMember(holdingId: string, type: string, listKey: string, id: string): Promise<AppNotification[]> {
+		if (!/^[a-z_]+$/.test(listKey)) return [];
+
+		return this.notificationRepository
+			.createQueryBuilder('n')
+			.where('n.holding_id = :holdingId AND n.type = :type AND n.status = :status', { holdingId, type, status: 'open' })
+			.andWhere(`n.metadata -> '${listKey}' @> :member::jsonb`, { member: JSON.stringify([{ id }]) })
+			.getMany();
+	}
+
+	/**
+	 * Cambia el contenido de una alerta abierta (título, cuerpo, recomendación, acción, metadata, recurso) sin tocar destinatarios, lectura
+	 * ni gravedad; avisa por socket a quienes la ven. Lo usa el productor que achica un grupo (una factura del aviso se envió bien).
+	 */
+	async updateContent(
+		holdingId: string,
+		notificationId: string,
+		patch: Pick<CreateAppNotificationDto, 'title' | 'message' | 'recommendation' | 'action_type' | 'action_payload' | 'metadata' | 'resource_id'>
+	): Promise<void> {
+		const existing = await this.notificationRepository.findOne({
+			where: { id: notificationId, holding_id: holdingId, status: 'open' },
+			relations: { recipients: true },
+		});
+
+		if (!existing) return;
+		await this.notificationRepository.update(existing.id, {
+			title: patch.title,
+			message: patch.message,
+			recommendation: patch.recommendation || null,
+			action_type: patch.action_type || null,
+			action_payload: patch.action_payload || {},
+			metadata: patch.metadata || {},
+			resource_id: patch.resource_id ?? null,
+			updated_at: new Date(),
+		});
+		await this.emitUpdated(
+			holdingId,
+			(existing.recipients || []).map((recipient) => recipient.user_id),
+			existing.id,
+			existing.company_id ?? null
+		);
+	}
+
 	async resolveByDeduplicationKey(holdingId: string, deduplicationKey: string): Promise<void> {
 		await this.resolveOpen(holdingId, { deduplicationKeys: [deduplicationKey] });
 	}

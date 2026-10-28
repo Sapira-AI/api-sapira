@@ -13,7 +13,14 @@ describe('NotificationsService', () => {
 			andWhere: jest.fn().mockReturnThis(),
 			getRawMany: jest.fn().mockResolvedValue([{ id: 'user-1' }]),
 		};
-		const notificationRepository = { findOne: jest.fn(), find: jest.fn(), update: jest.fn(), findOneByOrFail: jest.fn() };
+		const notificationQueryBuilder = { where: jest.fn().mockReturnThis(), andWhere: jest.fn().mockReturnThis(), getMany: jest.fn().mockResolvedValue([]) };
+		const notificationRepository = {
+			findOne: jest.fn(),
+			find: jest.fn(),
+			update: jest.fn(),
+			findOneByOrFail: jest.fn(),
+			createQueryBuilder: jest.fn().mockReturnValue(notificationQueryBuilder),
+		};
 		const recipientQueryBuilder = {
 			innerJoinAndSelect: jest.fn().mockReturnThis(),
 			where: jest.fn().mockReturnThis(),
@@ -75,6 +82,7 @@ describe('NotificationsService', () => {
 			service,
 			emails,
 			notificationRepository,
+			notificationQueryBuilder,
 			recipientRepository,
 			recipientQueryBuilder,
 			insertBuilder,
@@ -343,6 +351,66 @@ describe('NotificationsService', () => {
 			expect(notificationRepository.update).not.toHaveBeenCalled();
 			expect(notificationsGateway.emitNotificationUpdated).not.toHaveBeenCalled();
 		});
+
+		it('findOpenByDeduplicationKey: solo la abierta del holding con esa clave', async () => {
+			const { service, notificationRepository } = buildService();
+			notificationRepository.findOne.mockResolvedValue({ id: 'notification-1' });
+
+			await expect(service.findOpenByDeduplicationKey('holding-1', 'invoice-odoo-failure:c1:2026-10-28:post_invoice:folios_exhausted:abcd1234')).resolves.toEqual({
+				id: 'notification-1',
+			});
+			expect(notificationRepository.findOne).toHaveBeenCalledWith({
+				where: { holding_id: 'holding-1', deduplication_key: 'invoice-odoo-failure:c1:2026-10-28:post_invoice:folios_exhausted:abcd1234', status: 'open' },
+			});
+		});
+
+		it('findOpenWithMember: abiertas del tipo cuya lista de metadata contiene el id (contención JSONB); clave de lista no válida → []', async () => {
+			const { service, notificationQueryBuilder } = buildService();
+			notificationQueryBuilder.getMany.mockResolvedValue([{ id: 'group-1' }]);
+
+			await expect(service.findOpenWithMember('holding-1', 'invoice_odoo_failure', 'invoices', 'invoice-1')).resolves.toEqual([{ id: 'group-1' }]);
+			expect(notificationQueryBuilder.where).toHaveBeenCalledWith('n.holding_id = :holdingId AND n.type = :type AND n.status = :status', {
+				holdingId: 'holding-1',
+				type: 'invoice_odoo_failure',
+				status: 'open',
+			});
+			expect(notificationQueryBuilder.andWhere).toHaveBeenCalledWith("n.metadata -> 'invoices' @> :member::jsonb", { member: '[{"id":"invoice-1"}]' });
+			await expect(service.findOpenWithMember('holding-1', 'invoice_odoo_failure', "x'; drop", 'invoice-1')).resolves.toEqual([]);
+		});
+
+		it('updateContent: cambia título, cuerpo, acción, metadata y recurso de una abierta sin tocar lectura ni gravedad, y avisa a sus destinatarios', async () => {
+			const { service, notificationRepository, notificationsGateway } = buildService((sql) =>
+				sql.includes('FROM user_holdings') ? [{ user_id: 'user-1' }] : undefined
+			);
+			notificationRepository.findOne.mockResolvedValue({ id: 'group-1', company_id: 'company-1', recipients: [{ user_id: 'user-1' }] });
+
+			await service.updateContent('holding-1', 'group-1', {
+				title: 'No se pudieron enviar 28 facturas de Simplit SpA al ERP',
+				message: 'Se acabaron los folios. Solicita un CAF.',
+				recommendation: 'Solicita un CAF',
+				action_type: undefined,
+				action_payload: {},
+				metadata: { invoice_count: 28 },
+				resource_id: undefined,
+			});
+
+			expect(notificationRepository.update).toHaveBeenCalledWith('group-1', {
+				title: 'No se pudieron enviar 28 facturas de Simplit SpA al ERP',
+				message: 'Se acabaron los folios. Solicita un CAF.',
+				recommendation: 'Solicita un CAF',
+				action_type: null,
+				action_payload: {},
+				metadata: { invoice_count: 28 },
+				resource_id: null,
+				updated_at: expect.any(Date),
+			});
+			expect(notificationsGateway.emitNotificationUpdated).toHaveBeenCalledWith(['user-1'], { holdingId: 'holding-1', notificationId: 'group-1' });
+
+			notificationRepository.findOne.mockResolvedValue(null);
+			notificationRepository.update.mockClear();
+			await service.updateContent('holding-1', 'cerrada', { title: 't', message: 'm', metadata: {} });
+			expect(notificationRepository.update).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('bandeja del usuario', () => {
@@ -491,7 +559,8 @@ describe('NotificationsService', () => {
 				what_happened: 'El ERP la rechazó',
 				what_to_do:
 					'Corrige el dato que indica el mensaje en el contrato o en la factura y vuelve a enviarla. Si falta relacionar un producto, hazlo en Integraciones › ERP › Mapeos.',
-				what_we_do: 'Reintentamos en la próxima corrida automática y cerramos este aviso cuando la factura se envía bien.',
+				what_we_do:
+					'Si la factura no llegó a crearse en el ERP, la reintentamos en la próxima corrida automática y cerramos este aviso cuando se envía bien. Si ya existe allá como borrador o publicada, no la reenviamos.',
 			});
 			expect(detail.actor).toBeNull();
 			recipientQueryBuilder.getOne.mockResolvedValueOnce(null);

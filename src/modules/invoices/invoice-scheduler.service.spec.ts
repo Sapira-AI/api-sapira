@@ -35,6 +35,9 @@ describe('InvoiceSchedulerService', () => {
 		const notificationsService = {
 			createOrUpdate: jest.fn(),
 			resolveOpen: jest.fn().mockResolvedValue(1),
+			findOpenByDeduplicationKey: jest.fn().mockResolvedValue(null),
+			findOpenWithMember: jest.fn().mockResolvedValue([]),
+			updateContent: jest.fn().mockResolvedValue(undefined),
 		};
 
 		const service = new InvoiceSchedulerService(
@@ -234,6 +237,102 @@ describe('InvoiceSchedulerService', () => {
 				}),
 			})
 		);
+	});
+
+	it('28-10: las facturas que fallan por la misma causa el mismo día se suman al aviso abierto (una alerta, lista de facturas, sin acción propia)', async () => {
+		const { service, notificationsService } = createService();
+		const CAF =
+			'XML-RPC Fault: No hay CAFs disponible para el folio 28401 en la secuencia de Electronic Invoice. Por favor subo un archivo CAF o solicite uno nuevo en el sitio www.sii.cl (Code: 2)';
+		const invoiceOf = (n: number) => ({
+			id: `invoice-${n}`,
+			holding_id: 'holding-1',
+			contract_id: `contract-${n}`,
+			company_id: 'company-cl',
+			invoice_number: 'FAC 028401',
+			issue_date: new Date('2026-10-28T12:00:00Z'),
+			company: { id: 'company-cl', country: 'Chile', legal_name: 'Simplit SpA' },
+			clientEntity: { legal_name: `Cliente ${n}` },
+		});
+		const failure = (n: number) =>
+			(service as any).createOdooFailureNotification({
+				invoice: invoiceOf(n),
+				stage: 'post_invoice',
+				title: 'Error al publicar factura FAC 028401 en Odoo',
+				message: `Factura creada en Odoo con ID: ${201180 + n}, pero falló la emisión: ${CAF}`,
+				errorType: 'odoo_post_exception',
+				errorMessage: CAF,
+				odooInvoiceId: 201180 + n,
+				schedulerSource: 'automatic',
+				errorDetails: { stack: 'Error: …\n    at …' },
+			});
+
+		await failure(1);
+		const first = notificationsService.createOrUpdate.mock.calls[0][1];
+
+		expect(first.title).toBe('No se pudo enviar la factura FAC 028401 de Cliente 1');
+		expect(first.deduplication_key).toMatch(/^invoice-odoo-failure:company-cl:\d{4}-\d{2}-\d{2}:post_invoice:folios_exhausted:[0-9a-f]{8}$/);
+		expect(first.company_id).toBe('company-cl');
+		expect(first.metadata.what_we_do).toMatch(/^No la reintentamos solos: el borrador ya existe en el ERP/);
+		expect(first.metadata.technical_detail).toBe(
+			'No hay CAFs disponible para el folio 28401 en la secuencia de Electronic Invoice. Por favor subo un archivo CAF o solicite uno nuevo en el sitio www.sii.cl'
+		);
+
+		// Segunda factura con la misma causa: el aviso abierto ya tiene a la primera → se agrupa.
+		notificationsService.findOpenByDeduplicationKey.mockResolvedValueOnce({ id: 'group-1', metadata: first.metadata });
+		await failure(2);
+		const second = notificationsService.createOrUpdate.mock.calls[1][1];
+
+		expect(second.deduplication_key).toBe(first.deduplication_key);
+		expect(second.title).toBe('No se pudieron enviar 2 facturas de Simplit SpA al ERP');
+		expect(second.message).toBe(first.message);
+		expect(second.action_type).toBeUndefined();
+		expect(second.resource_id).toBeUndefined();
+		expect(second.metadata.invoice_count).toBe(2);
+		expect(second.metadata.invoices.map((item: { id: string }) => item.id)).toEqual(['invoice-1', 'invoice-2']);
+		expect(second.metadata.client_name).toBeNull();
+
+		// La misma factura otra vez (reintento manual) no se cuenta dos veces.
+		notificationsService.findOpenByDeduplicationKey.mockResolvedValueOnce({ id: 'group-1', metadata: second.metadata });
+		await failure(2);
+		expect(notificationsService.createOrUpdate.mock.calls[2][1].metadata.invoice_count).toBe(2);
+	});
+
+	it('28-10: al enviar bien una factura sale del aviso agrupado (se achica) y el aviso se resuelve cuando queda vacío', async () => {
+		const { service, notificationsService } = createService();
+		const invoices = (ids: string[]) => ids.map((id) => ({ id, invoice_number: `F-${id}`, client_name: `Cliente ${id}`, contract_id: `ctr-${id}`, odoo_invoice_id: null, issue_date: null }));
+		const metadata = (ids: string[]) => ({
+			failure_stage: 'post_invoice',
+			error_type: 'odoo_post_exception',
+			error_message: 'raw',
+			company_name: 'Simplit SpA',
+			country: 'Chile',
+			scheduler_source: 'automatic',
+			erp_error: { category: 'folios_exhausted', message: 'Se acabaron los folios', next_step: 'Solicita un CAF', action: 'none' },
+			invoices: invoices(ids),
+			invoice_count: ids.length,
+		});
+		notificationsService.findOpenWithMember.mockResolvedValue([
+			{ id: 'group-2', metadata: metadata(['invoice-1', 'invoice-9']) },
+			{ id: 'group-1', metadata: metadata(['invoice-1']) },
+		]);
+
+		await (service as any).resolveOdooFailureNotifications({ id: 'invoice-1', holding_id: 'holding-1' });
+
+		expect(notificationsService.resolveOpen).toHaveBeenCalledWith('holding-1', { type: 'invoice_odoo_failure', resourceId: 'invoice-1' });
+		expect(notificationsService.findOpenWithMember).toHaveBeenCalledWith('holding-1', 'invoice_odoo_failure', 'invoices', 'invoice-1');
+		expect(notificationsService.updateContent).toHaveBeenCalledWith(
+			'holding-1',
+			'group-2',
+			expect.objectContaining({
+				title: 'No se pudo enviar la factura F-invoice-9 de Cliente invoice-9',
+				message: 'Se acabaron los folios. Solicita un CAF.',
+				action_type: 'open_contract',
+				action_payload: { contract_id: 'ctr-invoice-9' },
+				resource_id: 'invoice-9',
+				metadata: expect.objectContaining({ invoice_count: 1, invoices: invoices(['invoice-9']) }),
+			})
+		);
+		expect(notificationsService.resolveOpen).toHaveBeenCalledWith('holding-1', { ids: ['group-1'] });
 	});
 
 	it('lastSendAttempt: lee el último log de la factura y lo traduce; si el log falla devuelve null', async () => {
@@ -902,6 +1001,157 @@ describe('InvoiceSchedulerService', () => {
 			...extra,
 		});
 
+		const CAF_FAULT =
+			'Error emitiendo factura en Odoo: XML-RPC Fault: No hay CAFs disponible para el folio 28401 en la secuencia de Electronic Invoice. Por favor subo un archivo CAF o solicite uno nuevo en el sitio www.sii.cl (Code: 2)';
+		const PAC_FAULT =
+			'Ocurrió un error al enviar el CFDI al PAC: - Código: CFDI40147 - El campo DomicilioFiscalReceptor del receptor, debe encontrarse en la lista de RFC inscritos no cancelados en el SAT.';
+		/** Envío con borrador creado y emisión automática: el ERP se mockea por etapa. */
+		const withErp = (erp: Record<string, jest.Mock>) => {
+			const ctx = withRepos({ 'p-ok': 77 }, { 'p-ok': { name: 'Plan Pro', odoo_product_id: null } });
+			const internals = ctx.service as unknown as Record<string, unknown>;
+			const createDraftInvoice = jest.fn().mockResolvedValue({ success: true, invoice_id: 201185 });
+			const query = jest.fn().mockResolvedValue([]);
+
+			internals.odooInvoicesService = { createDraftInvoice, ...erp };
+			internals.dataSource = { query };
+
+			return { ...ctx, createDraftInvoice, query };
+		};
+		const autoInvoice = () => ({ ...invoiceWith([line('a', 'p-ok')]), auto_invoice: true, invoice_number: null });
+
+		it('C (28-10): si la publicación falla y Odoo no publicó el documento, la factura vuelve a Por Emitir sin el folio que copió el webhook, conserva el borrador y se reconstruye el devengo', async () => {
+			const { service, invoiceRepository, notificationsService, query } = withErp({
+				postInvoice: jest.fn().mockRejectedValue(new Error(CAF_FAULT)),
+				readInvoiceState: jest.fn().mockResolvedValue({ state: 'draft', name: '/', edi_state: null }),
+			});
+			// Lo que el webhook alcanzó a escribir dentro de la transacción de Odoo, antes del rollback.
+			invoiceRepository.findOne.mockResolvedValue({ id: 'invoice-1', status: 'Enviada', invoice_number: 'FAC 028401', contract_id: 'contract-1', issue_date: new Date('2026-10-28T12:00:00Z') });
+
+			const result = await service.sendInvoiceToOdoo(autoInvoice(), false, 'automatic');
+
+			expect(result.status).toBe('error');
+			expect(result.errorType).toBe('odoo_post_exception');
+			expect(result.details).toContain('La factura vuelve a Por Emitir como borrador en el ERP');
+			expect(invoiceRepository.update).toHaveBeenCalledWith('invoice-1', { odoo_invoice_id: 201185, sent_to_odoo_at: expect.any(Date) });
+			expect(invoiceRepository.update).toHaveBeenCalledWith('invoice-1', { status: 'Por Emitir', invoice_number: null });
+			expect(invoiceRepository.update).not.toHaveBeenCalledWith('invoice-1', expect.objectContaining({ status: 'Emitida' }));
+			expect(query).toHaveBeenCalledWith(expect.stringContaining('revenue_schedule_rebuild'), ['contract-1', '2026-10-01']);
+			expect(notificationsService.createOrUpdate).toHaveBeenCalledWith(
+				'holding-1',
+				expect.objectContaining({ metadata: expect.objectContaining({ failure_stage: 'post_invoice', erp_error: expect.objectContaining({ category: 'folios_exhausted' }) }) })
+			);
+		});
+
+		it('C: si Odoo dice que el documento sí quedó publicado, no se toca nada; si no se puede leer, tampoco', async () => {
+			const posted = withErp({
+				postInvoice: jest.fn().mockResolvedValue({ success: false, message: 'Falló después de publicar' }),
+				readInvoiceState: jest.fn().mockResolvedValue({ state: 'posted', name: 'FAC 028401', edi_state: null }),
+			});
+
+			await posted.service.sendInvoiceToOdoo(autoInvoice(), false, 'automatic');
+			expect(posted.invoiceRepository.update).toHaveBeenCalledTimes(1);
+			expect(posted.invoiceRepository.update).not.toHaveBeenCalledWith('invoice-1', expect.objectContaining({ status: expect.anything() }));
+
+			const unknown = withErp({
+				postInvoice: jest.fn().mockRejectedValue(new Error(CAF_FAULT)),
+				readInvoiceState: jest.fn().mockRejectedValue(new Error('timeout')),
+			});
+			const result = await unknown.service.sendInvoiceToOdoo(autoInvoice(), false, 'automatic');
+
+			expect(result.status).toBe('error');
+			expect(unknown.invoiceRepository.update).toHaveBeenCalledTimes(1);
+			expect(unknown.query).not.toHaveBeenCalled();
+		});
+
+		it('C: si la factura seguía Por Emitir sin folio (el webhook no llegó), no se reescribe', async () => {
+			const { service, invoiceRepository, query } = withErp({
+				postInvoice: jest.fn().mockRejectedValue(new Error(CAF_FAULT)),
+				readInvoiceState: jest.fn().mockResolvedValue({ state: 'draft', name: '/', edi_state: null }),
+			});
+			invoiceRepository.findOne.mockResolvedValue({ id: 'invoice-1', status: 'Por Emitir', invoice_number: null, contract_id: 'contract-1' });
+
+			await service.sendInvoiceToOdoo(autoInvoice(), false, 'automatic');
+
+			expect(invoiceRepository.update).toHaveBeenCalledTimes(1);
+			expect(query).not.toHaveBeenCalled();
+		});
+
+		it('D (28-10): publicada pero con el timbre rechazado queda Enviada (nunca Emitida), no se manda al cliente y se avisa con el motivo del SAT', async () => {
+			const sendInvoiceToCustomer = jest.fn();
+			const { service, invoiceRepository, notificationsService } = withErp({
+				postInvoice: jest.fn().mockResolvedValue({ success: true, message: 'ok', state: 'posted' }),
+				emitElectronicInvoice: jest.fn().mockResolvedValue({ success: true, state: 'posted', electronic_status: 'rejected', electronic_errors: [{ message: PAC_FAULT }] }),
+				sendInvoiceToCustomer,
+			});
+
+			const result = await service.sendInvoiceToOdoo(autoInvoice(), false, 'automatic');
+
+			expect(result.status).toBe('error');
+			expect(invoiceRepository.update).toHaveBeenCalledWith('invoice-1', { status: 'Enviada' });
+			expect(invoiceRepository.update).not.toHaveBeenCalledWith('invoice-1', expect.objectContaining({ status: 'Emitida' }));
+			expect(sendInvoiceToCustomer).not.toHaveBeenCalled();
+			expect(notificationsService.createOrUpdate).toHaveBeenCalledWith(
+				'holding-1',
+				expect.objectContaining({
+					message: expect.stringMatching(/^El SAT rechazó el timbrado: el domicilio fiscal \(código postal\) del cliente/),
+					metadata: expect.objectContaining({ failure_stage: 'emit_electronic_invoice', erp_error: expect.objectContaining({ category: 'electronic_rejected' }) }),
+				})
+			);
+		});
+
+		it('D: si el paso de timbre lanza, la factura publicada queda Enviada, no Emitida', async () => {
+			const { service, invoiceRepository } = withErp({
+				postInvoice: jest.fn().mockResolvedValue({ success: true, message: 'ok', state: 'posted' }),
+				emitElectronicInvoice: jest.fn().mockRejectedValue(new Error(`Error emitiendo factura México en Odoo: XML-RPC Fault: ${PAC_FAULT}`)),
+			});
+
+			const result = await service.sendInvoiceToOdoo(autoInvoice(), false, 'automatic');
+
+			expect(result.errorType).toBe('emit_electronic_exception');
+			expect(invoiceRepository.update).toHaveBeenCalledWith('invoice-1', { status: 'Enviada' });
+			expect(invoiceRepository.update).not.toHaveBeenCalledWith('invoice-1', expect.objectContaining({ status: 'Emitida' }));
+		});
+
+		it('timbre aceptado: Emitida y correo al cliente, como siempre', async () => {
+			const sendInvoiceToCustomer = jest.fn().mockResolvedValue({ message: 'enviado' });
+			const { service, invoiceRepository } = withErp({
+				postInvoice: jest.fn().mockResolvedValue({ success: true, message: 'ok', state: 'posted' }),
+				emitElectronicInvoice: jest.fn().mockResolvedValue({ success: true, state: 'posted', electronic_status: 'accepted' }),
+				sendInvoiceToCustomer,
+			});
+
+			const result = await service.sendInvoiceToOdoo(autoInvoice(), false, 'automatic');
+
+			expect(result.status).toBe('sent');
+			expect(invoiceRepository.update).toHaveBeenCalledWith('invoice-1', { status: 'Emitida' });
+			expect(sendInvoiceToCustomer).toHaveBeenCalled();
+		});
+
+		it('lastSendErrors: último intento por factura en una sola consulta; solo las que fallaron; si el log falla, mapa vacío', async () => {
+			const { service } = createService();
+			const internals = service as unknown as Record<string, unknown>;
+			const exec = jest.fn().mockResolvedValue([
+				{ _id: 'invoice-1', log: { operation: 'post_invoice', status: 'error', error_message: CAF_FAULT, error_type: 'odoo_post_exception', createdAt: new Date('2026-10-28T11:00:00Z') } },
+				{ _id: 'invoice-2', log: { operation: 'create_draft', status: 'success', createdAt: new Date('2026-10-28T11:00:00Z') } },
+			]);
+			const aggregate = jest.fn().mockReturnValue({ exec });
+
+			internals.invoiceOdooSendLogModel = { aggregate };
+
+			const errors = await service.lastSendErrors('holding-1', ['invoice-1', 'invoice-2']);
+
+			expect(aggregate).toHaveBeenCalledWith([
+				{ $match: { holding_id: 'holding-1', invoice_id: { $in: ['invoice-1', 'invoice-2'] } } },
+				{ $sort: { createdAt: -1 } },
+				{ $group: { _id: '$invoice_id', log: { $first: '$$ROOT' } } },
+			]);
+			expect([...errors.keys()]).toEqual(['invoice-1']);
+			expect(errors.get('invoice-1')).toMatchObject({ ok: false, category: 'folios_exhausted', message: expect.stringMatching(/^Se acabaron los folios/) });
+			expect(await service.lastSendErrors('holding-1', [])).toEqual(new Map());
+			exec.mockRejectedValueOnce(new Error('sin mongo'));
+			expect(await service.lastSendErrors('holding-1', ['invoice-1'])).toEqual(new Map());
+		});
+
 		it('rechaza la factura (skipped), registra el log, notifica por el camino de fallos de Odoo y no llama al ERP', async () => {
 			const { service, createDraftInvoice, sendLog, notificationsService } = withRepos(
 				{ 'p-ok': 77 },
@@ -929,7 +1179,9 @@ describe('InvoiceSchedulerService', () => {
 					message:
 						'Hay productos sin mapeo en Odoo: Soporte Premium. Relaciona el producto en Integraciones › ERP › Mapeos y vuelve a enviarla.',
 					recommendation: 'Relaciona el producto en Integraciones › ERP › Mapeos y vuelve a enviarla',
-					deduplication_key: 'invoice-odoo-failure:invoice-1:product_mapping:product_without_erp_mapping',
+					// Agrupada por compañía, día de negocio, etapa y causa (28-10); la factura va en la lista.
+					deduplication_key: expect.stringMatching(/^invoice-odoo-failure:company-1:\d{4}-\d{2}-\d{2}:product_mapping:product_without_mapping:[0-9a-f]{8}$/),
+					metadata: expect.objectContaining({ invoice_count: 1, invoices: [expect.objectContaining({ id: 'invoice-1', invoice_number: 'INV-001' })] }),
 				})
 			);
 		});
