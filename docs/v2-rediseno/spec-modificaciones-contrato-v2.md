@@ -283,7 +283,7 @@ facturas por **F3** (estado objetivo → cambio mínimo, generador v2 para lo nu
   warnings: [{ code, message }], blockers: [{ code, message, next_step }] }
 ```
 
-Blockers (invariantes): `period_closed`, `issued_after_effective_date` (solo `item_change`), `not_active`, `manual_lines_pending` (solo `contract_cancel`),
+Blockers (invariantes): `period_closed`, `issued_after_effective_date` (solo `item_change` DOWNSELL; el UPSELL dentro de un período emitido no bloquea: prorratea por días hasta lo emitido, aviso `upsell_within_issued_period`, 28-10), `not_active`, `manual_lines_pending` (solo `contract_cancel`),
 `item_already_churned`, `item_already_renewed`, `unified_invoice_in_range` (hasta A.5), `fixed_fx_without_rate`,
 `quote_already_applied`, `new_business_quote_on_existing_contract` (S3-3), `uf_invoice_currency`. Warnings (blandas,
 piden motivo y siguen): `possible_duplicate`, `unpaid_invoice_prorated`, `pending_invoices_keep_old_terms`,
