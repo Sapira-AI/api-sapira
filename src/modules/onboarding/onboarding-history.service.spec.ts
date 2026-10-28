@@ -792,18 +792,25 @@ describe('editar línea = volver a registrar sus facturas (Domi 14-10)', () => {
 	});
 	/** Factura A: abril y mayo; factura B: junio. */
 	const baseRows = [
-		editRow({ id: 'r-a1', invoice_legacy_id: INV_A, invoice_number: 'F-A', period: '2026-04' }),
-		editRow({ id: 'r-a2', invoice_legacy_id: INV_A, invoice_number: 'F-A', period: '2026-05' }),
-		editRow({ id: 'r-b1', invoice_legacy_id: INV_B, invoice_number: 'F-B', period: '2026-06' }),
+		editRow({ id: 'r-a1', invoice_legacy_id: INV_A, invoice_item_legacy_id: 'it-F-A', invoice_number: 'F-A', period: '2026-04' }),
+		editRow({ id: 'r-a2', invoice_legacy_id: INV_A, invoice_item_legacy_id: 'it-F-A', invoice_number: 'F-A', period: '2026-05' }),
+		editRow({ id: 'r-b1', invoice_legacy_id: INV_B, invoice_item_legacy_id: 'it-F-B', invoice_number: 'F-B', period: '2026-06' }),
 	];
-	const input = (overrides: Record<string, unknown> = {}) => ({
-		invoice_id: INV_A,
-		period_from: '2026-04',
-		period_to: '2026-06',
-		contract_currency: 'USD',
-		amount_contract_currency: 300,
-		products: [{ product_id: P1, amount_contract_currency: 300 }],
-		...overrides,
+	const itemOf = (invoiceId: string) => (invoiceId === INV_A ? 'it-F-A' : 'it-F-B');
+	/** Una factura con una línea de registro sobre su única línea de factura (lo que cambia va en la línea). */
+	const input = (overrides: Record<string, unknown> = {}, invoiceId = INV_A) => ({
+		invoice_id: invoiceId,
+		lines: [
+			{
+				item_id: itemOf(invoiceId),
+				period_from: '2026-04',
+				period_to: '2026-06',
+				contract_currency: 'USD',
+				amount_contract_currency: 300,
+				products: [{ product_id: P1, amount_contract_currency: 300 }],
+				...overrides,
+			},
+		],
 	});
 	const invoiceRow = (id: string, number: string) => ({
 		id,
@@ -816,15 +823,24 @@ describe('editar línea = volver a registrar sus facturas (Domi 14-10)', () => {
 		total_invoice_currency: '595000',
 		status: 'Pagada',
 		client_id: CLIENT,
-		item_id: `it-${number}`,
-		item_subtotal: '500000',
-		has_history: true,
+		reconciled_invoice_id: null,
 	});
 	const editHandlers = (rows = baseRows, covered: unknown[] = [], extra: Handler[] = []): Handler[] => [
 		...extra,
 		// Filas del registro pedido: solo el de la moneda USD (el de destino al cambiar la moneda está vacío).
 		['m.migrated_to_contract_id, m.migrated_at, m.migrated_by', (params) => (params[3] === 'USD' ? rows : [])],
-		['LEFT JOIN LATERAL', (params) => (params[1] as string[]).map((id) => invoiceRow(id, id === INV_A ? 'F-A' : 'F-B'))],
+		['il.id = ANY($2::uuid[])', (params) => (params[1] as string[]).map((id) => invoiceRow(id, id === INV_A ? 'F-A' : 'F-B'))],
+		[
+			'FROM invoice_items_legacy ii WHERE ii.invoices_legacy_id = ANY',
+			(params) =>
+				(params[0] as string[]).map((id) => ({
+					id: itemOf(id),
+					invoices_legacy_id: id,
+					subtotal: '500000',
+					description: null,
+					currency: null,
+				})),
+		],
 		[
 			'SELECT id, name FROM products WHERE holding_id = $1 AND id = ANY',
 			() => [
@@ -914,13 +930,15 @@ describe('editar línea = volver a registrar sus facturas (Domi 14-10)', () => {
 					amount_contract_currency: 190000,
 					products: [{ product_id: P1, amount_contract_currency: 190000 }],
 				}),
-				input({
-					invoice_id: INV_B,
-					period_from: '2026-06',
-					contract_currency: 'CLP',
-					amount_contract_currency: 95000,
-					products: [{ product_id: P1, amount_contract_currency: 95000 }],
-				}),
+				input(
+					{
+						period_from: '2026-06',
+						contract_currency: 'CLP',
+						amount_contract_currency: 95000,
+						products: [{ product_id: P1, amount_contract_currency: 95000 }],
+					},
+					INV_B
+				),
 			],
 		});
 		const to = encodeLineKey({ ...PARTS, contract_currency: 'CLP' });
@@ -934,10 +952,10 @@ describe('editar línea = volver a registrar sus facturas (Domi 14-10)', () => {
 	it('400 si la factura no es del registro, está repetida o el motor la rechaza; avisos de tipo de cambio por factura', async () => {
 		const { service } = build(editHandlers());
 
-		await expect(service.editPreview(HOLDING, KEY, { invoices: [input({ invoice_id: CONTRACT })] })).rejects.toBeInstanceOf(BadRequestException);
+		await expect(service.editPreview(HOLDING, KEY, { invoices: [input({}, CONTRACT)] })).rejects.toBeInstanceOf(BadRequestException);
 		await expect(service.editPreview(HOLDING, KEY, { invoices: [input(), input()] })).rejects.toBeInstanceOf(BadRequestException);
 		await expect(service.editPreview(HOLDING, KEY, { invoices: [input({ period_from: '2026-07' })] })).rejects.toMatchObject({
-			response: { errors: [{ field: 'invoices.0', message: expect.stringContaining('Período inválido') }] },
+			response: { errors: [{ field: 'invoices.0.lines.0', message: expect.stringContaining('Período inválido') }] },
 		});
 		const copied = await service.editPreview(HOLDING, KEY, {
 			invoices: [
@@ -1039,7 +1057,7 @@ describe('editar línea = volver a registrar sus facturas (Domi 14-10)', () => {
 
 		await expect(
 			mismatch.service.editLine(HOLDING, KEY, { invoices: [input({ products: [{ product_id: P1, amount_contract_currency: 100 }] })] }, ACTOR)
-		).rejects.toMatchObject({ response: { errors: [{ field: 'invoices.0.products' }] } });
+		).rejects.toMatchObject({ response: { errors: [{ field: 'invoices.0.lines.0.products' }] } });
 		expect(blocked.db.rolledBack() + mismatch.db.rolledBack()).toBe(2);
 	});
 
@@ -1056,6 +1074,7 @@ describe('editar línea = volver a registrar sus facturas (Domi 14-10)', () => {
 						term: 12,
 						is_recurring: true,
 						invoice_legacy_id: INV_A,
+						invoice_item_legacy_id: 'it-a1',
 					},
 					{
 						id: 'r-a2',
@@ -1065,6 +1084,7 @@ describe('editar línea = volver a registrar sus facturas (Domi 14-10)', () => {
 						term: 12,
 						is_recurring: true,
 						invoice_legacy_id: INV_A,
+						invoice_item_legacy_id: 'it-a1',
 					},
 					{
 						id: 'r-a3',
@@ -1074,6 +1094,7 @@ describe('editar línea = volver a registrar sus facturas (Domi 14-10)', () => {
 						term: 12,
 						is_recurring: true,
 						invoice_legacy_id: INV_A,
+						invoice_item_legacy_id: 'it-a1',
 					},
 					{
 						id: 'r-a4',
@@ -1083,6 +1104,7 @@ describe('editar línea = volver a registrar sus facturas (Domi 14-10)', () => {
 						term: 12,
 						is_recurring: true,
 						invoice_legacy_id: INV_A,
+						invoice_item_legacy_id: 'it-a1',
 					},
 					{
 						id: 'r-b1',
@@ -1092,6 +1114,7 @@ describe('editar línea = volver a registrar sus facturas (Domi 14-10)', () => {
 						term: 1,
 						is_recurring: false,
 						invoice_legacy_id: INV_B,
+						invoice_item_legacy_id: 'it-b1',
 					},
 				],
 			],
@@ -1102,9 +1125,32 @@ describe('editar línea = volver a registrar sus facturas (Domi 14-10)', () => {
 					{ id: INV_B, invoice_number: 'F-B' },
 				],
 			],
+			[
+				'FROM invoice_items_legacy ii WHERE ii.invoices_legacy_id IN',
+				() => [
+					{ id: 'it-a1', invoices_legacy_id: INV_A, description: 'Plataforma', subtotal: '1000000', currency: 'CLP' },
+					{ id: 'it-a2', invoices_legacy_id: INV_A, description: 'Soporte', subtotal: '200000', currency: 'CLP' },
+					{ id: 'it-b1', invoices_legacy_id: INV_B, description: 'Implementación', subtotal: '90000', currency: 'CLP' },
+				],
+			],
 			['SELECT id, name FROM products WHERE holding_id = $1 ORDER BY created_at', () => [{ id: 'p-b', name: ' soporte ' }]],
 		]);
 		const detail = await service.detail(HOLDING, KEY);
+
+		// Por línea de factura (Domi 28-10): la primera línea tiene las filas de los dos productos (registro por factura, antes de la regla); la
+		// segunda no tiene registro.
+		expect(
+			detail.invoices[0].lines.map((line) => [
+				line.item_id,
+				line.item_index,
+				line.description,
+				line.registration?.amount_contract_currency ?? null,
+			])
+		).toEqual([
+			['it-a1', 1, 'Plataforma', 240],
+			['it-a2', 2, 'Soporte', null],
+		]);
+		expect(detail.invoices[1].lines[0]).toMatchObject({ item_id: 'it-b1', registration: { amount_contract_currency: 90, is_recurring: false } });
 
 		expect(detail.invoices[0].registration).toEqual({
 			period_from: '2026-04',
