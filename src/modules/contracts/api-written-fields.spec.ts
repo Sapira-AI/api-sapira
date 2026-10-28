@@ -245,11 +245,34 @@ describe('pricingFields: réplica de auto_calculate_pricing_fields + calculate_m
 		});
 	});
 
-	it('CHURN/DOWNSELL solo en contract_items: mensual = final ÷ plazo (negativo)', () => {
+	it('CHURN solo en contract_items: mensual = final ÷ plazo (negativo)', () => {
 		const churn = { ...base, categoria: 'CHURN', final_price: -600, term_months: 3, billing_frequency: 'Trimestral' };
 
 		expect(pricingFields(churn, 'contract_items')).toMatchObject({ monthly_price: -200, billing_period_price: -600 });
 		expect(pricingFields(churn, 'quote_items')).toMatchObject({ monthly_price: 180, billing_period_price: 540 });
+	});
+
+	it('DOWNSELL (28-10): mensual = cantidad × unitario con signo (ΔMRR), aunque el valor vaya por días; sin unitario cae a final ÷ plazo', () => {
+		// S06879: 30 × 38,50 → 5 × 47,96 desde el 08-11: ΔMRR −915,20, valor por días −1.616,85 en 2 meses.
+		const downsell = {
+			...base,
+			categoria: 'DOWNSELL',
+			quantity: 25,
+			unit_price: -36.608,
+			annual_unit_price: null,
+			discount_type: null,
+			discount_value: null,
+			final_price: -1616.85,
+			term_months: 2,
+			billing_frequency: 'Mensual',
+		};
+
+		expect(pricingFields(downsell, 'contract_items')).toMatchObject({ monthly_price: -915.2, billing_period_price: -915.2 });
+		// Rebaja que parte en inicio de período: mismo número que final ÷ plazo.
+		expect(pricingFields({ ...downsell, final_price: -1830.4 }, 'contract_items').monthly_price).toBe(-915.2);
+		expect(pricingFields({ ...downsell, quantity: 2, unit_price: -100, final_price: -200, term_months: 1, discount_type: 'Porcentaje', discount_value: 10 }, 'contract_items').monthly_price).toBe(-180);
+		expect(pricingFields({ ...downsell, unit_price: null, annual_unit_price: null, final_price: -600, term_months: 3 }, 'contract_items').monthly_price).toBe(-200);
+		expect(pricingFields(downsell, 'quote_items').monthly_price).toBe(0);
 	});
 
 	it('monto fijo: final ÷ plazo; sin final, base − descuento con piso 0; modo nulo → monthly', () => {
