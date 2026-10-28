@@ -143,6 +143,19 @@ export function pricingFields(input: PricingFieldsInput, table: 'contract_items'
 	}
 	const base = { unit_price: unitPrice, annual_unit_price: annualUnitPrice, annual_price: annualPrice, price_entry_mode: mode };
 
+	// DOWNSELL (Domi 28-10, downsell prorrateado): el mensual es cantidad × unitario con signo (invariante del ajuste: `qty × unit = ΔMRR`,
+	// manual §"Lo que tiene que seguir funcionando" 2). Antes salía de final ÷ plazo, pero cuando la rebaja parte a mitad de período el valor
+	// del ajuste va por días (Σ facturas = TCV) y final ÷ plazo ya no es el ΔMRR; el devengo lee `monthly_price` y prorratea el primer mes
+	// él solo. Para una rebaja que parte en inicio de período da el mismo número de siempre. Sin unitario o cantidad, final ÷ plazo.
+	if (table === 'contract_items' && input.categoria === 'DOWNSELL' && unitPrice !== null && input.quantity !== null) {
+		const gross = unitPrice * input.quantity;
+		const monthly = pgRound(
+			input.discount_type === 'Porcentaje' && input.discount_value !== null && input.discount_value > 0 ? gross * (1 - input.discount_value / 100) : gross,
+			2
+		);
+
+		return { ...base, monthly_price: monthly, billing_period_price: pgRound(monthly * frequencyMultiplier(input.billing_frequency), 2) };
+	}
 	if (
 		table === 'contract_items' &&
 		['CHURN', 'DOWNSELL'].includes(input.categoria ?? '') &&

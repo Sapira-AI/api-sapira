@@ -981,24 +981,40 @@ describe('item_change (M1 precio/cantidad)', () => {
 		});
 	});
 
-	it('downsell rige desde el próximo inicio de período sin prorrateo (S3-5/6) y reescribe la línea base al neto (S3-14)', () => {
+	it('downsell a mitad de período con la PE del período por emitir (28-10): rige desde la fecha, esa PE se prorratea por días y las siguientes quedan netas (S3-14)', () => {
 		const plan = planChange(
 			context(),
 			request({ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 8, unit_price: 100 }] }, { reason: 'ok' })
 		);
 		const [delta] = inserted(plan);
 
+		// Valor por días: −200 × (16/30 + 1) = −306,67; el mensual (−200) sale de qty × unit, no de final ÷ plazo.
 		expect(delta).toMatchObject({
 			categoria: 'DOWNSELL',
 			quantity: 2,
 			unit_price: -100,
-			start_date: '2026-12-01',
-			term_months: 1,
-			final_price: -200,
+			start_date: '2026-11-15',
+			term_months: 2,
+			final_price: -306.67,
 		});
-		expect(plan.preview.warnings.map((warning) => warning.code)).toEqual(['downsell_from_next_period']);
-		// Noviembre no se toca; diciembre queda neta: 8 × 100 = 800.
+		expect(plan.preview.warnings.map((warning) => warning.code)).toEqual(['downsell_prorated']);
+		// Noviembre: tramo actual 01–14 (10 × 100 × 14/30 = 466,67) + tramo nuevo 15–30 (8 × 100 × 16/30 = 426,67); diciembre neta 800.
 		expect(ops(plan, 'update_line')).toEqual([
+			{
+				kind: 'update_line',
+				invoice_id: 'inv-11',
+				line_id: 'line-11-lic',
+				values: {
+					quantity: 10,
+					unit_price: 46.666667,
+					discount_pct: 0,
+					subtotal: 466.67,
+					tax_amount: 88.67,
+					total: 555.34,
+					billing_period_end: '2026-11-14',
+					description_suffix: ' (hasta 2026-11-14: 14/30 días)',
+				},
+			},
 			{
 				kind: 'update_line',
 				invoice_id: 'inv-12',
@@ -1006,9 +1022,128 @@ describe('item_change (M1 precio/cantidad)', () => {
 				values: { quantity: 8, unit_price: 100, discount_pct: 0, subtotal: 800, tax_amount: 152, total: 952 },
 			},
 		]);
-		expect(ops(plan, 'create_invoices')).toEqual([]);
-		expect(plan.preview.invoices.updated).toEqual([expect.objectContaining({ id: 'inv-12', subtotal_before: 1200, subtotal_after: 1000 })]);
-		expect(plan.event).toMatchObject({ type: 'DOWNSELL', subtype: 'quantity', amount_delta: -200, rsm_from_month: '2026-12-01' });
+		const [create] = ops(plan, 'create_invoices') as Array<{ invoices: Array<{ lines: Array<Record<string, unknown>> }>; merge_into: Array<string | null> }>;
+
+		expect(create.merge_into).toEqual(['inv-11']);
+		expect(create.invoices[0].lines).toEqual([
+			expect.objectContaining({
+				item_key: LICENCIA,
+				quantity: 8,
+				unit_price: 53.333333,
+				subtotal: 426.67,
+				billing_period_start: '2026-11-15',
+				billing_period_end: '2026-11-30',
+				description: 'Licencia - Periodo 15/11/2026 a 30/11/2026',
+				prorated: true,
+			}),
+		]);
+		expect(plan.preview.invoices.updated).toEqual([
+			expect.objectContaining({ id: 'inv-11', subtotal_before: 1200, subtotal_after: 1093.34 }),
+			expect.objectContaining({ id: 'inv-12', subtotal_before: 1200, subtotal_after: 1000 }),
+		]);
+		expect(plan.event).toMatchObject({ type: 'DOWNSELL', subtype: 'quantity', amount_delta: -200, rsm_from_month: '2026-11-01' });
+	});
+
+	describe('downsell dentro de un período (soporte SimpliRoute 28-10, S06879 / Carelis)', () => {
+		const MONTHS_ALL = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+		/** PATHFINDER+ 30 × 38,50 (MRR 1.155) mensual anticipado; octubre emitido, noviembre y diciembre Por Emitir; hoy 20-10. */
+		const s06879 = (overrides: { billing_method?: string; lineOverrides?: (mm: string) => Record<string, unknown> } = {}) =>
+			context({
+				today: '2026-10-20',
+				items: [
+					itemRow({ product_name: 'PATHFINDER+', quantity: 30, unit_price: 38.5, monthly_price: 1155, final_price: 13860, ...(overrides.billing_method ? { billing_method: overrides.billing_method } : {}) }),
+					soporteRow(),
+				],
+				invoices: MONTHS_ALL.map((mm) => {
+					const row = invoiceRow(mm, mm === '10' ? { status: 'Emitida', invoice_number: 'F-10' } : {});
+
+					return {
+						...row,
+						// Neto de la PE = PATHFINDER+ 1.155 + Soporte 200.
+						subtotal: 1355,
+						lines: row.lines.map((line) =>
+							line.contract_item_id === LICENCIA
+								? { ...line, quantity: 30, unit_price: 38.5, subtotal: 1155, tax_amount: 219.45, total: 1374.45, ...(overrides.lineOverrides?.(mm) ?? {}) }
+								: line
+						),
+					};
+				}),
+			});
+		const rebaja = (ctx = s06879(), effective = '2026-11-08') =>
+			planChange(ctx, request({ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 5, unit_price: 47.96 }] }, { effective_date: effective, reason: 'ok' }));
+
+		it('5 × 47,96 desde el 08-11 con noviembre Por Emitir: 1–7 nov 30 × 38,50 × 7/30 = 269,50; 8–30 nov 5 × 47,96 × 23/30 = 183,85; diciembre 239,80', () => {
+			const plan = rebaja();
+			const [delta] = inserted(plan);
+
+			expect(plan.preview.blockers).toEqual([]);
+			expect(plan.preview.warnings.map((warning) => warning.code)).toEqual(['downsell_prorated']);
+			expect(plan.preview.warnings[0].message).toBe(
+				'La rebaja de "PATHFINDER+" rige desde el 2026-11-08: el período 2026-11-01 → 2026-11-30 se prorratea por días (2026-11-01 a 2026-11-07 con 30, 2026-11-08 a 2026-11-30 con 5)'
+			);
+			// ΔMRR = 5 × 47,96 − 1.155 = −915,20; valor por días −915,20 × (23/30 + 1) = −1.616,85.
+			expect(delta).toMatchObject({ categoria: 'DOWNSELL', start_date: '2026-11-08', end_date: '2026-12-31', term_months: 2, final_price: -1616.85 });
+			expect(Math.round(Number(delta.quantity) * Number(delta.unit_price) * 100) / 100).toBe(-915.2);
+			expect(ops(plan, 'update_line')).toEqual([
+				expect.objectContaining({
+					invoice_id: 'inv-11',
+					line_id: 'line-11-lic',
+					values: expect.objectContaining({ quantity: 30, subtotal: 269.5, billing_period_end: '2026-11-07', description_suffix: ' (hasta 2026-11-07: 7/30 días)' }),
+				}),
+				expect.objectContaining({ invoice_id: 'inv-12', line_id: 'line-12-lic', values: expect.objectContaining({ quantity: 5, unit_price: 47.96, subtotal: 239.8 }) }),
+			]);
+			const [create] = ops(plan, 'create_invoices') as Array<{ invoices: Array<{ lines: Array<Record<string, unknown>> }>; merge_into: Array<string | null> }>;
+
+			expect(create.merge_into).toEqual(['inv-11']);
+			expect(create.invoices[0].lines[0]).toMatchObject({ quantity: 5, unit_price: 36.769333, subtotal: 183.85, billing_period_start: '2026-11-08', billing_period_end: '2026-11-30' });
+			// Noviembre (con Soporte 200): 1.355 → 200 + 269,50 + 183,85 = 653,35. Octubre emitido intacto.
+			expect(plan.preview.invoices.updated.find((entry) => entry.id === 'inv-11')).toMatchObject({ subtotal_before: 1355, subtotal_after: 653.35 });
+			expect(plan.ops.some((op) => JSON.stringify(op).includes('inv-10'))).toBe(false);
+			// TCV después = Σ final de los ítems: 13.860 (PATHFINDER+) + 2.400 (Soporte) − 1.616,85 (ajuste por días) = Σ facturas.
+			expect(plan.preview.contract.after.total_value).toBe(14643.15);
+			expect(plan.event).toMatchObject({ type: 'DOWNSELL', subtype: 'RENEGOTIATION', amount_delta: -915.2, rsm_from_month: '2026-11-01' });
+		});
+
+		it('mes vencido: la factura que cubre noviembre también se prorratea (la condición es sobre la factura, no sobre la fecha)', () => {
+			const plan = rebaja(s06879({ billing_method: 'Vencido' }));
+
+			expect(plan.preview.warnings.map((warning) => warning.code)).toEqual(['downsell_prorated']);
+			expect(ops(plan, 'update_line')[0]).toMatchObject({ invoice_id: 'inv-11', values: expect.objectContaining({ subtotal: 269.5, billing_period_end: '2026-11-07' }) });
+			expect((ops(plan, 'create_invoices')[0] as { invoices: Array<{ lines: Array<{ subtotal: number }> }> }).invoices[0].lines[0].subtotal).toBe(183.85);
+		});
+
+		it('la factura del período ya emitida: rige desde el próximo inicio de período como hoy; si lo emitido cubre más, bloquea con fecha sugerida', () => {
+			const siguiente = rebaja(s06879(), '2026-10-15');
+
+			expect(siguiente.preview.blockers).toEqual([]);
+			expect(siguiente.preview.warnings.map((warning) => warning.code)).toEqual(['downsell_from_next_period']);
+			expect(inserted(siguiente)[0]).toMatchObject({ start_date: '2026-11-01', final_price: -1830.4 });
+			expect(ops(siguiente, 'create_invoices')).toEqual([]);
+
+			const bloqueado = rebaja(s06879(), '2026-09-15');
+
+			expect(bloqueado.preview.blockers[0]).toMatchObject({ code: 'issued_after_effective_date', next_step: expect.stringContaining('2026-11-01') });
+		});
+
+		it('fecha efectiva = inicio de período: sin tramo ni aviso', () => {
+			const plan = rebaja(s06879(), '2026-11-01');
+
+			expect(plan.preview.warnings).toEqual([]);
+			expect(inserted(plan)[0]).toMatchObject({ start_date: '2026-11-01', final_price: -1830.4 });
+			expect(ops(plan, 'create_invoices')).toEqual([]);
+			expect(ops(plan, 'update_line').map((op) => op.invoice_id)).toEqual(['inv-11', 'inv-12']);
+		});
+
+		it('línea de noviembre con consumo registrado o editada a mano: no se prorratea, rige desde el próximo período', () => {
+			const consumo = rebaja(s06879({ lineOverrides: (mm) => (mm === '11' ? { quantity_source: 'consumption' } : {}) }));
+
+			expect(consumo.preview.warnings.map((warning) => warning.code)).toContain('downsell_from_next_period');
+			expect(inserted(consumo)[0]).toMatchObject({ start_date: '2026-12-01' });
+
+			const manual = rebaja(s06879({ lineOverrides: (mm) => (mm === '11' ? { quantity_source: 'manual' } : {}) }));
+
+			expect(manual.preview.warnings.map((warning) => warning.code)).toContain('downsell_from_next_period');
+		});
 	});
 	it('renegociación (dos ejes) con la fórmula unificada: STG-38 da UPSELL +51,20 con qty −20', () => {
 		const stg = itemRow({ quantity: 160, unit_price: 13.68, monthly_price: 2188.8, final_price: 26265.6 });
