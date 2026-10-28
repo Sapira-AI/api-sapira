@@ -88,21 +88,66 @@ como están (una por factura, metadata vieja, sin `invoices`): el front las mues
 Riesgo: el cierre automático al enviar bien ahora también achica grupos; si `updateContent` falla, el `warn` del scheduler lo registra y el
 envío no se afecta.
 
-## C–E · Pendientes (plan, con OK de Domi y análisis de impacto aparte)
+## C · Estado al fallar la publicación (hecho, sin commit)
 
-- **C · Estado al fallar `action_post`.** No queda Enviada con folio de borrador: vuelve a Por Emitir con `odoo_invoice_id` guardado,
-  `sent_to_odoo_at` limpio y marca de error visible en la cola ("Error al emitir: <motivo>"); el webhook no escribe `invoice_number` si
-  `name = '/'` o si el scheduler acaba de registrar el fallo del `post` de esa factura; confirmar el borrador en Odoo tras cargar el CAF
-  deja Emitida con el folio real (camino a verificar con test). Lectores de `Enviada`: Métricas, Clientes, cobranza, vencidas, devengo
-  (`trigger_rsm_on_invoice_change`): análisis de impacto obligatorio.
-- **D · México.** Move publicado pero CFDI no timbrado → no `Emitida`: "Publicada en el ERP, timbrado rechazado: <motivo>";
-  `emitElectronicInvoiceWithSendWizard` devuelve `rejected` con el motivo en vez de lanzar.
+Dato de prod del 28-10 (solo lectura, antes de construir): las 29 de Simplit **ya no** estaban "Enviada FAC 028401": alguien cargó el CAF y
+confirmó los borradores en Odoo y hoy figuran Emitida con folios reales FAC 028401–028429 (+ FCXE 000756). Ese Emitida no lo escribió la
+API (el scheduler solo lo escribe tras publicar él mismo; el webhook escribe Enviada): llegó por soporte o por el front viejo. Las 30 alertas
+seguían abiertas: se resolvieron con OK de Domi y respaldo en `sapira_backups.app_notifications_odoo_failure_20261028`. Las de julio
+(FAC 027500–027515) están Pagadas. Hay 7 grupos de folio repetido entre emitidas (16 facturas; 4 con FCXE 000800 en una compañía) que
+huelen al mismo patrón: análisis aparte.
+
+Confirmado en código: el scheduler **nunca escribe Enviada**; lo hace el webhook (`posted` → Enviada + `name`) y además reconstruye el
+devengo. La acción automatizada de Odoo dispara el webhook dentro de la transacción de `action_post`, con el nombre provisional de la
+secuencia, antes del rollback. El catch del scheduler solo registraba log y alerta.
+
+- **`OdooInvoicesService.readInvoiceState`** (nuevo): `state`, `name` y `edi_state` del documento (sin `account_edi`, relee sin el campo).
+- **`InvoiceSchedulerService.revertIfNotPosted`**: en los dos caminos de fallo de la publicación (respuesta `success: false` y excepción) relee
+  el documento en Odoo. Si **no** quedó publicado y Sapira la tiene como facturada o con un folio distinto al de antes del envío: vuelve a
+  **Por Emitir** con el folio previo (NULL en v2), conserva `odoo_invoice_id` y `sent_to_odoo_at` (la cola la muestra "Borrador en ERP" y
+  `pendingInvoicesQuery` no la reenvía: no se duplica el borrador) y, si estaba facturada, `revenue_schedule_rebuild(contrato, mes de
+  emisión)` como hace el webhook. Si Odoo dice `posted`, no toca nada; si no se puede leer, tampoco. Nunca lanza.
+- **Webhook:** `name = '/'` nunca se copia como folio (guard barato; **no cubre** el caso del 28-10, donde llegó "FAC 028401": lo cubre la
+  relectura). Cuando una Por Emitir pasa a publicada, cierra sus avisos de envío fallido o la saca del aviso agrupado
+  (`detachInvoiceFromOdooFailureAlerts`, compartido con el scheduler; `NotificationsService` inyectado con `@Optional()`, `OdooModule`
+  importa `NotificationsModule`).
+- **Cola Por Emitir** (`BillingReadService.queueEntries`): para las vinculadas al ERP lee el último intento del log en una sola consulta
+  (`InvoiceSchedulerService.lastSendErrors`, `BillingModule` importa `InvoicesModule`) y, si falló, el bloqueo `sent_to_erp_draft` dice
+  **"Error al emitir en el ERP: <motivo>"** con el paso siguiente traducido. El front no cambia: ya muestra `message`/`next_step` del
+  bloqueo; el chip sigue "Borrador en ERP" con "Restablecer borrador".
+- "Qué hacemos nosotros" de la etapa `post_invoice` ahora dice que la factura vuelve a Por Emitir como "Borrador en ERP" y que el aviso se
+  cierra al confirmarse el borrador en el ERP.
+
+## D · México publicada sin timbre (hecho, sin commit)
+
+- **`emitElectronicInvoiceWithSendWizard`**: si el wizard lanza (Fault del PAC) pero `readInvoiceState` dice `posted`, devuelve
+  `electronic_status: 'rejected'` con el motivo en vez de lanzar; si no quedó publicada, lanza como antes.
+- **Scheduler**: rechazo o excepción del timbre → **`Enviada`** (lo que el webhook ya puso), nunca `Emitida`; Emitida solo con timbre
+  aceptado / no requerido. Para Métricas, Clientes y cobranza no cambia nada: Enviada ya cuenta como facturada en todos los lectores; cambia
+  la etiqueta ("Enviada al ERP") y la vista rápida muestra "El SAT rechazó el timbrado…" (`last_send_attempt`, ya existía).
+- **Webhook**: lee `edi_state` (o `l10n_mx_edi_cfdi_state`) si viene en el aviso; publicada + `sent` → Emitida. Hoy la acción automatizada
+  no lo manda: pedido a Leon. Mientras, una rechazada y luego timbrada en Odoo queda Enviada hasta que se pague.
+
+Tests: `invoice-scheduler.service.spec.ts` (C: fallo → Por Emitir sin folio + devengo; publicada → no toca; ilegible → no toca; Por Emitir sin
+cambios → no reescribe; D: rechazo y excepción → Enviada, aceptado → Emitida; `lastSendErrors`), `odoo-invoices.service.spec.ts`
+(`readInvoiceState`, wizard con documento publicado → rechazada), `odoo-webhook.service.spec.ts` (nombre "/", cierre de alertas, `edi_state`),
+`billing-read-queue.spec.ts` (bloqueo con motivo), `odoo-failure-alert.spec.ts` (detach). Arranque de la API local verificado tras la DI.
+
+**Impacto de C+D.** Quién más lo usa: `status`/`invoice_number` los leen webhook, backfill, cola (`toIssueGroupOf` → `erp_draft`), Contrato
+360 (`erp_sync_state: draft`), consumos y modificaciones (`hasErpDraft`, `erp_draft_stale`), Métricas/Clientes/cobranza (estados
+facturados): volver a Por Emitir las saca de facturado, igual que si nunca se hubieran publicado; el devengo se reconstruye. `Enviada` en
+vez de `Emitida` no mueve ningún KPI. `sendInvoiceToOdoo` lo llaman la corrida automática, "Enviar ahora" de Contratos y el envío masivo de
+Facturación: los tres heredan C y D. Registros: ninguno migrado (las 29 ya estaban emitidas; A10166 queda como decida Domi). Riesgo: si Odoo
+no responde a la relectura, la factura queda como la dejó el webhook (igual que hoy) y el log lo dice.
+
+## E · Pendiente (plan, con OK de Domi)
+
 - **E · Resumen de la corrida** por causa ("29 sin folios CAF Chile, 1 timbrado rechazado México") y enlace a las facturas con error, no a
-  Por Emitir.
-- Datos de prod: las 29 "Enviada FAC 028401" y la A10166 se corrigen con OK explícito de Domi y respaldo (sin folio, de vuelta a Por Emitir
-  o Enviada según lo que haga la usuaria en Odoo).
-- Aviso a Leon (`docs/v2-rediseno/cambios-integracion-para-leon.md`): A es la ampliación de patrones que pedía su §9; C y D tocan
-  scheduler y webhook y se le avisan al construirlos.
+  Por Emitir (`InvoiceNotificationService.sendSchedulerErrorSummary`).
+- Datos de prod: A10166 (México, publicada con CFDI rechazado) sigue Emitida; pasarla a Enviada no mueve KPIs y la decide Domi. Las 29 de
+  Chile ya estaban emitidas; sus 30 alertas se resolvieron (respaldo arriba).
+- Aviso a Leon (`docs/v2-rediseno/cambios-integracion-para-leon.md`): A, B, C y D ya avisados; pedido: que la acción automatizada mande
+  `edi_state` para que Sapira pase a Emitida cuando se vuelva a timbrar en Odoo.
 
 ## Impacto de A
 

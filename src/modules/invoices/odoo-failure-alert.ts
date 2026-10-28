@@ -34,9 +34,9 @@ export const ODOO_FAILURE_WHAT_WE_DO: Record<OdooFailureStage, string> = {
 	create_draft: 'La factura sigue Por Emitir: la reintentamos en la próxima corrida automática y cerramos este aviso cuando se envía bien.',
 	product_mapping: 'La factura sigue Por Emitir: la reintentamos en la próxima corrida automática y cerramos este aviso cuando se envía bien.',
 	post_invoice:
-		'No la reintentamos solos: el borrador ya existe en el ERP y un reenvío lo duplicaría. Cuando el borrador se confirme en el ERP, Sapira toma el folio; después archiva este aviso.',
+		'No la reintentamos solos: el borrador ya existe en el ERP y un reenvío lo duplicaría. La factura vuelve a Por Emitir como "Borrador en ERP"; cuando el borrador se confirme en el ERP, Sapira toma el folio y cierra este aviso.',
 	emit_electronic_invoice:
-		'No la reintentamos solos: la factura ya está publicada en el ERP. Cuando se vuelva a timbrar allí, archiva este aviso.',
+		'No la reintentamos solos: la factura ya está publicada en el ERP y queda "Enviada al ERP" sin timbre. Cuando se vuelva a timbrar allí, archiva este aviso.',
 	send_invoice_to_customer: 'La factura ya está emitida en el ERP; solo falló el correo al cliente. Envíaselo desde el ERP y archiva este aviso.',
 };
 
@@ -180,6 +180,57 @@ export function odooFailureContent(input: OdooFailureContentInput): OdooFailureC
 			error_details: input.errorDetails ?? null,
 		},
 	};
+}
+
+/** Lo que el cierre automático necesita del servicio de notificaciones (lo cumplen `NotificationsService` y los mocks de los tests). */
+export interface OdooFailureAlertStore {
+	resolveOpen(holdingId: string, criteria: { type?: string; resourceId?: string; ids?: string[] }): Promise<number>;
+	findOpenWithMember(holdingId: string, type: string, listKey: string, id: string): Promise<Array<{ id: string; metadata?: Record<string, unknown> | null }>>;
+	updateContent(
+		holdingId: string,
+		notificationId: string,
+		patch: {
+			title: string;
+			message: string;
+			recommendation?: string;
+			action_type?: string;
+			action_payload?: Record<string, unknown>;
+			metadata?: Record<string, unknown>;
+			resource_id?: string;
+		}
+	): Promise<void>;
+}
+
+export const INVOICE_ODOO_FAILURE_TYPE = 'invoice_odoo_failure';
+
+/**
+ * Una factura llegó bien al ERP (el scheduler la envió, o el webhook la vio publicada): se resuelven sus avisos propios (`resource_id`) y
+ * sale de los avisos agrupados que la contienen; un grupo que queda vacío se resuelve. Lo comparten el scheduler y el webhook de Odoo.
+ */
+export async function detachInvoiceFromOdooFailureAlerts(store: OdooFailureAlertStore, holdingId: string, invoiceId: string): Promise<void> {
+	await store.resolveOpen(holdingId, { type: INVOICE_ODOO_FAILURE_TYPE, resourceId: invoiceId });
+	const groups = await store.findOpenWithMember(holdingId, INVOICE_ODOO_FAILURE_TYPE, 'invoices', invoiceId);
+
+	for (const group of groups) {
+		const remaining = failureInvoicesOf(group.metadata).filter((item) => item.id !== invoiceId);
+		const input = remaining.length ? contentInputFromMetadata(group.metadata ?? {}, remaining) : null;
+
+		if (!input) {
+			await store.resolveOpen(holdingId, { ids: [group.id] });
+			continue;
+		}
+		const content = odooFailureContent({ ...input, invoiceCount: remaining.length });
+
+		await store.updateContent(holdingId, group.id, {
+			title: content.title,
+			message: content.message,
+			recommendation: content.recommendation,
+			action_type: content.action_type,
+			action_payload: content.action_payload,
+			metadata: content.metadata,
+			resource_id: content.resource_id,
+		});
+	}
 }
 
 /** Reconstruye la entrada de `odooFailureContent` desde la metadata guardada (para achicar el grupo al enviar bien una factura). */

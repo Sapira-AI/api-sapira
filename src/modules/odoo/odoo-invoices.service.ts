@@ -362,6 +362,41 @@ export class OdooInvoicesService {
 	}
 
 	/**
+	 * Estado real de un documento en Odoo (`state`, `name`, y el estado del timbre si el módulo lo expone). Lo usa el scheduler cuando la
+	 * publicación o el timbre fallan: Odoo dispara el webhook dentro de su transacción, antes del rollback, así que lo que Sapira recibió
+	 * puede no ser lo que quedó. `null` si Odoo no conoce el id.
+	 */
+	async readInvoiceState(holdingId: string, invoiceId: number): Promise<{ state: string; name: string | null; edi_state: string | null } | null> {
+		const connection = await this.getOdooConnectionByHoldingId(holdingId);
+		const commonClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/common`);
+		const objectClient = this.odooProvider.createXmlRpcClient(`${connection.url}/xmlrpc/2/object`);
+		const uid = await commonClient.methodCall('authenticate', [connection.database_name, connection.username, connection.api_key, {}]);
+
+		if (!uid) throw new Error('Falló la autenticación con Odoo');
+		const read = async (fields: string[]) =>
+			(await objectClient.methodCall('execute_kw', [connection.database_name, uid, connection.api_key, 'account.move', 'read', [[invoiceId]], { fields }])) as Array<
+				Record<string, unknown>
+			>;
+		let rows: Array<Record<string, unknown>>;
+
+		try {
+			rows = await read(['state', 'name', 'edi_state']);
+		} catch {
+			// Bases sin `account_edi`: el campo no existe y Odoo rechaza el read entero.
+			rows = await read(['state', 'name']);
+		}
+		const row = rows?.[0];
+
+		if (!row) return null;
+
+		return {
+			state: String(row.state ?? ''),
+			name: typeof row.name === 'string' ? row.name : null,
+			edi_state: typeof row.edi_state === 'string' ? row.edi_state : null,
+		};
+	}
+
+	/**
 	 * Emite electrónicamente una factura según el país de la compañía
 	 * - Chile: No requiere paso adicional (ya está emitida con action_post)
 	 * - Colombia: Ejecuta wizard "Enviar e imprimir" con DIAN
@@ -586,6 +621,19 @@ export class OdooInvoicesService {
 			};
 		} catch (error) {
 			this.logger.error(`❌ Error emitiendo factura ${labels.countryLabel} con ${labels.authorityLabel}:`, error);
+			// D (Domi 28-10): si el wizard lanza (p. ej. el PAC rechaza el CFDI) pero el documento sí quedó publicado en Odoo, no es un fallo de
+			// envío sino un timbre rechazado: se devuelve `rejected` con el motivo para que el scheduler deje la factura Enviada, no Emitida.
+			const remote = await this.readInvoiceState(holdingId, invoiceId).catch(() => null);
+
+			if (remote?.state === 'posted') {
+				return {
+					success: true,
+					message: `Factura ${remote.name ?? invoiceId} publicada en Odoo pero rechazada por ${labels.authorityLabel}`,
+					state: remote.state,
+					electronic_status: 'rejected',
+					electronic_errors: [{ message: this.getErrorMessage(error) }],
+				};
+			}
 			throw new Error(`Error emitiendo factura ${labels.countryLabel} en Odoo: ${this.getErrorMessage(error)}`);
 		}
 	}

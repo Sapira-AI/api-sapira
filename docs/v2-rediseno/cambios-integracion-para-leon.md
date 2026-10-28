@@ -524,7 +524,18 @@ ERP…". Detalle y causa raíz en `docs/cambios/errores-emision-erp-28-10.md`. L
   facturas en `metadata.invoices`. "Qué hacemos nosotros" ahora dice la verdad por etapa: solo antes de crear el borrador hay reintento
   automático (`pendingInvoicesQuery` exige `sent_to_odoo_at IS NULL`); con borrador o publicada no reenviamos. Al enviar bien una factura,
   sale del grupo (`resolveOdooFailureNotifications`). El Estado de Integraciones › ERP encuentra el aviso por `resource_id` o por la lista.
-- **Pendiente (te avisamos al construirlo):** C) al fallar `action_post` la factura no debe quedar Enviada con el folio provisional (hoy el
-  webhook llega dentro de la transacción de Odoo antes del rollback y el catch del scheduler no revierte `status`/`sent_to_odoo_at`);
-  D) México publicada sin timbre no debe quedar Emitida; E) resumen de la corrida por causa. Esos tres tocan tu scheduler y el webhook.
+- **C · Fallo al publicar (`action_post`):** el scheduler nunca escribía Enviada; lo hacía tu webhook, que Odoo dispara **dentro** de la
+  transacción de `action_post` con el nombre provisional de la secuencia, antes del rollback (por eso las 29 "FAC 028401"). Ahora, en los
+  dos caminos de fallo de la publicación, `InvoiceSchedulerService.revertIfNotPosted` relee el documento (`OdooInvoicesService.readInvoiceState`:
+  `state`, `name`, `edi_state`): si no quedó publicado, la factura vuelve a Por Emitir con el folio previo, conserva `odoo_invoice_id` y
+  `sent_to_odoo_at` (no se reenvía: no se duplica el borrador) y se reconstruye el devengo como hace el webhook. Si Odoo dice `posted`, no se
+  toca. El webhook además ignora `name = '/'` y, cuando una Por Emitir pasa a publicada, cierra sus alertas de envío (`NotificationsService`
+  con `@Optional()`; `OdooModule` importa `NotificationsModule`). La cola Por Emitir dice "Error al emitir en el ERP: <motivo>" en el
+  bloqueo `sent_to_erp_draft` leyendo el último log (`lastSendErrors`, una consulta por página; `BillingModule` importa `InvoicesModule`).
+- **D · México publicada sin timbre:** `emitElectronicInvoiceWithSendWizard` ya no lanza si el documento quedó `posted`: devuelve
+  `electronic_status: 'rejected'` con el Fault del PAC. El scheduler deja la factura **Enviada** (no Emitida) ante rechazo o excepción del
+  timbre; Emitida solo con timbre aceptado o no requerido. **Pedido:** que la acción automatizada mande `edi_state` (o
+  `l10n_mx_edi_cfdi_state`) en el aviso; el webhook ya lo lee y pasa a Emitida al llegar `sent`. Mientras no venga, una rechazada y luego
+  timbrada en Odoo queda Enviada hasta que se pague.
+- **Pendiente:** E) resumen de la corrida por causa.
 

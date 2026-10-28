@@ -2,6 +2,7 @@ import { translateErpError } from './erp-error-translation';
 import {
 	businessDay,
 	contentInputFromMetadata,
+	detachInvoiceFromOdooFailureAlerts,
 	failureInvoicesOf,
 	mergeFailureInvoice,
 	ODOO_FAILURE_MAX_INVOICES,
@@ -190,5 +191,39 @@ describe('odoo-failure-alert (alerta agrupada por causa, Domi 28-10)', () => {
 		expect(shrunk.message).toBe(saved.erp_error && translation.message + '. ' + translation.next_step + '.');
 		expect(contentInputFromMetadata({ failure_stage: 'post_invoice' }, [invoice(1)])).toBeNull();
 		expect(contentInputFromMetadata({ ...saved, failure_stage: 'otra' }, [invoice(1)])).toBeNull();
+	});
+
+	it('detachInvoiceFromOdooFailureAlerts: resuelve los avisos propios, achica los grupos que la contienen y resuelve el grupo vacío (lo comparten scheduler y webhook)', async () => {
+		const translation = translateErpError(CAF, 'odoo_post_exception');
+		const group = (ids: number[]) =>
+			odooFailureContent({
+				invoices: ids.map((n) => invoice(n)),
+				company: simplit,
+				stage: 'post_invoice',
+				translation,
+				errorType: 'odoo_post_exception',
+				errorMessage: CAF,
+				schedulerSource: 'automatic',
+				technicalTitle: null,
+				technicalMessage: null,
+			}).metadata;
+		const store = {
+			resolveOpen: jest.fn().mockResolvedValue(1),
+			findOpenWithMember: jest.fn().mockResolvedValue([
+				{ id: 'g-2', metadata: group([1, 2]) },
+				{ id: 'g-1', metadata: group([1]) },
+			]),
+			updateContent: jest.fn().mockResolvedValue(undefined),
+		};
+
+		await detachInvoiceFromOdooFailureAlerts(store, 'h-1', 'inv-1');
+
+		expect(store.resolveOpen).toHaveBeenCalledWith('h-1', { type: 'invoice_odoo_failure', resourceId: 'inv-1' });
+		expect(store.updateContent).toHaveBeenCalledWith(
+			'h-1',
+			'g-2',
+			expect.objectContaining({ title: 'No se pudo enviar la factura FAC 028402 de Cliente 2', resource_id: 'inv-2', action_payload: { contract_id: 'ctr-2' } })
+		);
+		expect(store.resolveOpen).toHaveBeenCalledWith('h-1', { ids: ['g-1'] });
 	});
 });

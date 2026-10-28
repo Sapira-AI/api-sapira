@@ -4,6 +4,7 @@ import { PostgreSQLDatabaseModule } from '@/databases/postgresql/database.module
 import { BudgetsModule } from '@/modules/budgets/budgets.module';
 import { ContractsModule } from '@/modules/contracts/contracts.module';
 import { EmailsModule } from '@/modules/emails/emails.module';
+import { InvoicesModule } from '@/modules/invoices/invoices.module';
 
 import { BillingBulkService } from './billing-bulk.service';
 import { BillingCollectionsService } from './billing-collections.service';
@@ -24,7 +25,8 @@ import { BillingScheduler } from './billing.scheduler';
  * Presupuesto de ingresos a caja (meta de cobranza y proyección): `BudgetsModule` exporta `BudgetsService`.
  */
 @Module({
-	imports: [PostgreSQLDatabaseModule, ContractsModule, EmailsModule, BudgetsModule],
+	// `InvoicesModule` aporta el scheduler: último intento de envío al ERP para las Por Emitir con borrador (C, Domi 28-10).
+	imports: [PostgreSQLDatabaseModule, ContractsModule, EmailsModule, BudgetsModule, InvoicesModule],
 	controllers: [BillingController, BillingReconciliationController],
 	providers: [
 		BillingReadService,

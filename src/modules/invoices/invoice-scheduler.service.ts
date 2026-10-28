@@ -28,7 +28,14 @@ import { SchedulerJobProgressDto } from './dtos/scheduler-job.dto';
 import { SchedulerReportQueryDto, SchedulerReportResponseDto } from './dtos/scheduler-report.dto';
 import { InvoiceResultDto, ProcessInvoicesResponseDto, ProcessInvoicesSummaryDto } from './dtos/send-invoices.dto';
 import { translateErpError } from './erp-error-translation';
-import { businessDay, contentInputFromMetadata, failureInvoicesOf, mergeFailureInvoice, odooFailureContent, odooFailureGroupKey } from './odoo-failure-alert';
+import {
+	businessDay,
+	detachInvoiceFromOdooFailureAlerts,
+	failureInvoicesOf,
+	mergeFailureInvoice,
+	odooFailureContent,
+	odooFailureGroupKey,
+} from './odoo-failure-alert';
 import { InvoiceNotificationService } from './invoice-notification.service';
 import { InvoiceSchedulerGateway } from './invoice-scheduler.gateway';
 import { type LastSendAttempt, lastSendAttemptOf } from './last-send-attempt';
@@ -52,6 +59,9 @@ export const NON_SENDABLE_DOCUMENT_TYPES = ['NC', 'ND'] as const;
 export const CREDIT_NOTE_SEND_PENDING = 'credit_note_send_pending';
 /** Línea que viajaría al ERP sin producto de Odoo resoluble (mismo código que el bloqueo del 360 y de la cola de Facturación). */
 export const PRODUCT_WITHOUT_ERP_MAPPING = 'product_without_erp_mapping';
+
+/** Estados que cuentan como facturados (misma regla que el devengo del webhook de Odoo). */
+const BILLED_STATUSES = new Set(['Emitida', 'Enviada', 'Pagada', 'Vencida']);
 
 export const isNonSendableDocumentType = (documentType: string | null | undefined): boolean =>
 	(NON_SENDABLE_DOCUMENT_TYPES as readonly string[]).includes((documentType ?? '').trim().toUpperCase());
@@ -711,8 +721,9 @@ export class InvoiceSchedulerService {
 											emitResponse.electronic_errors?.map((e) => e.message).join(', ') ||
 											'La entidad electrónica rechazó la factura';
 
+										// D (Domi 28-10): publicada en el ERP pero sin timbre → Enviada (lo que el webhook ya puso), nunca Emitida.
 										await this.invoiceRepository.update(invoice.id, {
-											status: 'Emitida',
+											status: 'Enviada',
 										});
 										result.status = 'error';
 										result.error = electronicErrorMessage;
@@ -837,11 +848,11 @@ export class InvoiceSchedulerService {
 									}
 								}
 							} catch (emitError) {
-								// Error en emisión electrónica, pero la factura está publicada en Odoo
+								// Error en emisión electrónica, pero la factura está publicada en Odoo: queda Enviada (D, Domi 28-10), no Emitida.
 								this.logger.error(`✗ Error en emisión electrónica para ${invoice.invoice_number}:`, emitError);
 
 								await this.invoiceRepository.update(invoice.id, {
-									status: 'Emitida',
+									status: 'Enviada',
 								});
 
 								result.status = 'error';
@@ -917,6 +928,9 @@ export class InvoiceSchedulerService {
 								schedulerSource,
 								responseData: postResponse,
 							});
+							if ((await this.revertIfNotPosted(invoice, odooResponse.invoice_id)) === 'reverted') {
+								result.details = `${result.details}. La factura vuelve a Por Emitir como borrador en el ERP`;
+							}
 						}
 					} catch (postError) {
 						result.status = 'error';
@@ -953,6 +967,9 @@ export class InvoiceSchedulerService {
 							schedulerSource,
 							errorDetails: { stack: postError.stack },
 						});
+						if ((await this.revertIfNotPosted(invoice, odooResponse.invoice_id)) === 'reverted') {
+							result.details = `${result.details}. La factura vuelve a Por Emitir como borrador en el ERP`;
+						}
 					}
 				} else {
 					result.details = `Factura enviada exitosamente a Odoo con ID: ${odooResponse.invoice_id} (mantiene estado 'Por Emitir')`;
@@ -1045,32 +1062,55 @@ export class InvoiceSchedulerService {
 	 */
 	private async resolveOdooFailureNotifications(invoice: InvoiceWithRelations): Promise<void> {
 		try {
-			await this.notificationsService.resolveOpen(invoice.holding_id, { type: INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE, resourceId: invoice.id });
-			const groups = await this.notificationsService.findOpenWithMember(invoice.holding_id, INVOICE_ODOO_FAILURE_NOTIFICATION_TYPE, 'invoices', invoice.id);
-
-			for (const group of groups) {
-				const remaining = failureInvoicesOf(group.metadata).filter((item) => item.id !== invoice.id);
-				const input = remaining.length ? contentInputFromMetadata(group.metadata ?? {}, remaining) : null;
-
-				if (!input) {
-					await this.notificationsService.resolveOpen(invoice.holding_id, { ids: [group.id] });
-					continue;
-				}
-				const content = odooFailureContent({ ...input, invoiceCount: remaining.length });
-
-				await this.notificationsService.updateContent(invoice.holding_id, group.id, {
-					title: content.title,
-					message: content.message,
-					recommendation: content.recommendation,
-					action_type: content.action_type,
-					action_payload: content.action_payload,
-					metadata: content.metadata,
-					resource_id: content.resource_id,
-				});
-			}
+			await detachInvoiceFromOdooFailureAlerts(this.notificationsService, invoice.holding_id, invoice.id);
 			await this.invoiceNotificationService.resolveMissingExchangeRate(invoice.holding_id, invoice.id);
 		} catch (error) {
 			this.logger.warn(`No se pudieron cerrar los avisos de envío de la factura ${invoice.id}: ${(error as Error).message}`);
+		}
+	}
+
+	/**
+	 * C (Domi 28-10) · la publicación en el ERP falló (CAF agotado, validación de Odoo…). Odoo dispara el webhook **dentro** de la transacción
+	 * de `action_post`, antes del rollback, así que Sapira puede haber quedado Enviada con el folio provisional de la secuencia (las 29
+	 * "FAC 028401" del 28-10). Se relee el documento en Odoo: si no quedó publicado, la factura vuelve a Por Emitir con el folio que tenía
+	 * antes del envío, conserva `odoo_invoice_id` y `sent_to_odoo_at` (borrador en el ERP: la cola la muestra como "Borrador en ERP" y la
+	 * corrida automática no la reenvía) y, si el webhook la había contado como facturada, se reconstruye el devengo del contrato con la misma
+	 * regla del webhook. Si Odoo dice que sí quedó publicada, no se toca nada. Nunca lanza.
+	 */
+	private async revertIfNotPosted(invoice: InvoiceWithRelations, odooInvoiceId: number): Promise<'reverted' | 'posted' | 'unchanged' | 'unknown'> {
+		try {
+			const remote = await this.odooInvoicesService.readInvoiceState(invoice.holding_id, odooInvoiceId);
+
+			if (!remote) return 'unknown';
+			if (remote.state === 'posted') return 'posted';
+			const current = await this.invoiceRepository.findOne({ where: { id: invoice.id } });
+
+			if (!current) return 'unknown';
+			const wasBilled = BILLED_STATUSES.has(current.status ?? '');
+			const numberBefore = invoice.invoice_number ?? null;
+			const numberChanged = (current.invoice_number ?? null) !== numberBefore;
+
+			if (!wasBilled && !numberChanged) return 'unchanged';
+			await this.invoiceRepository.update(invoice.id, { status: 'Por Emitir', invoice_number: numberBefore as unknown as string });
+			this.logger.warn(
+				`↩︎ Factura ${invoice.id} vuelve a Por Emitir: el ERP no publicó el documento ${odooInvoiceId} (estado ${remote.state}); el webhook la había dejado ${current.status}${
+					numberChanged ? ` con folio ${current.invoice_number}` : ''
+				}`
+			);
+			if (wasBilled && current.contract_id) {
+				const issue = current.issue_date ? new Date(current.issue_date).toISOString().slice(0, 10) : null;
+				const from = issue && /^\d{4}-\d{2}-\d{2}$/.test(issue) ? `${issue.slice(0, 7)}-01` : null;
+
+				await this.dataSource
+					.query(`SELECT revenue_schedule_rebuild($1::uuid, $2::date)`, [current.contract_id, from])
+					.catch((error: Error) => this.logger.error(`No se pudo reconstruir el devengo del contrato ${current.contract_id}: ${error.message}`));
+			}
+
+			return 'reverted';
+		} catch (error) {
+			this.logger.warn(`No se pudo verificar en el ERP el documento ${odooInvoiceId} de la factura ${invoice.id}: ${(error as Error).message}`);
+
+			return 'unknown';
 		}
 	}
 
@@ -2315,6 +2355,36 @@ export class InvoiceSchedulerService {
 			this.logger.warn(`No se pudo leer el último intento de envío de la factura ${invoiceId}: ${(error as Error).message}`);
 			return null;
 		}
+	}
+
+	/**
+	 * Último intento **fallido** de envío de varias facturas (una consulta al log por página): lo usa la cola Por Emitir para decir "Error al
+	 * emitir: <motivo>" en las que quedaron como borrador en el ERP (C, Domi 28-10). Solo facturas cuyo último log es un error; si el log no
+	 * responde, mapa vacío (la cola no se bloquea por esto).
+	 */
+	async lastSendErrors(holdingId: string, invoiceIds: string[]): Promise<Map<string, LastSendAttempt>> {
+		const result = new Map<string, LastSendAttempt>();
+
+		if (!invoiceIds.length) return result;
+		try {
+			const rows = (await this.invoiceOdooSendLogModel
+				.aggregate([
+					{ $match: { holding_id: holdingId, invoice_id: { $in: invoiceIds } } },
+					{ $sort: { createdAt: -1 } },
+					{ $group: { _id: '$invoice_id', log: { $first: '$$ROOT' } } },
+				])
+				.exec()) as Array<{ _id: string; log: InvoiceOdooSendLog & { createdAt?: Date } }>;
+
+			for (const row of rows) {
+				const attempt = lastSendAttemptOf(row.log);
+
+				if (!attempt.ok) result.set(row._id, attempt);
+			}
+		} catch (error) {
+			this.logger.warn(`No se pudo leer el último intento de envío de ${invoiceIds.length} facturas: ${(error as Error).message}`);
+		}
+
+		return result;
 	}
 
 	async startSchedulerJob(options: ProcessOptions & { userId: string }): Promise<string> {
