@@ -519,7 +519,8 @@ crea (no es un desvío: sin fila en `invoice_adjustments`, solo el evento).
   `client_request`; el motivo exacto va al evento y a las notas de la NC).
 - **Reemisión** (`reissue: true`): el editor de §3.4 sobre la emitida vista como una Por Emitir nueva (`reissueEditContext`: sin folio ni ERP,
   emisión = `reissue_changes.issue_date` o hoy, vencimiento por condición de pago, sin la emitida en los períodos emitidos ni en "otras facturas"
-  del conciliador). Sin cambios = copia exacta de líneas y encabezado (moneda, tasa, receptor, IVA, condiciones); con `reissue_changes` (mismo
+  del conciliador). Sin cambios = copia exacta de líneas y encabezado (moneda, tasa, receptor, IVA, condiciones; cada línea copiada conserva
+  su propia tasa, origen y fecha de tasa, 28-10); con `reissue_changes` (mismo
   cuerpo que `PUT …/:invoiceId`, `lines[].id` = líneas de la emitida) pasa por la misma lógica y exige `reissue_changes.deviation` si se desvía
   del plan (409 `deviation_reason_required`; con motivo, fila en `invoice_adjustments` de la reemisión). Encabezado nuevo con
   `related_invoice_id` = la original, `split_reason = 'reissue'`, notas "Reemplaza a F-xxxx" (+ las del cuerpo), grupo propio, referencias

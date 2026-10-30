@@ -208,6 +208,7 @@ export interface ContractListFilters {
 	nextEndTo?: string;
 	multicompany?: BoolParam;
 	multicurrency?: BoolParam;
+	requiresReferences?: BoolParam;
 	segment?: string;
 	market?: string;
 	industry?: string;
@@ -387,6 +388,10 @@ export class ContractsService {
 			where.push(isTrue(filters.multicompany!) ? `c.requires_multicompany_billing IS TRUE` : `c.requires_multicompany_billing IS NOT TRUE`);
 		if (has(filters.multicurrency))
 			where.push(isTrue(filters.multicurrency!) ? `c.requires_multicurrency_billing IS TRUE` : `c.requires_multicurrency_billing IS NOT TRUE`);
+		if (has(filters.requiresReferences))
+			where.push(
+				isTrue(filters.requiresReferences!) ? `c.requires_references_for_billing IS TRUE` : `c.requires_references_for_billing IS NOT TRUE`
+			);
 		if (filters.segment?.trim()) where.push(`cl.segment = ANY($${params.push(list(filters.segment))}::text[])`);
 		if (filters.market?.trim()) where.push(`cl.market = ANY($${params.push(list(filters.market))}::text[])`);
 		if (filters.industry?.trim()) where.push(`cl.industry = ANY($${params.push(list(filters.industry))}::text[])`);
@@ -457,7 +462,7 @@ export class ContractsService {
 					COALESCE(rsm.mrr, 0) AS mrr, COALESCE(rsm.mrr_contract_ccy, 0) AS mrr_contract_ccy,
 					c.total_value, c.total_value_system_currency, COALESCE(items.items_count, 0) AS items_count,
 					COALESCE(pr.products, '{}') AS products, c.auto_send_to_odoo, c.auto_invoice,
-					c.requires_multicompany_billing, c.requires_multicurrency_billing,
+					c.requires_multicompany_billing, c.requires_multicurrency_billing, c.requires_references_for_billing,
 					qt.seller_id, sl.name AS seller_name, qt.id AS quote_id, qt.quote_number
 				${from}
 				LEFT JOIN LATERAL (
@@ -536,6 +541,8 @@ export class ContractsService {
 				auto_invoice: bool(row.auto_invoice),
 				requires_multicompany_billing: bool(row.requires_multicompany_billing),
 				requires_multicurrency_billing: bool(row.requires_multicurrency_billing),
+				// Requiere OC/HES en la fila: la acción masiva muestra el estado actual y ofrece la acción contraria (Domi 26-10).
+				requires_references_for_billing: bool(row.requires_references_for_billing),
 				seller: row.seller_id ? { id: row.seller_id as string, name: toText(row.seller_name) } : null,
 				/** Cotización de origen (si el contrato nació de una). */
 				client_segment: toText(row.client_segment),
@@ -706,6 +713,7 @@ export class ContractsService {
 					nx.next_item_end_date::text AS next_item_end_date, c.term, c.churn_date::text AS churn_date,
 					COALESCE(cr.name, c.churn_reason) AS churn_reason,
 					c.billing_anchor_day, c.payment_terms, c.document_type, c.requires_multicompany_billing, c.requires_multicurrency_billing,
+					c.requires_references_for_billing,
 					c.tax_document_type_id, tdt.code AS tax_document_type_code, tdt.name AS tax_document_type_name, tdt.kind AS tax_document_type_kind,
 					tdt.country_code AS tax_document_type_country,
 					c.auto_send_to_odoo, c.auto_invoice, c.group_invoices_by_period, c.invoice_terms_and_conditions, c.notes, c.export_details,
@@ -815,6 +823,8 @@ export class ContractsService {
 			/** Banderas: factura a más de una razón social / en más de una moneda (mismas que la lista). */
 			requires_multicompany_billing: row.requires_multicompany_billing === true,
 			requires_multicurrency_billing: row.requires_multicurrency_billing === true,
+			/** Requiere OC/HES (Domi 26-10): la marca se edita en Modificar facturación › Condiciones y en la acción masiva. */
+			requires_references_for_billing: row.requires_references_for_billing === true,
 			/** Multimoneda: tasas fijas pactadas ítem → contrato (`purpose = 'item'`, "1 [from] = rate [moneda del contrato]"). Vacío sin multimoneda. */
 			fx_item_rates: ContractsService.fxItemRatesOf(row.fx_item_rates),
 			auto_send_to_odoo: row.auto_send_to_odoo === null || row.auto_send_to_odoo === undefined ? null : Boolean(row.auto_send_to_odoo),
@@ -1270,7 +1280,8 @@ export class ContractsService {
 					i.odoo_invoice_id, i.sent_to_odoo_at, ${DTE_COLUMNS_SQL}, i.sent_at, i.notes, i.pdf_url, i.invoice_terms_and_conditions,
 					(co.odoo_integration_id IS NULL AND EXISTS (SELECT 1 FROM sii_configurations s WHERE s.company_id = i.company_id AND s.holding_id = i.holding_id
 						AND s.is_enabled = true)) AS dte_issuer,
-					i.requires_references_for_billing, i.related_invoice_id, i.consolidated_into_invoice_id, i.split_from_invoice_id, i.split_reason,
+					i.requires_references_for_billing, c.requires_references_for_billing AS contract_requires_references_for_billing,
+					i.related_invoice_id, i.consolidated_into_invoice_id, i.split_from_invoice_id, i.split_reason,
 					-- Proforma / documento: emisor y receptor como los guarda la factura, con la compañía y la razón social como respaldo.
 					COALESCE(i.issuer_legal_name, co.legal_name) AS issuer_legal_name, COALESCE(i.issuer_tax_id, co.tax_id) AS issuer_tax_id,
 					COALESCE(i.issuer_address, co.legal_address) AS issuer_address, i.fiscal_regime, i.export_type, i.export_details,
@@ -1430,6 +1441,8 @@ export class ContractsService {
 			pdf_url: toText(header.pdf_url),
 			invoice_terms_and_conditions: toText(header.invoice_terms_and_conditions),
 			requires_references_for_billing: header.requires_references_for_billing === true,
+			// La marca del contrato manda (contrato O factura): el check de la factura se bloquea en el front cuando el contrato la exige (Domi 26-10).
+			contract_requires_references_for_billing: header.contract_requires_references_for_billing === true,
 			related_invoice_id: toText(header.related_invoice_id),
 			split_reason: toText(header.split_reason),
 			split_from_invoice_id: toText(header.split_from_invoice_id),

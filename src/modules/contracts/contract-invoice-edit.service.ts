@@ -1300,6 +1300,9 @@ export class ContractInvoiceEditService {
 			quantity_source: toText(row.quantity_source),
 			pricing_breakdown: parseJson<PricedSubline[]>(row.pricing_breakdown),
 			visible_line_id: toText(row.visible_line_id),
+			// Tasa y origen propios de la línea (sin `currency`: no es la rama multimoneda de `stateOf`). La reemisión los copia tal cual.
+			fx: toNullableNumber(row.line_fx),
+			fx_rate_source: toText(row.line_fx_rate_source),
 		};
 	}
 

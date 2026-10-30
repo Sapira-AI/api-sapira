@@ -131,6 +131,7 @@ describe('ContractsService', () => {
 					nextEndTo: '2026-10-31',
 					multicompany: 'true',
 					multicurrency: 'false',
+					requiresReferences: 'true',
 					clientCountry: 'Chile,Perú',
 					entityCountry: 'CL',
 					autoInvoice: 'false',
@@ -169,6 +170,7 @@ describe('ContractsService', () => {
 				expect(sql).toContain('nx.next_item_end_date <= $11::date');
 				expect(sql).toContain('c.requires_multicompany_billing IS TRUE');
 				expect(sql).toContain('c.requires_multicurrency_billing IS NOT TRUE');
+				expect(sql).toContain('c.requires_references_for_billing IS TRUE');
 				expect(sql).toContain('cl.country = ANY($12::text[])');
 				expect(sql).toContain('ce.country = ANY($13::text[])');
 				expect(sql).toContain('c.auto_invoice IS NOT TRUE');

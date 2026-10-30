@@ -122,7 +122,7 @@ const defaults: Array<[string, unknown[]]> = [
 	['FROM currencies', [{ code: 'CLP' }, { code: 'USD' }]],
 	['FROM tax_document_types', TAX_CATALOG],
 	['FROM contracts c WHERE c.quote_id', []],
-	['substring(contract_number', [{ next: 7 }]],
+	['regexp_match(contract_number', [{ next: 7 }]],
 	['FROM holding_settings', [{ system_currency: 'CLP' }]],
 	['INSERT INTO contracts', [{ id: 'contract-new' }]],
 	['INSERT INTO contract_items', [{ id: 'item-1', auto_renew: false }]],
@@ -255,7 +255,7 @@ describe('ContractDraftsService', () => {
 			const [lock] = calls(runner.query, 'pg_advisory_xact_lock');
 
 			expect(lock[1]).toEqual(['contracts:h-1:CTR:2026']);
-			const [next] = calls(runner.query, 'substring(contract_number');
+			const [next] = calls(runner.query, 'regexp_match(contract_number');
 
 			expect(next[1]).toEqual(['h-1', '^CTR-2026-(\\d{1,5})$']);
 
@@ -338,14 +338,18 @@ describe('ContractDraftsService', () => {
 			expect(calls(runner.query, 'INSERT INTO invoices')).toHaveLength(0);
 		});
 
-		it('número manual repetido en el holding → 409 y rollback', async () => {
+		it('número manual repetido en el holding → 409 y rollback; sin distinguir mayúsculas y nombrando el existente (Domi 26-10, 4a)', async () => {
 			const { service, runner } = build((sql) =>
-				sql.includes('SELECT 1 FROM contracts WHERE holding_id = $1 AND contract_number') ? [{ '?column?': 1 }] : undefined
+				sql.includes('WHERE holding_id = $1 AND lower(contract_number) = lower($2)') ? [{ contract_number: 'CTR-2026-100' }] : undefined
 			);
 
-			await expect(service.create(baseDto({ contract_number: 'CTR-2026-100' }), 'h-1', 'auth-1', NOW)).rejects.toThrow(
+			await expect(service.create(baseDto({ contract_number: 'ctr-2026-100 ' }), 'h-1', 'auth-1', NOW)).rejects.toThrow(
 				new ConflictException('Ya existe un contrato con el número CTR-2026-100')
 			);
+			const [[existsSql, existsParams]] = calls(runner.query, 'lower(contract_number) = lower($2)');
+
+			expect(existsSql).toContain('SELECT contract_number FROM contracts');
+			expect(existsParams).toEqual(['h-1', 'ctr-2026-100']);
 			expect(runner.rollbackTransaction).toHaveBeenCalled();
 			expect(runner.release).toHaveBeenCalled();
 			expect(calls(runner.query, 'INSERT INTO contracts')).toHaveLength(0);
@@ -355,7 +359,7 @@ describe('ContractDraftsService', () => {
 			const { service, runner } = build();
 
 			await service.create(baseDto({ contract_number: 'ACME-01' }), 'h-1', 'auth-1', NOW);
-			expect(calls(runner.query, 'substring(contract_number')).toHaveLength(0);
+			expect(calls(runner.query, 'regexp_match(contract_number')).toHaveLength(0);
 			expect(calls(runner.query, 'INSERT INTO contracts')[0][1]).toContain('ACME-01');
 		});
 
@@ -718,7 +722,7 @@ describe('ContractDraftsService', () => {
 						},
 					];
 				if (sql.includes('FROM master_data')) return [{ category: 'item_types', value: 'Licencias' }];
-				if (sql.includes('substring(contract_number')) return [{ next: 12 }];
+				if (sql.includes('regexp_match(contract_number')) return [{ next: 12 }];
 				if (sql.includes('FROM products p'))
 					return [{ id: PRODUCT, name: 'Licencia', is_recurring: true, item_type: 'Licencias', unit_of_measure: 'UN' }];
 
@@ -1852,7 +1856,10 @@ describe('ContractDraftsService · editar borrador (GET :id/form y PUT :id)', ()
 			);
 
 			// La categoría se recalcula con el cliente y el producto guardados (sin contar borradores borrados).
-			expect(updateSql).toContain(`categoria = COALESCE($33::text, ${itemCategoriaSql(2, 4, 20)})`);
+			// Domi 26-10 (4c): un ítem ya en RENEWAL (Datos históricos, arranque rápido) conserva la categoría al editar; el resto se recalcula.
+			expect(updateSql).toContain(
+				`categoria = COALESCE($33::text, CASE WHEN categoria = 'RENEWAL' THEN categoria ELSE ${itemCategoriaSql(2, 4, 20)} END)`
+			);
 			expect(updateParams.slice(0, 3)).toEqual([ITEM_A, 'contract-1', 'h-1']);
 			expect(updateParams).toHaveLength(33);
 			expect(updateParams[32]).toBeNull();

@@ -221,6 +221,11 @@ en Bosch hay **doble prorrateo**: 23/30 × 45,115 + 3 × 45,115 = 169,94 (−10,
 **Por qué no en downsell (S3-5)**: hoy hay tres criterios para el mismo downsell a mitad de ciclo (AQD no toca el período
 y calcula `term` por meses; el RSM prorratea por días calendario; ACC prorratea PE y NC por días exactos y el fantasma
 parte el día 1) → tres números distintos. "El downsell rige desde el próximo inicio de período" los colapsa.
+**Actualización 28-10 (Domi, S06879 Carelis):** con los tres criterios ya retirados y un solo motor, la rebaja a mitad de período
+**sí prorratea** cuando la factura del período sigue Por Emitir: esa factura queda en dos tramos por días (el actual hasta
+efectiva−1, el nuevo desde efectiva) con el mismo cálculo de días del upsell, y el ajuste DOWNSELL lleva `monthly_price = qty × unit`
+(= ΔMRR, `pricingFields`) y valor por días, así el RSM prorratea el primer mes una sola vez y Σ facturas = TCV. Si la factura ya
+está emitida o la fecha es inicio de período, se mantiene "desde el próximo inicio de período" (lo emitido no se reescribe).
 **Hallazgo lateral** [NO VERIFICADO]: en frecuencias trimestral/semestral/anual el stub se valoriza como `precio_período ×
 días / días_del_mes` → cobra 3, 6 o 12 veces el tramo real.
 
@@ -236,7 +241,10 @@ días / días_del_mes` → cobra 3, 6 o 12 veces el tramo real.
 7. El ítem madre coincide con la próxima factura (Cooprinsem 30,00; FORCEFIELD; la cuenta separa, Turboboy).
 8. Primer período proporcional por días en upsell y cross-sell, en la factura del ciclo, y **Σ facturas = TV = devengo**
    sin doble prorrateo (Bosch 180,46).
-9. Downsell sin prorrateo: rige desde el próximo inicio de período (S3-5/S3-6).
+9. Downsell (regla 28-10, Domi, S06879): si la factura que cubre la fecha efectiva **todavía está Por Emitir**, rige desde la fecha
+   efectiva y esa factura se prorratea por días (tramo actual hasta efectiva−1, tramo nuevo desde efectiva, mismo cálculo de días
+   que el upsell; `monthly_price` del ajuste = `qty × unit` = ΔMRR, valor por días, Σ facturas = TCV). Si ya está emitida o la fecha
+   es inicio de período, rige desde el próximo inicio de período sin prorrateo (S3-5/S3-6) y nunca reescribe lo emitido.
 10. Downsell del 100% → churn o contracción (S3-7).
 11. Churn: non-renewal sin ítem (UPSERT + tail BOP), early con fantasma; manda el inicio del ítem CHURN; ítems en $0 no
     bloquean (PEN-01, La Mascota, Porvenir).

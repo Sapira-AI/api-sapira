@@ -306,6 +306,69 @@ describe('invoice-void (spec facturas §3.8 y §8, lógica pura)', () => {
 			expect(plan.deviation.changed).toBe(false);
 		});
 
+		it('copia exacta por línea (Alicorp 28-10): una línea parcial del mes y una con tasa propia distinta a la del encabezado quedan tal cual; nada se re-tarifa desde el ítem', () => {
+			// Ítem PATHFINDER+ de 560 unidades × 34,65 (mensual 19.404); la emitida llevó 55,9573 unidades (1.938,92 USD) porque el resto del mes
+			// ya se emitió en otra factura. Encabezado sin tasa (spot) y líneas con su tasa 3,369 (USD → PEN).
+			const partial = line({
+				id: 'line-partial',
+				contract_item_id: ITEM,
+				quantity: 55.9573,
+				unit_price: 34.65,
+				subtotal: 1938.92,
+				tax_amount: 349.01,
+				total: 2287.93,
+				unit_price_invoice: 116.73585,
+				subtotal_invoice: 6532.22,
+				tax_amount_invoice: 1175.8,
+				total_invoice: 7708.02,
+				fx: 3.369,
+				fx_rate_source: 'scheduled-generation',
+			});
+			const advisory = line({
+				id: 'line-advisory',
+				contract_item_id: OTHER,
+				quantity: 1,
+				unit_price: 679.41,
+				subtotal: 679.41,
+				tax_amount: 122.29,
+				total: 801.7,
+				unit_price_invoice: 2288.93,
+				subtotal_invoice: 2288.93,
+				tax_amount_invoice: 412.01,
+				total_invoice: 2700.94,
+				fx: 3.369,
+				fx_rate_source: null,
+			});
+			const ctx = editCtx({
+				invoice: issued({ invoice_currency: 'PEN', fx_contract_to_invoice: null, amount_contract_currency: 2618.33, amount_invoice_currency: 8821.15 }),
+				lines: [partial, advisory],
+				items: new Map([
+					[ITEM, { ...item(ITEM, 'PATHFINDER+'), quantity: 560, unit_price: 34.65 } as EditItem],
+					[OTHER, item(OTHER, 'ASESORIA TECNICA')],
+				]),
+				issued_periods: [
+					{ contract_item_id: ITEM, billing_period_start: '2026-09-01', billing_period_end: '2026-09-30', invoice_id: 'inv-other', invoice_number: 'F-098' },
+				],
+				plan: { ...deviationPlan(), expected: new Map([[`${ITEM}|2026-09-01`, 19404]]), others: new Map([[`${ITEM}|2026-09-01`, 17465.08]]) },
+			});
+			const plan = planReissue(ctx, null);
+
+			expect(plan.blockers).toEqual([]);
+			expect(plan.lines.map((entry) => entry.action)).toEqual(['unchanged', 'unchanged']);
+			expect(plan.lines[0].after).toMatchObject({ quantity: 55.9573, unit_price_contract_currency: 34.65, subtotal_contract_currency: 1938.92, subtotal_invoice_currency: 6532.22 });
+			expect(plan.lines[1].after).toMatchObject({ quantity: 1, subtotal_contract_currency: 679.41, subtotal_invoice_currency: 2288.93 });
+			// El encabezado conserva sus montos y su (falta de) tasa: la tasa de cada línea viaja en la fila origen (`writeReissue` la copia).
+			expect(plan.header.after).toMatchObject({ amount_contract_currency: 2618.33, amount_invoice_currency: 8821.15, fx_contract_to_invoice: null });
+			expect(ctx.lines.map((row) => row.fx)).toEqual([3.369, 3.369]);
+			// Corregir la otra línea no toca la parcial: sigue siendo copia, no el mensual del ítem.
+			const edited = planReissue(ctx, {
+				lines: [{ id: 'line-advisory', contract_item_id: OTHER, quantity: 2, unit_price: 679.41, billing_period_start: '2026-09-01', billing_period_end: '2026-09-30' }],
+			});
+
+			expect(edited.lines.find((entry) => entry.id === 'line-partial')).toMatchObject({ action: 'unchanged', after: { quantity: 55.9573, subtotal_contract_currency: 1938.92 } });
+			expect(edited.lines.find((entry) => entry.id === 'line-advisory')).toMatchObject({ action: 'update', after: { quantity: 2, subtotal_contract_currency: 1358.82 } });
+		});
+
 		it('el contexto de reemisión saca a la emitida de los períodos emitidos (no choca overlaps_issued)', () => {
 			expect(reissueEditContext(editCtx(), TODAY).issued_periods).toEqual([]);
 		});

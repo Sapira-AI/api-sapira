@@ -417,7 +417,8 @@ export class PreviousInvoiceItemInputDto {
 	@IsOptional()
 	total?: number;
 
-	// ── Histórico en el mismo paso (Domi 14-10): si todas las líneas traen esto completo, la importación registra el MRR histórico.
+	// ── Histórico en el mismo paso (Domi 14-10), opcional y **por línea** (Domi 28-10): cada línea que trae esto completo registra su
+	// propio MRR histórico con su período, moneda de contrato y producto; las demás entran solo como líneas de la factura.
 
 	@ApiPropertyOptional({ description: 'Producto del catálogo: nombre o código' })
 	@Transform(trim)
@@ -516,6 +517,22 @@ export class PreviousInvoiceInputDto {
 	@MinLength(1, { message: 'Escribe la compañía emisora' })
 	@MaxLength(300)
 	company_name!: string;
+
+	@ApiPropertyOptional({ description: 'Identificador fiscal de la compañía emisora: desempata compañías con el mismo nombre (Domi 28-10)' })
+	@Transform(trim)
+	@IsString()
+	@MaxLength(40)
+	@IsOptional()
+	company_tax_id?: string;
+
+	@ApiPropertyOptional({
+		example: 'AR',
+		description: 'País de la compañía emisora (código ISO de 2 letras): desempata compañías con el mismo nombre',
+	})
+	@Transform(upper)
+	@Matches(/^[A-Z]{2}$/, { message: 'País de la compañía inválido (código de 2 letras)' })
+	@IsOptional()
+	company_country?: string;
 
 	@ApiPropertyOptional({ enum: PREVIOUS_INVOICE_SOURCE_TYPES, default: 'historical_import' })
 	@IsIn(PREVIOUS_INVOICE_SOURCE_TYPES, { message: 'Origen inválido' })
@@ -645,16 +662,17 @@ export class HistoryProductAmountDto {
 }
 
 /**
- * Lo que completa la usuaria por factura (§3.2b): período que cubre, monto en moneda de contrato y productos. `target_key` (Domi 18-10,
- * "continuar un registro"): registro pendiente existente del mismo cliente y moneda al que se suman las filas; sin él, nace un registro
- * (`batch_id`) por cliente × moneda en la misma aplicación.
+ * Lo que completa la usuaria **por línea de la factura** (§3.2b, Domi 28-10: el MRR histórico se registra por línea, como la carga inicial
+ * y el front anterior): período que cubre, moneda y monto en moneda de contrato, recurrente y los productos del catálogo con su parte
+ * (una línea puede dividirse en varios productos). `target_key` (Domi 18-10, "continuar un registro"): registro pendiente existente del
+ * mismo cliente y moneda al que se suman las filas; sin él, nace un registro (`batch_id`) por cliente × moneda en la misma aplicación.
  */
-export class RegisterHistoryInvoiceDto {
-	@ApiProperty()
-	@IsUUID(undefined, { message: 'Factura inválida' })
-	invoice_id!: string;
+export class RegisterHistoryLineDto {
+	@ApiProperty({ description: 'Línea de la factura (`invoice_items_legacy.id`)' })
+	@IsUUID(undefined, { message: 'Línea de factura inválida' })
+	item_id!: string;
 
-	@ApiPropertyOptional({ description: 'Registro pendiente existente (clave de la URL) al que se suma esta factura' })
+	@ApiPropertyOptional({ description: 'Registro pendiente existente (clave de la URL) al que se suma esta línea' })
 	@IsString({ message: 'Clave de registro inválida' })
 	@MaxLength(KEY_MAX_LENGTH, { message: 'Clave de registro inválida' })
 	@IsOptional()
@@ -673,7 +691,7 @@ export class RegisterHistoryInvoiceDto {
 	@Matches(/^[A-Z]{3}$/, { message: 'Moneda de contrato inválida' })
 	contract_currency!: string;
 
-	@ApiProperty({ description: 'Monto de la factura en moneda de contrato (por todo el período)' })
+	@ApiProperty({ description: 'Monto de la línea en moneda de contrato (por todo el período)' })
 	@IsNumber({ maxDecimalPlaces: 2 }, { message: 'Escribe el monto en moneda de contrato' })
 	amount_contract_currency!: number;
 
@@ -682,7 +700,10 @@ export class RegisterHistoryInvoiceDto {
 	@IsOptional()
 	is_recurring?: boolean;
 
-	@ApiProperty({ type: [HistoryProductAmountDto] })
+	@ApiProperty({
+		type: [HistoryProductAmountDto],
+		description: 'Productos de la línea con su parte del monto (dividir una línea en varios productos)',
+	})
 	@ValidateNested({ each: true })
 	@Type(() => HistoryProductAmountDto)
 	@ArrayMinSize(1, { message: 'Elige al menos un producto' })
@@ -692,8 +713,35 @@ export class RegisterHistoryInvoiceDto {
 }
 
 /**
+ * Una factura al registrar: sus líneas (todas o solo las que faltan, Domi 28-10: una factura registrada a medias se completa) y, opcional,
+ * el registro pendiente al que se suman las líneas que no traen el suyo.
+ */
+export class RegisterHistoryInvoiceDto {
+	@ApiProperty()
+	@IsUUID(undefined, { message: 'Factura inválida' })
+	invoice_id!: string;
+
+	@ApiPropertyOptional({ description: 'Registro pendiente existente (clave de la URL) al que se suman las líneas de esta factura' })
+	@IsString({ message: 'Clave de registro inválida' })
+	@MaxLength(KEY_MAX_LENGTH, { message: 'Clave de registro inválida' })
+	@IsOptional()
+	target_key?: string;
+
+	@ApiProperty({
+		type: [RegisterHistoryLineDto],
+		description: 'Líneas de la factura que se registran (cada una con su período, moneda y productos)',
+	})
+	@ValidateNested({ each: true })
+	@Type(() => RegisterHistoryLineDto)
+	@ArrayMinSize(1, { message: 'Indica al menos una línea de la factura' })
+	@ArrayMaxSize(200, { message: 'Máximo 200 líneas por factura' })
+	@IsArray({ message: 'Indica las líneas de la factura' })
+	lines!: RegisterHistoryLineDto[];
+}
+
+/**
  * Editar una línea = volver a registrar sus facturas (Domi 14-10): una entrada por factura de la línea, con lo mismo que Registrar histórico
- * (§3.2b). Las facturas no listadas no cambian. Si cambia el producto o la moneda, las filas nuevas caen en otra línea.
+ * (§3.2b, por línea de factura). Las facturas no listadas no cambian. Si cambia el producto o la moneda, las filas nuevas caen en otra línea.
  */
 export class EditHistoryLineDto {
 	@ApiProperty({ type: [RegisterHistoryInvoiceDto] })

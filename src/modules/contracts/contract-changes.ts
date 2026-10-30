@@ -36,6 +36,7 @@ import {
 	itemEndDate,
 	itemPeriods,
 	itemPricing,
+	lineDescription,
 	monthsBetween,
 	nextPeriodStart,
 	type PreviewInvoice,
@@ -134,6 +135,8 @@ export interface ChangeContractRow {
 	fx_invoice_rates: FxPeriodRate[];
 	/** Multimoneda: `contracts.requires_multicurrency_billing`. */
 	requires_multicurrency_billing?: boolean;
+	/** Multiempresa: `contracts.requires_multicompany_billing` (marca informativa; se edita desde `billing_conditions`). */
+	requires_multicompany_billing?: boolean;
 	/** Multimoneda: tasas pactadas ítem → contrato (`purpose = 'item'`), para MRR/TCV y el encabezado en moneda de contrato. */
 	fx_item_rates?: FxPeriodRate[];
 	/** Cierre de períodos de la compañía (`get_cutoff_date`), o null. */
@@ -320,6 +323,8 @@ export interface ChangeInvoiceRow {
 	amount_invoice: number | null;
 	total_invoice: number | null;
 	lines: ChangeInvoiceLineRow[];
+	/** Referencias cargadas (propias o vinculadas desde el contrato): el aviso al encender "Requiere OC/HES" nombra las que no tienen. */
+	references_count?: number;
 	/** Borrador en el ERP (`odoo_invoice_id` / `sent_to_odoo_at`): no bloquea, pero la modificación avisa `erp_draft_stale`. */
 	odoo_invoice_id?: number | null;
 	sent_to_odoo_at?: string | null;
@@ -991,6 +996,35 @@ export const isIssued = (invoice: ChangeInvoiceRow) =>
 
 /** Por Emitir facturada por OC (§3.7b: tiene líneas internas con `visible_line_id`): fija en el calendario, las modificaciones no la tocan. */
 export const isPartialBilled = (invoice: ChangeInvoiceRow) => invoice.lines.some((line) => Boolean(line.visible_line_id));
+
+/**
+ * Downsell prorrateado (Domi 28-10): la Por Emitir editable cuya línea base del ítem cubre la fecha efectiva **por dentro** (inicio del
+ * período < efectiva ≤ fin). Si la fecha es un inicio de período, si la factura ya se emitió, si va por OC, o si la línea es de consumo o
+ * fue editada a mano, no hay tramo que prorratear: la rebaja rige desde el próximo inicio de período (S3-5/S3-6).
+ */
+export function coveringPendingLine(
+	ctx: Pick<ChangeContext, 'invoices'>,
+	item: Pick<ChangeItemRow, 'id'>,
+	groupIds: Set<string>,
+	effective: string
+): { invoice: ChangeInvoiceRow; line: ChangeInvoiceLineRow } | null {
+	for (const invoice of ctx.invoices.filter(isEditablePending)) {
+		if (isPartialBilled(invoice)) continue;
+		const line = invoice.lines.find(
+			(row) =>
+				row.contract_item_id === item.id &&
+				groupIds.has(row.contract_item_id) &&
+				(row.billing_period_start ?? '') < effective &&
+				(row.billing_period_end ?? '') >= effective &&
+				!isConsumptionLine(row) &&
+				row.quantity_source !== 'manual'
+		);
+
+		if (line) return { invoice, line };
+	}
+
+	return null;
+}
 
 /** ¿La factura ya tiene borrador en el ERP? (`odoo_invoice_id` o `sent_to_odoo_at`). */
 export const hasErpDraft = (invoice: Pick<ChangeInvoiceRow, 'odoo_invoice_id' | 'sent_to_odoo_at'>) =>
@@ -4307,26 +4341,34 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 			p.error(`${field}.quantity`, 'El mensual nuevo debe ser mayor que 0; para quitar el producto usa item_remove');
 			continue;
 		}
-		// Downsell rige desde el próximo inicio de período sin prorrateo (S3-5/S3-6); upsell parte el día efectivo y prorratea el primer tramo.
+		// Upsell parte el día efectivo y prorratea el primer tramo. Downsell (Domi 28-10, S06879): si la factura que cubre la fecha efectiva
+		// todavía es una Por Emitir editable, también parte el día efectivo y esa factura se prorratea por días (tramo actual hasta efectiva−1
+		// y tramo nuevo desde efectiva, mismo cálculo de días que el upsell); si ya está emitida o la fecha es inicio de período, rige desde
+		// el próximo inicio de período sin prorrateo (S3-5/S3-6). Con modelo de precio, siempre desde el próximo período.
 		let start = p.effective;
+		const groupIdsEarly = new Set(group.item_ids);
+		const prorated = delta.categoria === 'DOWNSELL' && !pricedSpec && !p.multicurrency ? coveringPendingLine(ctx, item, groupIdsEarly, p.effective) : null;
 
-		if (delta.categoria === 'DOWNSELL' || pricedSpec) {
+		if ((delta.categoria === 'DOWNSELL' && !prorated) || pricedSpec) {
 			const next = nextPeriodStart(engineShape(item), itemAnchor, p.effective) ?? p.effective;
 
 			if (next !== p.effective)
 				p.warn(
 					delta.categoria === 'DOWNSELL' ? 'downsell_from_next_period' : 'priced_item_from_next_period',
 					delta.categoria === 'DOWNSELL'
-						? `La rebaja de "${item.product_name}" rige desde el próximo inicio de período (${next}), sin prorrateo`
+						? `La rebaja de "${item.product_name}" rige desde el próximo inicio de período (${next}), sin prorrateo: la factura que cubre la fecha ya está emitida`
 						: `"${item.product_name}" se tarifa por período con su modelo de precio: el cambio rige desde el próximo inicio de período (${next})`
 				);
 			start = next;
 		}
-		if (!item.end_date || start > item.end_date) {
-			p.error(`${field}.item_id`, `"${item.product_name}" termina el ${item.end_date}: no queda período por cambiar; renuévalo primero`);
-			continue;
+		if (prorated) {
+			const headEnd = addDays(start, -1);
+
+			p.warn(
+				'downsell_prorated',
+				`La rebaja de "${item.product_name}" rige desde el ${start}: el período ${prorated.line.billing_period_start} → ${prorated.line.billing_period_end} se prorratea por días (${prorated.line.billing_period_start} a ${headEnd} con ${num(group.quantity ?? num(item.quantity))}, ${start} a ${prorated.line.billing_period_end} con ${num(ref.quantity)})`
+			);
 		}
-		p.assertOpenPeriod(start, `El inicio del cambio de "${item.product_name}"`);
 		const groupIds = new Set(group.item_ids);
 		const frontier = ctx.invoices
 			.filter(isIssued)
@@ -4335,14 +4377,52 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 			.map((line) => line.billing_period_end ?? '')
 			.sort()
 			.reverse()[0];
+		// Consumo registrado en alguna Por Emitir desde `from`: el cambio va como línea neta (la cantidad consumida se conserva).
+		const consumptionFrom = (from: string) =>
+			ctx.invoices
+				.filter(isEditablePending)
+				.some(
+					(invoice) =>
+						!isPartialBilled(invoice) &&
+						invoice.lines.some(
+							(line) => line.contract_item_id && groupIds.has(line.contract_item_id) && (line.billing_period_start ?? '') >= from && isConsumptionLine(line)
+						)
+				);
 
 		if (frontier && start <= frontier) {
-			p.block(
-				'issued_after_effective_date',
-				`"${item.product_name}" ya está facturado en firme hasta el ${frontier}`,
-				`Usa fecha efectiva ${addDays(frontier, 1)} o posterior; lo emitido se corrige con nota de crédito`
-			);
+			if (delta.categoria === 'UPSELL' && !pricedSpec && ref.net_line !== true && !consumptionFrom(start)) {
+				// Soporte SimpliRoute 28-10 (S06870, Carelis): el UPSELL parte el día efectivo aunque el período ya esté emitido. La
+				// diferencia se factura prorrateada por días hasta el fin de lo emitido (S3-5, S3-17), en la factura del próximo ciclo o en
+				// una suelta con "Cobrar ahora"; la factura emitida no se toca. Solo el DOWNSELL exige corregir lo emitido con nota de crédito.
+				p.warn(
+					'upsell_within_issued_period',
+					`"${item.product_name}" ya está facturado hasta el ${frontier}: la diferencia del ${start} al ${frontier} se prorratea por días y ${
+						(req.change.first_period_invoice ?? 'cycle') === 'immediate' ? 'va en una factura aparte' : 'se suma a la factura del próximo ciclo'
+					}; la factura emitida no se toca`
+				);
+			} else if (delta.categoria === 'UPSELL') {
+				// Línea neta (consumo registrado o pedida): reescribe las Por Emitir y no tiene dónde dejar el tramo del período emitido, así que
+				// el cambio rige desde el día siguiente a lo emitido (próximo inicio de período).
+				const next = addDays(frontier, 1);
+
+				p.warn(
+					'upsell_net_line_from_next_period',
+					`"${item.product_name}" ya está facturado hasta el ${frontier} y el cambio va como línea neta: rige desde el ${next}`
+				);
+				start = next;
+			} else {
+				p.block(
+					'issued_after_effective_date',
+					`"${item.product_name}" ya está facturado en firme hasta el ${frontier}`,
+					`Usa fecha efectiva ${addDays(frontier, 1)} o posterior; lo emitido se corrige con nota de crédito`
+				);
+			}
 		}
+		if (!item.end_date || start > item.end_date) {
+			p.error(`${field}.item_id`, `"${item.product_name}" termina el ${item.end_date}: no queda período por cambiar; renuévalo primero`);
+			continue;
+		}
+		p.assertOpenPeriod(start, `El inicio del cambio de "${item.product_name}"`);
 		if (ctx.quantity_override_item_ids.some((id) => groupIds.has(id))) {
 			p.warn(
 				'quantity_overrides_present',
@@ -4351,9 +4431,9 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 		}
 		p.assertNoUnified(groupIds, start);
 		const term = monthsCeil(start, item.end_date);
-		// UPSELL: el trigger deriva el mensual de `unit × qty`, así que el valor puede ser el real por días (Σ facturas = TV).
-		// DOWNSELL: el trigger deriva el mensual de `final / term`, así que el valor es ΔMRR × término (rige desde un inicio de período).
-		const coveredMonths = delta.categoria === 'UPSELL' ? monthsBetween(start, item.end_date, itemAnchor) : term;
+		// El mensual del ajuste sale de `unit × qty` (= ΔMRR) en UPSELL y DOWNSELL (`pricingFields`, 28-10), así que el valor es el real por
+		// días: Σ facturas = TV también cuando la rebaja parte a mitad de período. En inicio de período da ΔMRR × término, como siempre.
+		const coveredMonths = monthsBetween(start, item.end_date, itemAnchor);
 		const unitCurrent = num(item.unit_price ?? num(item.annual_unit_price) / 12);
 		const bothAxes = delta.quantity_delta !== 0 && Math.abs(unitNew - unitCurrent) > 1e-6;
 		const duplicate = ctx.items.find((row) => row.related_item_id === item.id && row.categoria === delta.categoria && row.start_date === start);
@@ -4418,6 +4498,91 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 				`"${item.product_name}" tiene consumo registrado en facturas por emitir: el cambio se aplica como línea neta al precio nuevo`
 			);
 		if (netLine) {
+			// Downsell prorrateado (28-10): la Por Emitir que cubre la fecha efectiva queda en dos tramos. El actual (inicio del período →
+			// efectiva−1) conserva la línea base al valor vigente del grupo en proporción a sus días; el nuevo (efectiva → fin del período) entra
+			// como línea neta a la cantidad y el precio nuevos, también por días, fundida en la misma factura (misma regla de días que el upsell).
+			if (prorated) {
+				const { invoice, line: baseLine } = prorated;
+				const periodStart = baseLine.billing_period_start!;
+				const periodEnd = baseLine.billing_period_end!;
+				const headEnd = addDays(start, -1);
+				const periodMonths = monthsBetween(periodStart, periodEnd, itemAnchor);
+				const headMonths = monthsBetween(periodStart, headEnd, itemAnchor);
+				const tailMonths = monthsBetween(start, periodEnd, itemAnchor);
+				const ratio = periodMonths > 0 ? headMonths / periodMonths : 0;
+				const groupLines = invoice.lines.filter((line) => line.contract_item_id && groupIds.has(line.contract_item_id) && !isConsumptionLine(line));
+				const current = round2(groupLines.reduce((sum, line) => sum + line.subtotal, 0));
+
+				// Los ajustes previos del grupo en ese período se funden en el tramo actual (una sola línea por tramo, nunca negativas hacia el ERP).
+				for (const line of groupLines) if (line !== baseLine) p.deleteLine(invoice, line);
+				const headSubtotal = round2(current * ratio);
+				const headTax = round2((headSubtotal * invoice.tax_rate) / 100);
+				const totalDays = diffDays(periodStart, periodEnd) + 1;
+				const headDays = diffDays(periodStart, headEnd) + 1;
+				// Unitario del tramo: el de la línea en proporción a sus días; si la línea base absorbió ajustes previos del grupo, el que deja
+				// `cantidad × unitario × (1 − descuento) = subtotal`.
+				const headQuantity = num(baseLine.quantity) || 1;
+				const discountFactor = 1 - num(baseLine.discount_pct) / 100;
+				const headUnit =
+					groupLines.length === 1 ? round6(num(baseLine.unit_price) * ratio) : discountFactor > 0 ? round6(headSubtotal / headQuantity / discountFactor) : 0;
+				const baseBefore = baseLine.subtotal;
+
+				p.updateLine(
+					invoice,
+					baseLine,
+					{
+						quantity: num(baseLine.quantity),
+						unit_price: headUnit,
+						discount_pct: num(baseLine.discount_pct),
+						subtotal: headSubtotal,
+						tax_amount: headTax,
+						total: round2(headSubtotal + headTax),
+						billing_period_end: headEnd,
+						description_suffix: ` (hasta ${headEnd}: ${headDays}/${totalDays} días)`,
+					},
+					'tramo actual prorrateado por días'
+				);
+				// `updateLine` no mueve el neto de la PE (lo recalcula el cierre de encabezados); la fusión del tramo nuevo sí parte de él.
+				invoice.subtotal = round2(invoice.subtotal - baseBefore + headSubtotal);
+				const tailSubtotal = round2(delta.monthly_new * tailMonths);
+				const tailTax = round2((tailSubtotal * invoice.tax_rate) / 100);
+				const tailLine: PreviewLine = {
+					item_key: item.id,
+					product_name: item.product_name ?? 'Producto',
+					description: lineDescription(item.product_name ?? 'Producto', item.account, start, periodEnd),
+					quantity: num(ref.quantity),
+					unit_price: round6(unitNew * tailMonths),
+					discount_pct: round6(pct),
+					subtotal: tailSubtotal,
+					tax_amount: tailTax,
+					total: round2(tailSubtotal + tailTax),
+					billing_period_start: start,
+					billing_period_end: periodEnd,
+					quantity_source: 'fixed',
+					prorated: true,
+					prorated_days: totalDays - headDays,
+				};
+
+				p.mergePricedLines(
+					invoice,
+					{
+						issue_date: invoice.issue_date ?? start,
+						due_date: invoice.due_date ?? invoice.issue_date ?? start,
+						billing_period_start: start,
+						billing_period_end: periodEnd,
+						document_type: (invoice.document_type ?? 'FACTURA') as PreviewInvoice['document_type'],
+						export_type: (invoice.export_type ?? 0) as 0 | 1,
+						currency: item.currency ?? ctx.contract.contract_currency,
+						fx: null,
+						tax_rate: invoice.tax_rate,
+						lines: [tailLine],
+						subtotal: tailSubtotal,
+						tax: tailTax,
+						total: round2(tailSubtotal + tailTax),
+					},
+					'tramo nuevo prorrateado por días'
+				);
+			}
 			// Consumos registrados del ítem en las Por Emitir del cambio: con modelo de precio se re-tarifan por período con su cantidad
 			// (una fila por tramo en `per_tier`; nunca una sola fila con el total).
 			const recorded = pricedSpec ? recordedConsumption(ctx, item.id, start) : [];
@@ -4969,10 +5134,6 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 		track('auto_invoice', contract.auto_invoice, invoiceAfter);
 		invoiceFields.auto_invoice = invoiceAfter;
 	}
-	if (has('requires_references_for_billing') && change.requires_references_for_billing !== contract.requires_references_for_billing) {
-		track('requires_references_for_billing', contract.requires_references_for_billing, change.requires_references_for_billing);
-		invoiceFields.requires_references_for_billing = change.requires_references_for_billing;
-	}
 	if (Object.keys(invoiceFields).length && pendingIds.length) {
 		p.ops.push({ kind: 'update_invoices_fields', invoice_ids: pendingIds, set: invoiceFields });
 		for (const invoice of pending) {
@@ -4983,10 +5144,72 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 				lines_changed: 0,
 				subtotal_before: invoice.subtotal,
 				subtotal_after: invoice.subtotal,
-				change: Object.keys(invoiceFields)
-					.map((key) => (key === 'auto_invoice' ? 'emisión automática' : 'referencias obligatorias'))
-					.join(' · '),
+				change: 'emisión automática',
 			});
+		}
+	}
+	// Requiere OC/HES (Domi 26-10, caso NUR SRL): la marca no depende del período, así que va a TODAS las Por Emitir vivas, también las
+	// atrasadas (apagarla las libera; encenderla las vuelve a exigir). Las emitidas no se tocan; un borrador en el ERP sí recibe la marca,
+	// porque no viaja al ERP: decide si la factura se emite.
+	if (has('requires_references_for_billing') && change.requires_references_for_billing !== contract.requires_references_for_billing) {
+		const requires = change.requires_references_for_billing === true;
+		const allPending = ctx.invoices.filter(isEditablePending);
+
+		track('requires_references_for_billing', contract.requires_references_for_billing, requires);
+		if (allPending.length) {
+			p.ops.push({
+				kind: 'update_invoices_fields',
+				invoice_ids: allPending.map((invoice) => invoice.id),
+				set: { requires_references_for_billing: requires },
+			});
+			for (const invoice of allPending) {
+				p.updatedInvoices.push({
+					id: invoice.id,
+					invoice_number: invoice.invoice_number,
+					issue_date: invoice.issue_date,
+					lines_changed: 0,
+					subtotal_before: invoice.subtotal,
+					subtotal_after: invoice.subtotal,
+					change: requires ? 'exige OC/HES' : 'deja de exigir OC/HES',
+				});
+			}
+			const withoutReference = allPending.filter((invoice) => (invoice.references_count ?? 0) === 0);
+
+			if (requires && withoutReference.length)
+				p.warn(
+					'pending_invoices_without_reference',
+					`${withoutReference.length === 1 ? '1 factura por emitir queda' : `${withoutReference.length} facturas por emitir quedan`} sin referencia y no se ${
+						withoutReference.length === 1 ? 'emitirá' : 'emitirán'
+					} hasta tener una: ${withoutReference
+						.slice(0, 8)
+						.map((invoice) => invoice.invoice_number ?? invoice.issue_date ?? invoice.id)
+						.join(', ')}${withoutReference.length > 8 ? '…' : ''}`
+				);
+		}
+	}
+	// Multiempresa: marca informativa (lista, filtro y chip del 360); solo contrato e Historial.
+	if (has('requires_multicompany_billing') && change.requires_multicompany_billing !== (contract.requires_multicompany_billing === true)) {
+		track('requires_multicompany_billing', contract.requires_multicompany_billing === true, change.requires_multicompany_billing === true);
+	}
+	// Multimoneda desde las condiciones: misma regla que `planMulticurrency` (apagar con ítems en otra moneda se bloquea).
+	if (has('requires_multicurrency_billing') && change.requires_multicurrency_billing !== (contract.requires_multicurrency_billing === true)) {
+		const enabled = change.requires_multicurrency_billing === true;
+		const contractCode = upperCode(contract.contract_currency);
+		const foreign = enabled ? [] : ctx.items.filter((item) => (upperCode(item.currency) || contractCode) !== contractCode);
+
+		if (foreign.length)
+			p.block(
+				MULTICURRENCY_CODES.foreign_currency_items_present,
+				`No se puede desactivar multimoneda: ${foreign.length === 1 ? 'el ítem' : 'los ítems'} ${foreign
+					.map((item) => `"${item.product_name ?? item.id}" (${upperCode(item.currency)})`)
+					.join(', ')} ${foreign.length === 1 ? 'está' : 'están'} en otra moneda que la del contrato (${contractCode})`,
+				'Los ítems en otra moneda (vigentes o históricos) mantienen el contrato multimoneda'
+			);
+		else {
+			before.requires_multicurrency_billing = contract.requires_multicurrency_billing === true;
+			after.requires_multicurrency_billing = enabled;
+			p.multicurrencyAfter = enabled;
+			p.ops.push({ kind: 'set_multicurrency', enabled });
 		}
 	}
 	if (has('group_invoices_by_period') && change.group_invoices_by_period !== contract.group_invoices_by_period) {
@@ -5165,7 +5388,19 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 	// Un documento cambiado solo ya quedó bloqueado (`tax_document_requires_party_change`): se informa el bloqueo, no "sin diferencias".
 	const documentBlocked = p.blockers.some((blocker) => blocker.code === TAX_DOCUMENT_REQUIRES_PARTY_CHANGE);
 
-	if (!p.errors.length && !documentBlocked && !Object.keys(p.contractSet).length && !newRates.length && !autoRenewItems.length) {
+	// Multimoneda desde las condiciones: encendida/apagada (op) o apagado bloqueado por ítems en otra moneda (se informa el bloqueo).
+	const multicurrencyToggled =
+		p.ops.some((op) => op.kind === 'set_multicurrency') ||
+		p.blockers.some((blocker) => blocker.code === MULTICURRENCY_CODES.foreign_currency_items_present);
+
+	if (
+		!p.errors.length &&
+		!documentBlocked &&
+		!Object.keys(p.contractSet).length &&
+		!newRates.length &&
+		!autoRenewItems.length &&
+		!multicurrencyToggled
+	) {
 		p.error('change', 'Indica qué condición cambiar: no hay diferencias con las condiciones actuales');
 	}
 	const changed = Object.keys(before);

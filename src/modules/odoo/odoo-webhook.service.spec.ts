@@ -337,6 +337,69 @@ describe('OdooWebhookService.processInvoiceStatusUpdate · Canceladas (12-10)', 
 	});
 });
 
+describe('OdooWebhookService.processInvoiceStatusUpdate · publicación y alertas (Domi 28-10, C y D)', () => {
+	const crear = (invoice: Record<string, unknown>) => {
+		const update = jest.fn().mockResolvedValue({ affected: 1 });
+		const query = jest.fn().mockResolvedValue([]);
+		const logModel = function (this: any, datos: any) {
+			this.save = jest.fn().mockResolvedValue(datos);
+		};
+		const connection = { model: jest.fn(() => logModel) };
+		const dataSource = { getRepository: jest.fn(() => ({ findOne: jest.fn().mockResolvedValue(invoice), update, query })) };
+		const notifications = {
+			resolveOpen: jest.fn().mockResolvedValue(1),
+			findOpenWithMember: jest.fn().mockResolvedValue([]),
+			updateContent: jest.fn().mockResolvedValue(undefined),
+		};
+
+		return { service: new OdooWebhookService(connection as any, dataSource as any, notifications as any), update, notifications };
+	};
+	const porEmitir = { id: 'inv-1', status: 'Por Emitir', invoice_number: null, odoo_invoice_id: 201185, holding_id: 'h-1', contract_id: 'c-1', issue_date: '2026-10-28' };
+
+	it('el nombre "/" de un borrador nunca se copia como folio', async () => {
+		const { service, update } = crear(porEmitir);
+
+		await service.processInvoiceStatusUpdate({ model: 'account.move', x_sapira_invoice_id: 'inv-1', id: 201185, state: 'posted', payment_state: 'not_paid', name: '/' });
+
+		expect(update).toHaveBeenCalledWith('inv-1', expect.not.objectContaining({ invoice_number: expect.anything() }));
+		expect(update).toHaveBeenCalledWith('inv-1', expect.objectContaining({ status: 'Enviada' }));
+	});
+
+	it('Por Emitir → publicada: cierra los avisos de envío fallido de la factura (o la saca del aviso agrupado)', async () => {
+		const { service, notifications } = crear(porEmitir);
+
+		await service.processInvoiceStatusUpdate({ model: 'account.move', x_sapira_invoice_id: 'inv-1', id: 201185, state: 'posted', payment_state: 'not_paid', name: 'FAC 028401' });
+
+		expect(notifications.resolveOpen).toHaveBeenCalledWith('h-1', { type: 'invoice_odoo_failure', resourceId: 'inv-1' });
+		expect(notifications.findOpenWithMember).toHaveBeenCalledWith('h-1', 'invoice_odoo_failure', 'invoices', 'inv-1');
+	});
+
+	it('Enviada → Pagada no toca las alertas; un fallo al cerrarlas no rompe la actualización', async () => {
+		const pagada = crear({ ...porEmitir, status: 'Enviada', invoice_number: 'FAC 028401' });
+
+		await pagada.service.processInvoiceStatusUpdate({ model: 'account.move', x_sapira_invoice_id: 'inv-1', id: 201185, state: 'posted', payment_state: 'paid', name: 'FAC 028401' });
+		expect(pagada.notifications.resolveOpen).not.toHaveBeenCalled();
+
+		const rota = crear(porEmitir);
+		rota.notifications.resolveOpen.mockRejectedValue(new Error('sin base'));
+		const result = await rota.service.processInvoiceStatusUpdate({ model: 'account.move', x_sapira_invoice_id: 'inv-1', id: 201185, state: 'posted', payment_state: 'not_paid', name: 'FAC 028401' });
+
+		expect(result.updated).toBe(true);
+	});
+
+	it('D: con el estado del timbre en el aviso, publicada + edi_state "sent" → Emitida; sin él, Enviada', async () => {
+		const conTimbre = crear(porEmitir);
+
+		await conTimbre.service.processInvoiceStatusUpdate({ model: 'account.move', x_sapira_invoice_id: 'inv-1', id: 201220, state: 'posted', payment_state: 'not_paid', name: 'A10166', edi_state: 'sent' });
+		expect(conTimbre.update).toHaveBeenCalledWith('inv-1', expect.objectContaining({ status: 'Emitida', invoice_number: 'A10166' }));
+
+		const sinTimbre = crear(porEmitir);
+
+		await sinTimbre.service.processInvoiceStatusUpdate({ model: 'account.move', x_sapira_invoice_id: 'inv-1', id: 201220, state: 'posted', payment_state: 'not_paid', name: 'A10166' });
+		expect(sinTimbre.update).toHaveBeenCalledWith('inv-1', expect.objectContaining({ status: 'Enviada' }));
+	});
+});
+
 describe('OdooWebhookService.processInvoiceStatusUpdate · devengo (Domi 22-10)', () => {
 	const crear = (invoice: Record<string, unknown>) => {
 		const update = jest.fn().mockResolvedValue({ affected: 1 });

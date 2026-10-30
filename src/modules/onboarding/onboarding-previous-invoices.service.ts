@@ -53,15 +53,29 @@ export type ImportRowStatus = 'new' | 'duplicate' | 'error' | 'needs_entity' | '
 /** Histórico en el mismo paso de la importación (Domi 14-10). */
 export type ImportHistoryStatus = 'none' | 'ready' | 'incomplete' | 'error';
 
-export interface ImportRowHistory {
-	status: ImportHistoryStatus;
-	errors: string[];
+/** Histórico de una línea de la planilla (Domi 28-10: cada línea registra el suyo). */
+export interface ImportRowHistoryLine {
+	/** Posición de la línea en la factura (1 = primera). */
+	index: number;
 	product: { id: string; name: string | null } | null;
+	contract_currency: string | null;
 	fx_contract_to_invoice: number | null;
 	warnings: FxWarning[];
 }
 
-/** Campos del histórico por línea de la planilla (todos o ninguno). */
+export interface ImportRowHistory {
+	status: ImportHistoryStatus;
+	errors: string[];
+	/** Producto de la primera línea con histórico (compatibilidad; el detalle va en `lines[]`). */
+	product: { id: string; name: string | null } | null;
+	/** Tipo de cambio de la primera línea con histórico (compatibilidad). */
+	fx_contract_to_invoice: number | null;
+	warnings: FxWarning[];
+	/** Líneas que registran histórico, con su producto y tipo de cambio. */
+	lines: ImportRowHistoryLine[];
+}
+
+/** Campos del histórico por línea de la planilla (todos o ninguno en cada línea). */
 const HISTORY_ITEM_FIELDS = [
 	['product', 'el producto'],
 	['period_from', 'el período desde'],
@@ -179,7 +193,8 @@ export class OnboardingPreviousInvoicesService {
 		const invoice = this.invoiceDto(row);
 		const [items, months, events] = await Promise.all([
 			this.dataSource.query(
-				`SELECT id, description, product_external_code, quantity, unit_price, discount_pct, currency, subtotal, tax_amount, total
+				`SELECT id, description, product_external_code, quantity, unit_price, discount_pct, currency, subtotal, tax_amount, total,
+					EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_item_legacy_id = invoice_items_legacy.id) AS has_history
 				FROM invoice_items_legacy WHERE invoices_legacy_id = $1 AND holding_id = $2 ORDER BY created_at, id`,
 				[id, holdingId]
 			) as Promise<Row[]>,
@@ -211,6 +226,8 @@ export class OnboardingPreviousInvoicesService {
 				subtotal: num(item.subtotal),
 				tax_amount: numOrNull(item.tax_amount),
 				total: num(item.total),
+				/** La línea ya tiene filas de MRR histórico (Domi 28-10: el registro es por línea). */
+				has_history: item.has_history === true,
 			})),
 			history_months: months.map((month) => ({
 				id: String(month.id),
@@ -235,6 +252,10 @@ export class OnboardingPreviousInvoicesService {
 			il.status, il.source_type, il.source_system, il.contract_id, ct.contract_number, to_jsonb(il) ->> 'import_batch_id' AS batch_id,
 			il.notes, upper(ce.country_code) AS entity_country,
 			EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_legacy_id = il.id) AS has_history,
+			(SELECT COUNT(*) FROM invoice_items_legacy ii WHERE ii.invoices_legacy_id = il.id
+				AND NOT EXISTS (SELECT 1 FROM mrr_legacy m WHERE m.invoice_item_legacy_id = ii.id)) AS items_without_history,
+			(SELECT COALESCE(SUM(x.allocated), 0) FROM (SELECT MAX(m.allocated_invoice_currency) AS allocated FROM mrr_legacy m
+				WHERE m.invoice_legacy_id = il.id GROUP BY m.invoice_item_legacy_id, m.split_index) x) AS history_allocated,
 			il.reconciliation_status, ri.id AS adopted_invoice_id, ri.invoice_number AS adopted_invoice_number, ri.status AS adopted_invoice_status,
 			ri.contract_id AS adopted_contract_id, rc.contract_number AS adopted_contract_number`;
 	}
@@ -276,6 +297,14 @@ export class OnboardingPreviousInvoicesService {
 			contract: row.contract_id ? { id: String(row.contract_id), contract_number: str(row.contract_number) } : null,
 			batch_id: str(row.batch_id),
 			has_history: row.has_history === true,
+			/**
+			 * Registrada a medias (Domi 28-10): tiene filas, alguna línea de factura no tiene las suyas y lo registrado no cubre el neto (una
+			 * factura registrada entera antes de la regla por línea no es parcial). Las líneas que faltan se registran con Registrar histórico.
+			 */
+			history_partial:
+				row.has_history === true &&
+				num(row.items_without_history) > 0 &&
+				Math.abs(num(row.history_allocated)) < Math.abs(num(row.amount_invoice_currency)) * (1 - SUM_TOLERANCE) - 0.005,
 			/** Adoptada como factura del contrato (§4.5): la factura de Sapira que nació de esta (`reconciled_invoice_id`). */
 			adopted: row.adopted_invoice_id
 				? {
@@ -368,7 +397,7 @@ export class OnboardingPreviousInvoicesService {
 		const crmIds = [...new Set(invoices.map((row) => row.client_crm_id).filter(Boolean))] as string[];
 		const clientNumbers = [...new Set(invoices.map((row) => row.client_number).filter(Boolean))] as string[];
 		const [companies, existing, entities, clientsByRef] = await Promise.all([
-			db.query(`SELECT id, legal_name, currency FROM companies WHERE holding_id = $1`, [holdingId]) as Promise<Row[]>,
+			db.query(`SELECT id, legal_name, currency, tax_id, country_code FROM companies WHERE holding_id = $1`, [holdingId]) as Promise<Row[]>,
 			db.query(
 				`SELECT invoice_number, odoo_integration_id FROM invoices_legacy
 				WHERE holding_id = $1 AND (invoice_number = ANY($2::text[]) OR odoo_integration_id = ANY($3::int[]))`,
@@ -397,12 +426,17 @@ export class OnboardingPreviousInvoicesService {
 		const seenErp = new Set<number>();
 		const plans: ImportRowPlan[] = invoices.map((input) => {
 			const errors: string[] = [];
-			const companyMatches = companies.filter((company) => normalizeName(company.legal_name) === normalizeName(input.company_name));
-			const byCurrency = companyMatches.filter((company) => String(company.currency ?? '').toUpperCase() === input.currency);
-			const company = companyMatches.length === 1 ? companyMatches[0] : byCurrency.length === 1 ? byCurrency[0] : null;
+			const resolved = this.companyOf(companies, input);
+			const company = resolved.company;
 
-			if (!companyMatches.length) errors.push(`La compañía emisora "${input.company_name}" no existe en el holding`);
-			else if (!company) errors.push(`Hay varias compañías llamadas "${input.company_name}": no se puede saber cuál emitió la factura`);
+			if (!resolved.matches.length) errors.push(`La compañía emisora "${input.company_name}" no existe en el holding`);
+			else if (!company) {
+				const where = resolved.matches.map((match) => str(match.country_code) ?? str(match.currency) ?? '?').join(', ');
+
+				errors.push(
+					`Hay varias compañías llamadas "${input.company_name}" (${where}): indica company_tax_id o company_country para saber cuál emitió la factura`
+				);
+			}
 			if (!input.items.length) errors.push('La factura no tiene líneas');
 			const duplicate =
 				existingNumbers.has(input.invoice_number) ||
@@ -437,19 +471,14 @@ export class OnboardingPreviousInvoicesService {
 					? null
 					: { legal_name: input.legal_client_name, tax_id: input.client_tax_id ?? null, country: null, client_candidates: [] },
 				company: company ? { id: String(company.id) } : null,
-				history: { status: 'none', errors: [], product: null, fx_contract_to_invoice: null, warnings: [] },
+				history: { status: 'none', errors: [], product: null, fx_contract_to_invoice: null, warnings: [], lines: [] },
 				history_products: [],
 				input,
 			};
 		});
 		const lookup = plans.filter((plan) => (plan.status === 'needs_entity' || plan.status === 'needs_client') && !plan.client);
 		const candidates = await this.clientCandidates(db, holdingId, [...new Set(lookup.map((plan) => plan.input.legal_client_name))]);
-		const countries = new Map(
-			((await db.query(`SELECT id, country_code FROM companies WHERE holding_id = $1`, [holdingId])) as Row[]).map((row) => [
-				String(row.id),
-				str(row.country_code),
-			])
-		);
+		const countries = new Map(companies.map((row) => [String(row.id), str(row.country_code)]));
 
 		for (const plan of plans) {
 			if (plan.entity_suggestion) {
@@ -467,13 +496,16 @@ export class OnboardingPreviousInvoicesService {
 	}
 
 	/**
-	 * Histórico en el mismo paso (Domi 14-10): por factura, `ready` si todas sus líneas traen producto del catálogo (nombre o código),
-	 * período, moneda y monto en moneda de contrato válidos; `incomplete` si faltan campos; `error` si un producto no existe, un período es
-	 * inválido, las líneas no comparten período y moneda, la suma de las líneas no cuadra con el neto (±1 %) o no hay cliente comercial;
-	 * `none` si ninguna línea trae datos de histórico. Avisos de tipo de cambio con la misma regla que Registrar histórico.
+	 * Histórico en el mismo paso (Domi 14-10), **por línea y opcional** (Domi 28-10): una línea que trae producto del catálogo (nombre o
+	 * código), período, moneda y monto en moneda de contrato registra su propio MRR histórico; una línea sin ninguno de esos campos entra
+	 * solo como línea de la factura. Por factura: `ready` si al menos una línea está completa y ninguna a medias; `incomplete` si alguna
+	 * línea trae solo parte de los campos; `error` si un producto no existe, un período o moneda es inválido, la suma de las líneas no cuadra
+	 * con el neto (±1 %) o no hay cliente comercial; `none` si ninguna línea trae datos de histórico. Tipo de cambio y avisos por línea
+	 * (subtotal de la línea ÷ monto en moneda de contrato), con la misma regla que Registrar histórico.
 	 */
 	private async planHistory(db: Queryable, holdingId: string, plans: ImportRowPlan[]) {
-		const wanted = plans.filter((plan) => plan.input.items.some((item) => HISTORY_ITEM_FIELDS.some(([field]) => item[field] !== undefined)));
+		const hasHistory = (item: PreviousInvoiceInputDto['items'][number]) => HISTORY_ITEM_FIELDS.some(([field]) => item[field] !== undefined);
+		const wanted = plans.filter((plan) => plan.input.items.some(hasHistory));
 
 		if (!wanted.length) return;
 		const [products, currencies, references] = await Promise.all([
@@ -494,20 +526,27 @@ export class OnboardingPreviousInvoicesService {
 			const errors: string[] = [];
 			const missing: string[] = [];
 			const resolved: Array<string | null> = [];
-			let product: ImportRowHistory['product'] = null;
+			const lines: ImportRowHistoryLine[] = [];
 
 			input.items.forEach((item, index) => {
 				const label = `Línea ${index + 1}`;
 
+				if (!hasHistory(item)) {
+					resolved.push(null);
+
+					return;
+				}
 				for (const [field, name] of HISTORY_ITEM_FIELDS) if (item[field] === undefined) missing.push(`${label}: falta ${name}`);
+				let product: ImportRowHistoryLine['product'] = null;
+
 				if (item.product !== undefined) {
 					const match = resolve(item.product);
 
 					if (match === 'ambiguous') errors.push(`${label}: hay varios productos "${item.product}" en el catálogo`);
 					else if (!match) errors.push(`${label}: el producto "${item.product}" no está en el catálogo`);
-					else product ??= { id: String(match.id), name: str(match.name) };
-					resolved.push(match && match !== 'ambiguous' ? String(match.id) : null);
-				} else resolved.push(null);
+					else product = { id: String(match.id), name: str(match.name) };
+				}
+				resolved.push(product?.id ?? null);
 				if (item.period_from && item.period_to) {
 					const span = monthsBetween(item.period_from, item.period_to);
 
@@ -517,60 +556,85 @@ export class OnboardingPreviousInvoicesService {
 				if (item.contract_currency && known.size && !known.has(item.contract_currency)) {
 					errors.push(`${label}: la moneda ${item.contract_currency} no está habilitada`);
 				}
+				const complete = HISTORY_ITEM_FIELDS.every(([field]) => item[field] !== undefined);
+				const fx = complete && item.amount_contract_currency ? round6(item.subtotal / item.amount_contract_currency!) : null;
+
+				if (complete && item.amount_contract_currency !== undefined && (fx === null ? item.subtotal !== 0 : fx <= 0))
+					errors.push(`${label}: el monto en moneda de contrato no es válido`);
+				lines.push({
+					index: index + 1,
+					product,
+					contract_currency: item.contract_currency ?? null,
+					fx_contract_to_invoice: fx,
+					warnings: fx !== null && item.contract_currency ? fxWarningsOf(input.currency, item.contract_currency, fx, references) : [],
+				});
 			});
 			const complete = !missing.length;
-			const first = input.items[0];
-			const contractAmount = input.items.reduce((sum, item) => sum + (item.amount_contract_currency ?? 0), 0);
-			const fx = complete && contractAmount !== 0 ? round6(input.amount / contractAmount) : null;
 
 			if (complete) {
-				const shared = input.items.every(
-					(item) =>
-						item.period_from === first.period_from &&
-						item.period_to === first.period_to &&
-						item.contract_currency === first.contract_currency &&
-						(item.is_recurring ?? true) === (first.is_recurring ?? true)
-				);
 				const itemsTotal = input.items.reduce((sum, item) => sum + item.subtotal, 0);
 
-				if (!shared) errors.push('Las líneas de la factura deben cubrir el mismo período, moneda de contrato y recurrencia');
 				if (Math.abs(itemsTotal - input.amount) > Math.abs(input.amount) * SUM_TOLERANCE + 0.005) {
 					errors.push('La suma de las líneas no cuadra con el neto de la factura (±1 %)');
 				}
-				if (fx !== null && fx <= 0) errors.push('El monto en moneda de contrato no es válido');
 				if (!plan.client) errors.push('La factura no tiene cliente comercial: registra el histórico después de relacionarla');
 			}
 			plan.history_products = resolved;
 			plan.history = {
 				status: errors.length ? 'error' : complete ? 'ready' : 'incomplete',
 				errors: errors.length ? errors : complete ? [] : missing,
-				product,
-				fx_contract_to_invoice: fx,
-				warnings: fx !== null && first.contract_currency ? fxWarningsOf(input.currency, first.contract_currency, fx, references) : [],
+				product: lines[0]?.product ?? null,
+				fx_contract_to_invoice: lines[0]?.fx_contract_to_invoice ?? null,
+				warnings: [...new Set(lines.flatMap((line) => line.warnings))],
+				lines,
 			};
 		}
 	}
 
-	/** Lo de Registrar histórico (§3.2b) para una factura importada con histórico `ready`: un producto por línea, montos sumados por producto. */
-	private registerInputOf(plan: ImportRowPlan, invoiceId: string): RegisterHistoryInvoiceDto {
-		const first = plan.input.items[0];
-		const byProduct = new Map<string, number>();
-
-		plan.input.items.forEach((item, index) => {
-			const productId = plan.history_products[index]!;
-
-			byProduct.set(productId, round2((byProduct.get(productId) ?? 0) + (item.amount_contract_currency ?? 0)));
-		});
-
+	/**
+	 * Lo de Registrar histórico (§3.2b) para una factura importada con histórico `ready`: una línea de registro por línea de la planilla
+	 * que trae histórico, con su producto, período, moneda y monto; `itemIds` = ids de las líneas recién insertadas, en el orden de la planilla.
+	 */
+	private registerInputOf(plan: ImportRowPlan, invoiceId: string, itemIds: string[]): RegisterHistoryInvoiceDto {
 		return {
 			invoice_id: invoiceId,
-			period_from: first.period_from!,
-			period_to: first.period_to!,
-			contract_currency: first.contract_currency!,
-			amount_contract_currency: round2([...byProduct.values()].reduce((sum, value) => sum + value, 0)),
-			is_recurring: first.is_recurring ?? true,
-			products: [...byProduct].map(([product_id, amount_contract_currency]) => ({ product_id, amount_contract_currency })),
+			lines: plan.input.items.flatMap((item, index) => {
+				const productId = plan.history_products[index];
+
+				if (!productId) return [];
+
+				return [
+					{
+						item_id: itemIds[index],
+						period_from: item.period_from!,
+						period_to: item.period_to!,
+						contract_currency: item.contract_currency!,
+						amount_contract_currency: item.amount_contract_currency!,
+						is_recurring: item.is_recurring ?? true,
+						products: [{ product_id: productId, amount_contract_currency: item.amount_contract_currency! }],
+					},
+				];
+			}),
 		};
+	}
+
+	/**
+	 * Compañía emisora de la fila (Domi 28-10, para holdings con compañías del mismo nombre en varios países): por identificador fiscal
+	 * (`company_tax_id`), si no por nombre + país (`company_country`), si no por nombre + moneda de la factura, si no por nombre único.
+	 * `matches` = las compañías con ese nombre (o RUT), para explicar la ambigüedad.
+	 */
+	private companyOf(companies: Row[], input: PreviousInvoiceInputDto): { company: Row | null; matches: Row[] } {
+		const tax = normalizeTaxId(input.company_tax_id);
+		const byTax = tax ? companies.filter((company) => normalizeTaxId(str(company.tax_id)) === tax) : [];
+
+		if (byTax.length === 1) return { company: byTax[0], matches: byTax };
+		const matches = companies.filter((company) => normalizeName(company.legal_name) === normalizeName(input.company_name));
+		const country = input.company_country?.toUpperCase();
+		const byCountry = country ? matches.filter((company) => String(company.country_code ?? '').toUpperCase() === country) : [];
+		const byCurrency = matches.filter((company) => String(company.currency ?? '').toUpperCase() === input.currency);
+		const company = byCountry.length === 1 ? byCountry[0] : matches.length === 1 ? matches[0] : byCurrency.length === 1 ? byCurrency[0] : null;
+
+		return { company, matches: byTax.length ? byTax : matches };
 	}
 
 	/** Cliente comercial de la fila: el de la razón social (principal o único vínculo) y, si no tiene, el del id del CRM o número de cliente. */
@@ -628,12 +692,16 @@ export class OnboardingPreviousInvoicesService {
 			const historyInputs: Array<{ row: number; invoice_number: string; input: RegisterHistoryInvoiceDto }> = [];
 
 			for (const plan of plans.filter((row) => row.status === 'new' || row.status === 'needs_client')) {
-				const invoiceId = await this.insertInvoice(runner, holdingId, plan, batchId, actor);
+				const { invoiceId, itemIds } = await this.insertInvoice(runner, holdingId, plan, batchId, actor);
 
 				inserted += 1;
 				if (plan.status === 'needs_client') needsClient += 1;
 				if (plan.history.status === 'ready') {
-					historyInputs.push({ row: plan.row, invoice_number: plan.input.invoice_number, input: this.registerInputOf(plan, invoiceId) });
+					historyInputs.push({
+						row: plan.row,
+						invoice_number: plan.input.invoice_number,
+						input: this.registerInputOf(plan, invoiceId, itemIds),
+					});
 				}
 			}
 			const skippedDuplicates = plans.filter((row) => row.status === 'duplicate').length;
@@ -658,7 +726,7 @@ export class OnboardingPreviousInvoicesService {
 						created_rows: 0,
 						records_touched: [] as string[],
 						batch_ids: [] as string[],
-						skipped: [] as Array<{ invoice_id: string; reason: string }>,
+						skipped: [] as Array<{ invoice_id: string; item_id: string | null; reason: string }>,
 					};
 			const rowOf = new Map(historyInputs.map((entry) => [entry.input.invoice_id, entry]));
 			const result = {
@@ -674,6 +742,7 @@ export class OnboardingPreviousInvoicesService {
 				history_skipped: history.skipped.map((skip) => ({
 					row: rowOf.get(skip.invoice_id)?.row ?? null,
 					invoice_number: rowOf.get(skip.invoice_id)?.invoice_number ?? null,
+					line: (rowOf.get(skip.invoice_id)?.input.lines.findIndex((line) => line.item_id === skip.item_id) ?? -1) + 1 || null,
 					reason: skip.reason,
 				})),
 			};
@@ -765,7 +834,14 @@ export class OnboardingPreviousInvoicesService {
 		return created;
 	}
 
-	private async insertInvoice(db: Queryable, holdingId: string, plan: ImportRowPlan, batchId: string, actor: OnboardingActor): Promise<string> {
+	/** Inserta la factura y sus líneas; devuelve el id de la factura y los de las líneas en el orden de la planilla. */
+	private async insertInvoice(
+		db: Queryable,
+		holdingId: string,
+		plan: ImportRowPlan,
+		batchId: string,
+		actor: OnboardingActor
+	): Promise<{ invoiceId: string; itemIds: string[] }> {
 		const input = plan.input;
 		const [row] = (await db.query(
 			`INSERT INTO invoices_legacy (holding_id, company_id, client_id, client_entity_id, client_tax_id, legal_client_name, source_type,
@@ -818,14 +894,15 @@ export class OnboardingPreviousInvoicesService {
 			return `(${Array.from({ length: 11 }, (_, i) => `$${base + i + 1}`).join(', ')})`;
 		});
 
-		await db.query(
+		const items = (await db.query(
 			`INSERT INTO invoice_items_legacy (invoices_legacy_id, holding_id, product_external_code, description, quantity, unit_price, discount_pct,
 				currency, subtotal, tax_amount, total)
-			VALUES ${tuples.join(', ')}`,
+			VALUES ${tuples.join(', ')}
+			RETURNING id`,
 			values
-		);
+		)) as Row[] | undefined;
 
-		return String(row.id);
+		return { invoiceId: String(row.id), itemIds: Array.isArray(items) ? items.map((item) => String(item.id)) : [] };
 	}
 
 	/**

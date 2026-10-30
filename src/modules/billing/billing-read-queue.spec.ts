@@ -44,7 +44,12 @@ const invoiceRow = (n: number, contract: string | null) => ({
  * BD simulada: solo devuelve las columnas que el SELECT de facturas proyecta (`i.contract_id` incluida o no), y contexto para todo id
  * pedido que no esté borrado.
  */
-function build(invoices: Array<Record<string, unknown>>, deleted = new Set<string>(), cutoff: string | null = null) {
+function build(
+	invoices: Array<Record<string, unknown>>,
+	deleted = new Set<string>(),
+	cutoff: string | null = null,
+	scheduler: { lastSendErrors: jest.Mock } | null = null
+) {
 	const query = jest.fn(async (sql: string, params: unknown[]) => {
 		if (sql.startsWith(CONTRACT_INVOICE_SELECT)) {
 			const projectsContract = /\bi\.contract_id\b/.test(CONTRACT_INVOICE_SELECT.split('FROM invoices i')[0].split('(SELECT')[0]);
@@ -77,10 +82,43 @@ function build(invoices: Array<Record<string, unknown>>, deleted = new Set<strin
 		return [];
 	});
 
-	return { service: new BillingReadService({ query } as unknown as DataSource), query };
+	return { service: new BillingReadService({ query } as unknown as DataSource, (scheduler ?? undefined) as never), query };
 }
 
 describe('BillingReadService.queueEntries · contexto por contrato', () => {
+	it('C (28-10): una Por Emitir con borrador en el ERP cuyo último envío falló dice "Error al emitir en el ERP: <motivo>" en su bloqueo; sin error o sin scheduler, el texto genérico', async () => {
+		const draft = { ...invoiceRow(1, contractId(1)), odoo_invoice_id: 201185, sent_to_odoo_at: '2026-10-28T11:00:00.000Z' };
+		const sinError = { ...invoiceRow(2, contractId(2)), odoo_invoice_id: 201186, sent_to_odoo_at: '2026-10-28T11:00:00.000Z' };
+		const lastSendErrors = jest.fn().mockResolvedValue(
+			new Map([
+				[
+					invoiceId(1),
+					{ ok: false, category: 'folios_exhausted', message: 'Se acabaron los folios autorizados por el SII para facturas electrónicas (siguiente folio 28401)', next_step: 'Solicita un CAF nuevo en sii.cl y cárgalo en Odoo', action: 'none' },
+				],
+			])
+		);
+		const { service } = build([draft, sinError, invoiceRow(3, contractId(3))], new Set(), null, { lastSendErrors });
+
+		const entries = await service.queueEntries(HOLDING, [invoiceId(1), invoiceId(2), invoiceId(3)], TODAY);
+		const blocker = (n: number) => entries.find((entry) => entry.id === invoiceId(n))!.blocked_reasons.find((reason) => reason.code === 'sent_to_erp_draft');
+
+		// Solo las vinculadas al ERP van a la consulta del log.
+		expect(lastSendErrors).toHaveBeenCalledWith(HOLDING, [invoiceId(1), invoiceId(2)]);
+		expect(blocker(1)).toMatchObject({
+			message: 'Error al emitir en el ERP: Se acabaron los folios autorizados por el SII para facturas electrónicas (siguiente folio 28401)',
+			next_step: 'Solicita un CAF nuevo en sii.cl y cárgalo en Odoo',
+			action: 'erp_reset',
+		});
+		expect(blocker(2)?.message).toMatch(/^La factura ya está en el ERP como borrador/);
+		expect(blocker(3)).toBeUndefined();
+		expect(entries.find((entry) => entry.id === invoiceId(1))?.group).toBe('erp_draft');
+
+		const sinScheduler = build([draft]);
+		const [entry] = await sinScheduler.service.queueEntries(HOLDING, [invoiceId(1)], TODAY);
+
+		expect(entry.blocked_reasons.find((reason) => reason.code === 'sent_to_erp_draft')?.message).toMatch(/^La factura ya está en el ERP como borrador/);
+	});
+
 	it('N facturas de M > 50 contratos: todas reciben el contexto de su contrato (ninguna queda como "sin contrato")', async () => {
 		const invoices = Array.from({ length: 180 }, (_, n) => invoiceRow(n, contractId(n % 60)));
 		const { service, query } = build(invoices);

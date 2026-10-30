@@ -31,15 +31,32 @@ const invoice = (overrides: Partial<PreviousInvoiceInputDto> = {}): PreviousInvo
 	}) as PreviousInvoiceInputDto;
 
 const companies: Handler = [
-	'SELECT id, legal_name, currency FROM companies',
+	'SELECT id, legal_name, currency, tax_id, country_code FROM companies',
 	() => [
-		{ id: CO_CL, legal_name: 'Simplit SpA', currency: 'CLP' },
-		{ id: 'co-uy', legal_name: 'SimpliRoute S.A.S', currency: 'UYU' },
-		{ id: 'co-co', legal_name: 'SimpliRoute S.A.S', currency: 'COP' },
-		{ id: 'co-ar', legal_name: 'SimpliRoute S.A.S', currency: 'ARS' },
+		{ id: CO_CL, legal_name: 'Simplit SpA', currency: 'CLP', tax_id: '76.000.000-1', country_code: 'CL' },
+		{ id: 'co-uy', legal_name: 'SimpliRoute S.A.S', currency: 'UYU', tax_id: '218668210015', country_code: 'UY' },
+		{ id: 'co-co', legal_name: 'SimpliRoute S.A.S', currency: 'COP', tax_id: '901412306-5', country_code: 'CO' },
+		{ id: 'co-ar', legal_name: 'SimpliRoute S.A.S', currency: 'ARS', tax_id: '30-71661797-8', country_code: 'AR' },
 	],
 ];
-const countries: Handler = ['SELECT id, country_code FROM companies', () => [{ id: CO_CL, country_code: 'CL' }]];
+/** Lo que el motor de Registrar histórico lee de una factura y sus líneas (por línea, Domi 28-10). */
+const planInvoice = (overrides: Record<string, unknown> = {}) => ({
+	id: 'inv-new',
+	invoice_number: 'F-100',
+	issue_date: '2026-07-01',
+	company_id: CO_CL,
+	legal_client_name: 'Acme',
+	invoice_currency: 'CLP',
+	amount_invoice_currency: '1000',
+	total_invoice_currency: '1190',
+	status: 'Enviada',
+	client_id: CLIENT,
+	reconciled_invoice_id: null,
+	...overrides,
+});
+const PLAN_INVOICES = 'il.id = ANY($2::uuid[])';
+const PLAN_ITEMS = 'FROM invoice_items_legacy ii WHERE ii.invoices_legacy_id = ANY';
+const PLAN_REGISTERED = 'AS allocated';
 const existing: Handler = [
 	'SELECT invoice_number, odoo_integration_id FROM invoices_legacy',
 	() => [{ invoice_number: 'F-OLD', odoo_integration_id: 77 }],
@@ -58,16 +75,7 @@ const byRef: Handler = [
 const candidates: Handler = ['public.similarity', () => [{ wanted: 'Nueva Ltda', id: 'cl-9', name_commercial: 'Nueva', score: '0.8' }]];
 
 function build(handlers: Handler[] = []) {
-	const db = fakeDb([
-		...handlers,
-		companies,
-		countries,
-		existing,
-		entities,
-		byRef,
-		candidates,
-		['INSERT INTO invoices_legacy', () => [{ id: 'inv-new' }]],
-	]);
+	const db = fakeDb([...handlers, companies, existing, entities, byRef, candidates, ['INSERT INTO invoices_legacy', () => [{ id: 'inv-new' }]]]);
 
 	return {
 		db,
@@ -110,7 +118,10 @@ describe('importación de facturas previas: vista previa', () => {
 		expect(preview.rows[0]).toMatchObject({ entity: { id: ENTITY }, client: { id: CLIENT }, company: { id: CO_CL } });
 		// Sin cliente en la razón social: el id del CRM de la fila lo resuelve.
 		expect(preview.rows[8].client).toEqual({ id: 'cl-crm', name: 'Cliente CRM' });
-		expect(preview.rows[5].errors[0]).toContain('varias compañías');
+		// Compañías con el mismo nombre: la fila dice en qué países están y qué columna desempata.
+		expect(preview.rows[5].errors[0]).toBe(
+			'Hay varias compañías llamadas "SimpliRoute S.A.S" (UY, CO, AR): indica company_tax_id o company_country para saber cuál emitió la factura'
+		);
 		expect(preview.rows[6].entity_suggestion).toMatchObject({
 			legal_name: 'Nueva Ltda',
 			country: 'CL',
@@ -121,6 +132,27 @@ describe('importación de facturas previas: vista previa', () => {
 			{ legal_name: 'Nueva Ltda', tax_id: null, rows: [7], client_candidates: [{ id: 'cl-9', name: 'Nueva', score: 0.8 }] },
 		]);
 		expect(preview.missing_companies).toEqual(['No Existe SA', 'SimpliRoute S.A.S']);
+	});
+
+	it('compañía emisora por identificador fiscal o por país cuando hay varias con el mismo nombre (Domi 28-10); la moneda sigue como último desempate', async () => {
+		const { service } = build();
+		const preview = await service.previewImport(HOLDING, {
+			invoices: [
+				invoice({ company_name: 'SimpliRoute S.A.S', currency: 'USD', company_tax_id: '30-71.661.797-8' }),
+				invoice({ row: 2, invoice_number: 'F-2', company_name: 'SimpliRoute S.A.S', currency: 'USD', company_country: 'co' }),
+				invoice({ row: 3, invoice_number: 'F-3', company_name: 'simpliroute sas', currency: 'USD', company_tax_id: '21866821-0015' }),
+				invoice({ row: 4, invoice_number: 'F-4', company_name: 'SimpliRoute S.A.S', currency: 'COP' }),
+				invoice({ row: 5, invoice_number: 'F-5', company_name: 'SimpliRoute S.A.S', currency: 'USD', company_country: 'BR' }),
+			],
+		});
+
+		expect(preview.rows.map((row) => [row.status, row.company?.id ?? null])).toEqual([
+			['new', 'co-ar'],
+			['new', 'co-co'],
+			['new', 'co-uy'],
+			['new', 'co-co'],
+			['error', null],
+		]);
 	});
 });
 
@@ -273,6 +305,7 @@ describe('importación con histórico en el mismo paso (Domi 14-10)', () => {
 			product: { id: PRODUCT, name: 'PATHFINDER+' },
 			fx_contract_to_invoice: 1,
 			warnings: [],
+			lines: [{ index: 1, product: { id: PRODUCT, name: 'PATHFINDER+' }, contract_currency: 'CLP', fx_contract_to_invoice: 1, warnings: [] }],
 		});
 		// CLP de factura con USD de contrato y fx 1: aviso de monto copiado.
 		expect(history[2]).toMatchObject({ status: 'ready', fx_contract_to_invoice: 1, warnings: ['fx_one_with_different_currencies'] });
@@ -284,35 +317,53 @@ describe('importación con histórico en el mismo paso (Domi 14-10)', () => {
 		expect(history[5].status).toBe('error');
 		expect(history[6].errors).toEqual(['La suma de las líneas no cuadra con el neto de la factura (±1 %)']);
 		expect(history[7].errors[0]).toContain('no tiene cliente comercial');
-		expect(history[8]).toMatchObject({ status: 'none', product: null });
+		expect(history[8]).toMatchObject({ status: 'none', product: null, lines: [] });
 		expect(preview.summary).toMatchObject({ history_ready: 2, history_incomplete: 1, history_error: 4 });
 		expect(preview.rows[0]).not.toHaveProperty('history_products');
+	});
+
+	it('histórico por línea y opcional (Domi 28-10): cada línea con su período, moneda y producto; una línea sin histórico entra solo como línea; el tipo de cambio es por línea', async () => {
+		const { service } = build([products, currencies]);
+		const preview = await service.previewImport(HOLDING, {
+			invoices: [
+				// Dos contratos pactados en monedas distintas, cobrados en una factura CLP: ya no se exige que las líneas coincidan.
+				invoice({
+					amount: 1500,
+					total: 1785,
+					items: [
+						historyItem({ subtotal: 1000, contract_currency: 'USD', amount_contract_currency: 1 }),
+						historyItem({
+							subtotal: 500,
+							product: 'SOP',
+							period_from: '2026-07',
+							period_to: '2026-09',
+							contract_currency: 'CLP',
+							amount_contract_currency: 500,
+						}),
+					],
+				}),
+				// Una línea con histórico y otra sin ninguno de sus campos: ready, con una sola línea de registro.
+				invoice({ row: 2, invoice_number: 'F-2', amount: 1500, total: 1785, items: [historyItem(), { subtotal: 500 }] }),
+			],
+		});
+		const [mixed, partial] = preview.rows.map((row) => row.history);
+
+		expect(mixed).toMatchObject({ status: 'ready', errors: [], product: { id: PRODUCT }, fx_contract_to_invoice: 1000 });
+		expect(mixed.lines).toEqual([
+			{ index: 1, product: { id: PRODUCT, name: 'PATHFINDER+' }, contract_currency: 'USD', fx_contract_to_invoice: 1000, warnings: [] },
+			{ index: 2, product: { id: 'p-sop', name: 'Soporte' }, contract_currency: 'CLP', fx_contract_to_invoice: 1, warnings: [] },
+		]);
+		expect(partial).toMatchObject({ status: 'ready', errors: [] });
+		expect(partial.lines).toHaveLength(1);
 	});
 
 	it('aplicar: registra el histórico de las facturas ready en la misma transacción y con el lote de la importación; incomplete entra sin histórico', async () => {
 		const { db, service } = build([
 			products,
 			currencies,
-			[
-				'LEFT JOIN LATERAL',
-				() => [
-					{
-						id: 'inv-new',
-						invoice_number: 'F-100',
-						issue_date: '2026-07-01',
-						company_id: CO_CL,
-						legal_client_name: 'Acme',
-						invoice_currency: 'CLP',
-						amount_invoice_currency: '1000',
-						total_invoice_currency: '1190',
-						status: 'Enviada',
-						client_id: CLIENT,
-						item_id: 'it-1',
-						item_subtotal: '1000',
-						has_history: false,
-					},
-				],
-			],
+			[PLAN_INVOICES, () => [planInvoice()]],
+			[PLAN_ITEMS, () => [{ id: 'it-1', invoices_legacy_id: 'inv-new', subtotal: '1000', description: 'Plataforma', currency: 'CLP' }]],
+			['INSERT INTO invoice_items_legacy', () => [{ id: 'it-1' }]],
 			['SELECT id, name FROM products', () => [{ id: PRODUCT, name: 'PATHFINDER+' }]],
 		]);
 		const result = await service.applyImport(
@@ -328,6 +379,9 @@ describe('importación con histórico en el mismo paso (Domi 14-10)', () => {
 		const [insert] = db.statements('INSERT INTO mrr_legacy');
 
 		expect(result).toMatchObject({ inserted: 2, history_rows_created: 1, history_skipped: [] });
+		// Las filas cuelgan de la línea recién insertada (RETURNING id de las líneas), con su descripción.
+		expect(insert.params.slice(0, 4)).toEqual([HOLDING, 'inv-new', 'it-1', 1]);
+		expect(insert.params[14]).toBe('Plataforma');
 		expect(result.history_records_touched).toHaveLength(1);
 		// El registro de MRR legacy nace con su propio `batch_id` (uno por cliente × moneda, Domi 18-10), nunca el lote de la importación; el
 		// lote lo guarda en su evento (`history_batch_ids`) para poder revertirlo.
@@ -344,27 +398,18 @@ describe('importación con histórico en el mismo paso (Domi 14-10)', () => {
 	});
 
 	it('aplicar: dos facturas del mismo cliente y moneda comparten registro; otra moneda abre otro', async () => {
-		const row = (id: string, number: string, currency: string) => ({
-			id,
-			invoice_number: number,
-			issue_date: '2026-07-01',
-			company_id: CO_CL,
-			legal_client_name: 'Acme',
-			invoice_currency: currency,
-			amount_invoice_currency: '1000',
-			total_invoice_currency: '1190',
-			status: 'Enviada',
-			client_id: CLIENT,
-			item_id: `it-${number}`,
-			item_subtotal: '1000',
-			has_history: false,
-		});
 		const inserted = ['inv-a', 'inv-b', 'inv-c'];
 		const { service } = build([
 			products,
 			currencies,
 			['INSERT INTO invoices_legacy', () => [{ id: inserted.shift() }]],
-			['LEFT JOIN LATERAL', (params) => (params[1] as string[]).map((id) => row(id, id, id === 'inv-c' ? 'USD' : 'CLP'))],
+			['INSERT INTO invoice_items_legacy', (params) => [{ id: `it-${params[0]}` }]],
+			[
+				PLAN_INVOICES,
+				(params) =>
+					(params[1] as string[]).map((id) => planInvoice({ id, invoice_number: id, invoice_currency: id === 'inv-c' ? 'USD' : 'CLP' })),
+			],
+			[PLAN_ITEMS, (params) => (params[0] as string[]).map((id) => ({ id: `it-${id}`, invoices_legacy_id: id, subtotal: '1000' }))],
 			['SELECT id, name FROM products', () => [{ id: PRODUCT, name: 'PATHFINDER+' }]],
 		]);
 		const result = await service.applyImport(
@@ -502,15 +547,28 @@ describe('registrar histórico (§3.2b)', () => {
 		vat: null,
 		status: 'Pagada',
 		client_id: CLIENT,
-		item_id: 'it-1',
-		item_subtotal: '1200000',
-		item_description: null,
-		item_currency: null,
-		has_history: false,
+		reconciled_invoice_id: null,
 		...overrides,
 	});
-	const handlers = (row = invoiceRow(), covered: unknown[] = []): Handler[] => [
-		['LEFT JOIN LATERAL', () => [row]],
+	const itemRow = (overrides: Record<string, unknown> = {}) => ({
+		id: 'it-1',
+		invoices_legacy_id: INVOICE,
+		subtotal: '1200000',
+		description: null,
+		currency: null,
+		...overrides,
+	});
+	/** Una fila de `mrr_legacy` ya registrada sobre una línea (lo que cubre en moneda de factura). */
+	const registeredRow = (itemId: string, allocated: string, split = 1) => ({
+		invoice_legacy_id: INVOICE,
+		item_id: itemId,
+		split_index: split,
+		allocated,
+	});
+	const handlers = (row = invoiceRow(), covered: unknown[] = [], items: unknown[] = [itemRow()], registered: unknown[] = []): Handler[] => [
+		[PLAN_INVOICES, () => [row]],
+		[PLAN_ITEMS, () => items],
+		[PLAN_REGISTERED, () => registered],
 		[
 			'SELECT id, name FROM products',
 			() => [
@@ -522,19 +580,21 @@ describe('registrar histórico (§3.2b)', () => {
 		['percentile_cont', () => [{ contract_currency: 'USD', invoice_currency: 'CLP', fx: '950' }]],
 		['SELECT DISTINCT m.client_id', () => covered],
 	];
-	const input = (overrides: Record<string, unknown> = {}) =>
-		({
-			invoice_id: INVOICE,
-			period_from: '2026-01',
-			period_to: '2026-12',
-			contract_currency: 'USD',
-			amount_contract_currency: 1200,
-			products: [
-				{ product_id: PRODUCT_A, amount_contract_currency: 1000 },
-				{ product_id: PRODUCT_B, amount_contract_currency: 200 },
-			],
-			...overrides,
-		}) as never;
+	const line = (overrides: Record<string, unknown> = {}) => ({
+		item_id: 'it-1',
+		period_from: '2026-01',
+		period_to: '2026-12',
+		contract_currency: 'USD',
+		amount_contract_currency: 1200,
+		products: [
+			{ product_id: PRODUCT_A, amount_contract_currency: 1000 },
+			{ product_id: PRODUCT_B, amount_contract_currency: 200 },
+		],
+		...overrides,
+	});
+	/** Una factura con una línea de registro (lo que cambia va en la línea; `invoiceOverrides` en la factura). */
+	const input = (overrides: Record<string, unknown> = {}, invoiceOverrides: Record<string, unknown> = {}) =>
+		({ invoice_id: INVOICE, lines: [line(overrides)], ...invoiceOverrides }) as never;
 	const make = (extra: Handler[]) => {
 		const db = fakeDb(extra);
 
@@ -544,20 +604,27 @@ describe('registrar histórico (§3.2b)', () => {
 	it('vista previa: meses del período, MRR mensual, tipo de cambio y avisos (suma, mes cubierto, tipo de cambio raro, sin cliente)', async () => {
 		const ok = await make(handlers()).service.preview(HOLDING, { invoices: [input()] });
 
-		expect(ok.rows[0]).toMatchObject({
+		expect(ok.rows[0]).toMatchObject({ months: expect.arrayContaining(['2026-01', '2026-12']), warnings: [], errors: [] });
+		expect(ok.rows[0].lines[0]).toMatchObject({
+			item_id: 'it-1',
+			item_index: 1,
 			months: expect.arrayContaining(['2026-01', '2026-12']),
 			mrr_per_month: 100,
 			fx_contract_to_invoice: 1000,
 			warnings: [],
 			errors: [],
+			blocked: false,
 		});
 		expect(ok.rows[0].months).toHaveLength(12);
-		expect(ok.summary).toMatchObject({ ready: 1, rows_to_create: 24 });
+		expect(ok.summary).toMatchObject({ invoices: 1, lines: 1, ready: 1, invoices_ready: 1, rows_to_create: 24 });
 
+		// El tipo de cambio sale del subtotal de la línea (no del neto de la factura): 3.000.000 ÷ 1.500 = 2.000, lejos de la mediana 950.
 		const warned = await make(
-			handlers(invoiceRow({ client_id: null, amount_invoice_currency: '3000000' }), [
-				{ client_id: CLIENT, product_name: 'PATHFINDER+', contract_currency: 'USD', period: '2026-03' },
-			])
+			handlers(
+				invoiceRow({ client_id: null, amount_invoice_currency: '3000000' }),
+				[{ client_id: CLIENT, product_name: 'PATHFINDER+', contract_currency: 'USD', period: '2026-03' }],
+				[itemRow({ subtotal: '3000000' })]
+			)
 		).service.preview(HOLDING, { invoices: [input({ amount_contract_currency: 1500 })] });
 
 		expect(warned.rows[0].warnings).toEqual(expect.arrayContaining(['sum_mismatch', 'fx_outlier', 'no_client']));
@@ -565,9 +632,14 @@ describe('registrar histórico (§3.2b)', () => {
 		expect(ok.rows[0]).toMatchObject({ invoice_currency: 'CLP', amount_invoice_currency: 1200000 });
 
 		// Monedas distintas con fx ≈ 1 (el monto de contrato se copió del de factura): aviso propio, además del outlier contra la mediana.
-		const copied = await make(handlers(invoiceRow({ amount_invoice_currency: '1200' }))).service.preview(HOLDING, { invoices: [input()] });
+		const copied = await make(handlers(invoiceRow({ amount_invoice_currency: '1200' }), [], [itemRow({ subtotal: '1200' })])).service.preview(
+			HOLDING,
+			{
+				invoices: [input()],
+			}
+		);
 
-		expect(copied.rows[0].fx_contract_to_invoice).toBe(1);
+		expect(copied.rows[0].lines[0].fx_contract_to_invoice).toBe(1);
 		expect(copied.rows[0].warnings).toEqual(expect.arrayContaining(['fx_one_with_different_currencies', 'fx_outlier']));
 		expect(warned.rows[0].errors).toContain('no_client');
 
@@ -612,8 +684,8 @@ describe('registrar histórico (§3.2b)', () => {
 		const { db, service } = make([...pendingHandlers, ...handlers(invoiceRow({ client_id: UUID_CLIENT }))]);
 		const preview = await service.preview(HOLDING, { invoices: [input()] });
 
-		expect(preview.rows[0]).toMatchObject({ record_key: null, record_exists: false });
-		expect(preview.rows[0].existing_records).toEqual([
+		expect(preview.rows[0].lines[0]).toMatchObject({ record_key: null, record_exists: false });
+		expect(preview.rows[0].lines[0].existing_records).toEqual([
 			{
 				key: TARGET_KEY,
 				batch_id: BATCH,
@@ -631,7 +703,7 @@ describe('registrar histórico (§3.2b)', () => {
 		// Sin cliente comercial no hay registro; una factura bloqueada no abre registro.
 		const noClient = await make(handlers(invoiceRow({ client_id: null }))).service.preview(HOLDING, { invoices: [input()] });
 
-		expect(noClient.rows[0]).toMatchObject({ record_key: null, record_exists: false, existing_records: [] });
+		expect(noClient.rows[0].lines[0]).toMatchObject({ record_key: null, record_exists: false, existing_records: [] });
 		expect(noClient.summary).toMatchObject({ records_touched: [], records_to_create: 0 });
 	});
 
@@ -639,15 +711,19 @@ describe('registrar histórico (§3.2b)', () => {
 		const { service } = make([...pendingHandlers, ...handlers(invoiceRow({ client_id: UUID_CLIENT }))]);
 		const own = await service.preview(HOLDING, { invoices: [input({ target_key: TARGET_KEY })] });
 
-		expect(own.rows[0]).toMatchObject({ record_key: TARGET_KEY, record_exists: true, errors: [] });
+		expect(own.rows[0].lines[0]).toMatchObject({ record_key: TARGET_KEY, record_exists: true, errors: [] });
 		expect(own.summary).toMatchObject({ records_touched: [TARGET_KEY], records_to_create: 0 });
 		const global = await service.preview(HOLDING, { invoices: [input()], target_key: TARGET_KEY });
 
-		expect(global.rows[0]).toMatchObject({ record_key: TARGET_KEY, record_exists: true });
+		expect(global.rows[0].lines[0]).toMatchObject({ record_key: TARGET_KEY, record_exists: true });
+		// También por factura (todas sus líneas).
+		const byInvoice = await service.preview(HOLDING, { invoices: [input({}, { target_key: TARGET_KEY })] });
+
+		expect(byInvoice.rows[0].lines[0]).toMatchObject({ record_key: TARGET_KEY, record_exists: true });
 		const mismatch = await service.preview(HOLDING, { invoices: [input({ contract_currency: 'CLP', target_key: TARGET_KEY })] });
 
 		expect(mismatch.rows[0].errors).toContain('target_mismatch');
-		expect(mismatch.rows[0].record_key).toBeNull();
+		expect(mismatch.rows[0].lines[0].record_key).toBeNull();
 		const missing = await make(handlers(invoiceRow({ client_id: UUID_CLIENT }))).service.preview(HOLDING, {
 			invoices: [input({ target_key: TARGET_KEY })],
 		});
@@ -659,8 +735,11 @@ describe('registrar histórico (§3.2b)', () => {
 		});
 
 		expect(linked.rows[0].errors).toContain('target_not_found');
-		await expect(service.preview(HOLDING, { invoices: [input({ target_key: 'rota' })] })).rejects.toMatchObject({
+		await expect(service.preview(HOLDING, { invoices: [input({}, { target_key: 'rota' })] })).rejects.toMatchObject({
 			response: { errors: [{ field: 'invoices.0.target_key' }] },
+		});
+		await expect(service.preview(HOLDING, { invoices: [input({ target_key: 'rota' })] })).rejects.toMatchObject({
+			response: { errors: [{ field: 'invoices.0.lines.0.target_key' }] },
 		});
 		await expect(service.preview(HOLDING, { invoices: [input()], target_key: 'rota' })).rejects.toMatchObject({
 			response: { errors: [{ field: 'target_key' }] },
@@ -701,21 +780,111 @@ describe('registrar histórico (§3.2b)', () => {
 		expect(db.statements('INSERT INTO onboarding_events')[0].params[1]).toBe('history_registered');
 	});
 
-	it('aplicar: se salta lo ya registrado, sin líneas, sin cliente o con la suma que no cuadra', async () => {
-		const cases: Array<[Record<string, unknown>, Record<string, unknown>, string]> = [
-			[{ has_history: true }, {}, 'already_registered'],
-			[{ item_id: null }, {}, 'invoice_without_items'],
-			[{ client_id: null }, {}, 'no_client'],
-			[{}, { amount_contract_currency: 2000 }, 'sum_mismatch'],
-			[{}, { period_from: '2026-05', period_to: '2026-01' }, 'invalid_period'],
+	it('aplicar: se salta lo ya registrado, sin líneas, una línea ajena, sin cliente o con la suma que no cuadra', async () => {
+		const cases: Array<[Handler[], Record<string, unknown>, string]> = [
+			[handlers(invoiceRow(), [], [itemRow()], [registeredRow('it-1', '1200000')]), {}, 'already_registered'],
+			[handlers(invoiceRow(), [], []), {}, 'invoice_without_items'],
+			[handlers(invoiceRow(), [], [itemRow({ id: 'it-9' })]), {}, 'item_not_found'],
+			[handlers(invoiceRow({ client_id: null })), {}, 'no_client'],
+			[handlers(), { amount_contract_currency: 2000 }, 'sum_mismatch'],
+			[handlers(), { period_from: '2026-05', period_to: '2026-01' }, 'invalid_period'],
 		];
 
-		for (const [row, overrides, reason] of cases) {
-			const { db, service } = make(handlers(invoiceRow(row)));
+		for (const [extra, overrides, reason] of cases) {
+			const { db, service } = make(extra);
 			const result = await service.register(HOLDING, { invoices: [input(overrides)] }, ACTOR);
 
-			expect(result.skipped).toEqual([{ invoice_id: INVOICE, reason }]);
+			expect(result.skipped).toEqual([{ invoice_id: INVOICE, item_id: 'it-1', reason }]);
 			expect(db.statements('INSERT INTO mrr_legacy')).toHaveLength(0);
 		}
+	});
+
+	describe('por línea de factura (Domi 28-10)', () => {
+		/** Factura CLP de 1.200.000 con dos líneas: Plataforma 1.000.000 (contrato en USD) y Soporte 200.000 (contrato en CLP). */
+		const twoItems = [
+			itemRow({ subtotal: '1000000', description: 'Plataforma' }),
+			itemRow({ id: 'it-2', subtotal: '200000', description: 'Soporte' }),
+		];
+		const twoLines = (extra: Record<string, unknown> = {}) =>
+			({
+				invoice_id: INVOICE,
+				lines: [
+					line({ products: [{ product_id: PRODUCT_A, amount_contract_currency: 1200 }] }),
+					line({
+						item_id: 'it-2',
+						contract_currency: 'CLP',
+						amount_contract_currency: 200000,
+						products: [{ product_id: PRODUCT_B, amount_contract_currency: 200000 }],
+					}),
+				],
+				...extra,
+			}) as never;
+
+		it('cada línea con su moneda de contrato y su tipo de cambio (subtotal de la línea ÷ monto); una factura abre un registro por moneda', async () => {
+			const { db, service } = make(handlers(invoiceRow(), [], twoItems));
+			const preview = await service.preview(HOLDING, { invoices: [twoLines()] });
+
+			expect(
+				preview.rows[0].lines.map((row) => [row.item_id, row.item_index, row.item_description, row.fx_contract_to_invoice, row.errors])
+			).toEqual([
+				['it-1', 1, 'Plataforma', 833.333333, []],
+				['it-2', 2, 'Soporte', 1, []],
+			]);
+			expect(preview.summary).toMatchObject({ invoices: 1, lines: 2, ready: 2, invoices_ready: 1, rows_to_create: 24, records_to_create: 2 });
+			const result = await service.register(HOLDING, { invoices: [twoLines()] }, ACTOR);
+			const inserts = db.statements('INSERT INTO mrr_legacy');
+
+			expect(result).toMatchObject({ created_rows: 24, skipped: [] });
+			expect(result.batch_ids).toHaveLength(2);
+			expect(result.records_touched).toHaveLength(2);
+			// Cada línea cuelga de su línea de factura, con su descripción, subtotal y asignado.
+			expect(inserts[0].params.slice(0, 4)).toEqual([HOLDING, INVOICE, 'it-1', 1]);
+			expect(inserts[0].params.slice(14, 18)).toEqual(['Plataforma', 'CLP', 1000000, 1000000]);
+			expect(inserts[1].params.slice(0, 4)).toEqual([HOLDING, INVOICE, 'it-2', 1]);
+			expect(inserts[1].params.slice(14, 18)).toEqual(['Soporte', 'CLP', 200000, 200000]);
+			expect(inserts[1].params[19]).toBe('CLP');
+			// La factura se marca una vez; un evento por línea.
+			expect(db.statements("SET reconciliation_status = 'mrr_legacy'")).toHaveLength(1);
+			expect(db.statements('INSERT INTO onboarding_events').map((call) => JSON.parse(String(call.params[5])).item_id)).toEqual([
+				'it-1',
+				'it-2',
+			]);
+		});
+
+		it('dividir una línea en varios productos: split_index por producto, después de los ya usados en esa línea', async () => {
+			const { db, service } = make([['AS max_split', () => [{ item_id: 'it-1', max_split: 2 }]], ...handlers(invoiceRow(), [], twoItems)]);
+			const result = await service.register(HOLDING, { invoices: [input()] }, ACTOR);
+			const [insert] = db.statements('INSERT INTO mrr_legacy');
+
+			expect(result.created_rows).toBe(24);
+			// Producto A en split 3 y producto B en split 4 (la línea ya tenía 2 partes de otro registro); 32 valores por fila, 12 meses por producto.
+			expect(insert.params[3]).toBe(3);
+			expect(insert.params[12 * 32 + 3]).toBe(4);
+		});
+
+		it('registro parcial: una línea con filas está registrada y las demás de la factura se pueden registrar; repetir una línea en el body es duplicate_line', async () => {
+			const partial = make(handlers(invoiceRow(), [], twoItems, [registeredRow('it-1', '1000000')]));
+			const preview = await partial.service.preview(HOLDING, { invoices: [twoLines()] });
+
+			expect(preview.rows[0].lines.map((row) => row.errors)).toEqual([['already_registered'], []]);
+			expect(preview.summary).toMatchObject({ lines: 2, ready: 1, invoices_ready: 1, with_errors: 1 });
+			const result = await partial.service.register(HOLDING, { invoices: [twoLines()] }, ACTOR);
+
+			expect(result).toMatchObject({ created_rows: 12, skipped: [{ invoice_id: INVOICE, item_id: 'it-1', reason: 'already_registered' }] });
+			expect(partial.db.statements('INSERT INTO mrr_legacy')[0].params[2]).toBe('it-2');
+			const repeated = await make(handlers(invoiceRow(), [], twoItems)).service.preview(HOLDING, {
+				invoices: [{ invoice_id: INVOICE, lines: [line(), line()] } as never],
+			});
+
+			expect(repeated.rows[0].lines.map((row) => row.errors)).toEqual([[], ['duplicate_line']]);
+		});
+
+		it('una factura registrada entera antes de la regla (todas sus filas en la primera línea, que cubren el neto) no deja registrar ninguna línea', async () => {
+			const { service } = make(handlers(invoiceRow(), [], twoItems, [registeredRow('it-1', '1000000'), registeredRow('it-1', '200000', 2)]));
+			const preview = await service.preview(HOLDING, { invoices: [twoLines()] });
+
+			expect(preview.rows[0].lines.map((row) => row.errors)).toEqual([['already_registered'], ['already_registered']]);
+			expect(preview.summary).toMatchObject({ ready: 0, invoices_ready: 0 });
+		});
 	});
 });

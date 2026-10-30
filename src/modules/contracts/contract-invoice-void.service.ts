@@ -90,7 +90,8 @@ export async function insertLineState(
 			$14, $15, $16, $17,
 			COALESCE($26::text, (SELECT h.contract_currency FROM invoices h WHERE h.id = $1)), (SELECT h.invoice_currency FROM invoices h WHERE h.id = $1), $18::numeric,
 			CASE WHEN $18::numeric IS NULL THEN NULL ELSE COALESCE((SELECT o.fx_rate_source FROM invoice_items o WHERE o.id = $24::uuid), $19) END,
-			CASE WHEN $18::numeric IS NULL THEN NULL ELSE CURRENT_DATE END,
+			CASE WHEN $18::numeric IS NULL THEN NULL
+				ELSE COALESCE((SELECT o.fx_rate_date FROM invoice_items o WHERE o.id = $24::uuid AND o.fx_contract_to_invoice = $18::numeric), CURRENT_DATE) END,
 			(SELECT h.status FROM invoices h WHERE h.id = $1), (SELECT h.issue_date FROM invoices h WHERE h.id = $1),
 			$20::date, $21::date, $22, $23::jsonb, $25::uuid
 		) RETURNING id`,
@@ -470,10 +471,13 @@ export class ContractInvoiceVoidService {
 		for (const line of ordered) {
 			const source = line.id ? sourceOf.get(line.id) : undefined;
 			const visibleSource = source?.visible_line_id ?? null;
-			// Multimoneda: la reemisión copia la moneda y la tasa DE CADA LÍNEA (como la NC espejo), no la del encabezado.
+			// Multimoneda: la reemisión copia la moneda y la tasa DE CADA LÍNEA (como la NC espejo), no la del encabezado. Sin el flag, una
+			// línea copiada sin cambios conserva su propia tasa (la que produjo sus montos en moneda de factura); una editada lleva la del
+			// encabezado, con la que el editor la volvió a valorizar (Domi 28-10, Alicorp F101-00004417).
 			const pair = line.after!.currency !== undefined;
+			const copied = line.action === 'unchanged' && source?.fx !== undefined && source.fx !== null;
 			const id = await insertLineState(runner, holdingId, reissueId, line.after!, {
-				fx: pair ? (line.after!.fx ?? null) : fx,
+				fx: pair ? (line.after!.fx ?? null) : copied ? source.fx! : fx,
 				fx_rate_source: REISSUE_FX_RATE_SOURCE,
 				...(pair ? { currency: line.after!.currency ?? null } : {}),
 				source_line_id: source?.id ?? null,
