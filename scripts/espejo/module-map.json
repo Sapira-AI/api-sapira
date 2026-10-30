@@ -78,6 +78,7 @@
  ],
  "facturacion": [
   "billing_references",
+  "dte_simulations",
   "invoice_adjustments",
   "invoice_collection_logs",
   "invoice_collection_settings",
