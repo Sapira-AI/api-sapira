@@ -2,7 +2,9 @@ import { BadGatewayException, HttpException, Injectable, ServiceUnavailableExcep
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
+import { dteSimulado } from './dte-simulado';
 import { FacturaOAuthService } from './factura-oauth.service';
+import { FacturaSimuladaService } from './factura-simulada.service';
 
 export interface ProvisionFacturaEmpresa {
 	externalReference: {
@@ -25,7 +27,8 @@ export interface ProvisionFacturaEmpresa {
 export class FacturaClientService {
 	constructor(
 		private readonly config: ConfigService,
-		private readonly oauth: FacturaOAuthService
+		private readonly oauth: FacturaOAuthService,
+		private readonly simulada: FacturaSimuladaService
 	) {}
 
 	/** URL de api-factura; sin ella la integración no está configurada en este ambiente (503 con el motivo, no un 500 genérico). */
@@ -72,6 +75,8 @@ export class FacturaClientService {
 
 	// ---------------------------------------------------------------- documentos tributarios (DTE)
 	// La compañía va en `X-Factura-Company-Id` con su UUID de Sapira (api-factura la resuelve por el vínculo del integrador).
+	// Con `DTE_SIMULATED=true` (solo QA) crear, enviar, consultar, entregar y descargar no van a api-factura: los responde
+	// `FacturaSimuladaService` (folio propio, aceptado, XML del mismo cuerpo). El PDF en borrador sí va siempre a api-factura.
 
 	/**
 	 * Crea (timbra y firma) el DTE. `externalRef` (el id de la factura) lo hace idempotente: si ya existe, api-factura devuelve el mismo
@@ -87,6 +92,7 @@ export class FacturaClientService {
 		externalRef: string,
 		options: { reemitirRechazado?: boolean } = {}
 	): Promise<DteCreado> {
+		if (dteSimulado()) return this.simulada.crearDte(companyId, body, externalRef, options);
 		const { data } = await this.dteRequest<{ data: DteCreado & { id: unknown } }>(companyId, 'post', '/dte/createDte', {
 			...body,
 			externalRef,
@@ -100,6 +106,7 @@ export class FacturaClientService {
 
 	/** Envía el DTE al SII; devuelve el TrackId. */
 	async enviarDte(companyId: string, dteId: string): Promise<{ trackId: string }> {
+		if (dteSimulado()) return this.simulada.enviarDte(companyId, dteId);
 		const { data } = await this.dteRequest<{ data: { trackId: unknown } }>(companyId, 'post', '/dte/sendDte', { dteIds: [dteId] });
 
 		return { trackId: String(data.data.trackId) };
@@ -107,6 +114,7 @@ export class FacturaClientService {
 
 	/** Consulta en el SII el envío del DTE y devuelve su resultado (`en_proceso`, `aceptado`, `reparos`, `rechazado`). */
 	async estadoDte(companyId: string, dteId: string): Promise<DteEstado> {
+		if (dteSimulado()) return this.simulada.estadoDte(companyId, dteId);
 		const { data } = await this.dteRequest<{ data: DteEstado }>(companyId, 'get', `/dte/${encodeURIComponent(dteId)}/estado`);
 
 		return data.data;
@@ -114,6 +122,7 @@ export class FacturaClientService {
 
 	/** Envía el DTE aceptado a su receptor por correo (EnvioDTE + muestra impresa), desde la casilla de intercambio de la compañía. */
 	async enviarReceptor(companyId: string, dteId: string, para: string): Promise<{ para: string; messageId?: string }> {
+		if (dteSimulado()) return this.simulada.enviarReceptor(companyId, dteId, para);
 		const { data } = await this.dteRequest<{ data: { para: string; messageId?: string } }>(
 			companyId,
 			'post',
@@ -138,6 +147,7 @@ export class FacturaClientService {
 		formato: 'pdf' | 'xml',
 		copia: 'tributaria' | 'cedible' = 'tributaria'
 	): Promise<DteDocumento> {
+		if (dteSimulado()) return this.simulada.documentoDte(companyId, dteId, formato, (body) => this.previewPdfDte(companyId, body));
 		const path = formato === 'pdf' ? `/dte/${encodeURIComponent(dteId)}/pdf?copia=${copia}` : `/dte/${encodeURIComponent(dteId)}/xml`;
 		const respuesta = await this.dteRequest<ArrayBuffer>(companyId, 'get', path, undefined, 'arraybuffer');
 		const disposition = String(respuesta.headers?.['content-disposition'] ?? '');

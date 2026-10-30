@@ -3,11 +3,20 @@ import axios from 'axios';
 
 import { FacturaClientService, facturaHttpError } from './factura-client.service';
 
+/** Simulador de DTE: sin `DTE_SIMULATED` nunca se llama. */
+const simulada = {
+	crearDte: jest.fn(),
+	enviarDte: jest.fn(),
+	estadoDte: jest.fn(),
+	enviarReceptor: jest.fn(),
+	documentoDte: jest.fn(),
+};
+
 describe('FacturaClientService', () => {
 	it('posts provision payloads with an external reference instead of sapira-specific fields', async () => {
 		const oauth = { getAccessToken: jest.fn().mockResolvedValue('oauth-token') };
 		const config = { get: jest.fn().mockReturnValue('http://localhost:9005') };
-		const service = new FacturaClientService(config as any, oauth as any);
+		const service = new FacturaClientService(config as any, oauth as any, simulada as any);
 		const axios = require('axios');
 		const post = jest.spyOn(axios, 'post').mockResolvedValue({ data: { created: true } });
 		const payload = {
@@ -33,7 +42,7 @@ describe('FacturaClientService', () => {
 			const oauth = { getAccessToken: jest.fn().mockResolvedValue('oauth-token') };
 			const config = { get: jest.fn().mockReturnValue('http://localhost:9005') };
 
-			return new FacturaClientService(config as any, oauth as any);
+			return new FacturaClientService(config as any, oauth as any, simulada as any);
 		};
 		const axiosError = (status: number | undefined, message?: unknown) =>
 			Object.assign(new Error(`Request failed with status code ${status}`), {
@@ -79,7 +88,11 @@ describe('FacturaClientService', () => {
 						Object.assign(new Error('Request failed with status code 401'), { isAxiosError: true, response: { status: 401, data: {} } })
 					),
 			};
-			const service = new FacturaClientService({ get: jest.fn().mockReturnValue('http://localhost:9005') } as any, oauth as any);
+			const service = new FacturaClientService(
+				{ get: jest.fn().mockReturnValue('http://localhost:9005') } as any,
+				oauth as any,
+				simulada as any
+			);
 			const post = jest.spyOn(axios, 'post');
 
 			await expect(service.provisionEmpresa({} as any)).rejects.toMatchObject({
@@ -92,7 +105,11 @@ describe('FacturaClientService', () => {
 
 		it('con el OAuth sin configurar o api-factura caído al pedir el token, el 502 conserva el motivo', async () => {
 			const oauth = { getAccessToken: jest.fn().mockRejectedValue(new Error('OAuth de api-factura no está configurado')) };
-			const service = new FacturaClientService({ get: jest.fn().mockReturnValue('http://localhost:9005') } as any, oauth as any);
+			const service = new FacturaClientService(
+				{ get: jest.fn().mockReturnValue('http://localhost:9005') } as any,
+				oauth as any,
+				simulada as any
+			);
 
 			await expect(service.provisionEmpresa({} as any)).rejects.toMatchObject({
 				status: 502,
@@ -102,7 +119,7 @@ describe('FacturaClientService', () => {
 
 		it('sin FACTURA_API_URL responde 503 con el motivo, sin pedir token', async () => {
 			const oauth = { getAccessToken: jest.fn() };
-			const service = new FacturaClientService({ get: jest.fn().mockReturnValue(undefined) } as any, oauth as any);
+			const service = new FacturaClientService({ get: jest.fn().mockReturnValue(undefined) } as any, oauth as any, simulada as any);
 
 			await expect(service.provisionEmpresa({} as any)).rejects.toMatchObject({
 				status: 503,
@@ -127,7 +144,7 @@ describe('FacturaClientService', () => {
 			};
 			const config = { get: jest.fn().mockReturnValue('http://localhost:9005/') };
 
-			return { service: new FacturaClientService(config as any, oauth as any), oauth };
+			return { service: new FacturaClientService(config as any, oauth as any, simulada as any), oauth };
 		};
 		const COMPANY = '1bdded45-cda6-4148-a425-fa0086e27ce8';
 
@@ -247,6 +264,70 @@ describe('FacturaClientService', () => {
 				message: expect.stringContaining('factura:dte:read y factura:dte:write'),
 			});
 			expect(post).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('emisión simulada (DTE_SIMULATED=true, solo QA)', () => {
+		const COMPANY = '1bdded45-cda6-4148-a425-fa0086e27ce8';
+		const build = () => {
+			const oauth = { getAccessToken: jest.fn(), getDteAccessToken: jest.fn() };
+
+			return {
+				service: new FacturaClientService({ get: jest.fn().mockReturnValue('http://localhost:9005') } as any, oauth as any, simulada as any),
+				oauth,
+			};
+		};
+
+		beforeEach(() => {
+			process.env.DTE_SIMULATED = 'true';
+			Object.values(simulada).forEach((fn) => fn.mockReset());
+		});
+		afterEach(() => {
+			delete process.env.DTE_SIMULATED;
+			jest.restoreAllMocks();
+		});
+
+		it('crear, enviar, consultar, entregar y descargar los responde el simulador: ni token ni api-factura', async () => {
+			const { service, oauth } = build();
+			const post = jest.spyOn(axios, 'post');
+			const get = jest.spyOn(axios, 'get');
+			simulada.crearDte.mockResolvedValue({ id: 'sim_1', folio: 1, tipoDte: 33, ambiente: 'certificacion', existente: false });
+			simulada.enviarDte.mockResolvedValue({ trackId: 'SIM-1' });
+			simulada.estadoDte.mockResolvedValue({ resultado: 'aceptado', estado: 'SIM', glosaEstado: 'Emisión simulada', trackId: 'SIM-1' });
+			simulada.enviarReceptor.mockResolvedValue({ para: 'dte@cliente.cl' });
+			simulada.documentoDte.mockResolvedValue({ contenido: Buffer.from('<EnvioDTE/>'), contentType: 'application/xml', fileName: 'x.xml' });
+
+			await expect(service.crearDte(COMPANY, { Encabezado: {} }, 'invoice-1')).resolves.toMatchObject({ id: 'sim_1' });
+			await expect(service.enviarDte(COMPANY, 'sim_1')).resolves.toEqual({ trackId: 'SIM-1' });
+			await expect(service.estadoDte(COMPANY, 'sim_1')).resolves.toMatchObject({ resultado: 'aceptado' });
+			await expect(service.enviarReceptor(COMPANY, 'sim_1', 'dte@cliente.cl')).resolves.toEqual({ para: 'dte@cliente.cl' });
+			await expect(service.documentoDte(COMPANY, 'sim_1', 'xml')).resolves.toMatchObject({ fileName: 'x.xml' });
+
+			expect(simulada.crearDte).toHaveBeenCalledWith(COMPANY, { Encabezado: {} }, 'invoice-1', {});
+			expect(oauth.getDteAccessToken).not.toHaveBeenCalled();
+			expect(post).not.toHaveBeenCalled();
+			expect(get).not.toHaveBeenCalled();
+		});
+
+		it('el PDF de un documento simulado es el borrador de api-factura (no gasta folio)', async () => {
+			const { service, oauth } = build();
+			oauth.getDteAccessToken.mockResolvedValue('dte-token');
+			const post = jest.spyOn(axios, 'post').mockResolvedValue({ data: new TextEncoder().encode('%PDF').buffer });
+			simulada.documentoDte.mockImplementation((_company, _id, _formato, borrador) => borrador({ Encabezado: { IdDoc: { TipoDTE: 33 } } }));
+
+			await expect(service.documentoDte(COMPANY, 'sim_1', 'pdf')).resolves.toMatchObject({ contentType: 'application/pdf' });
+			expect(post).toHaveBeenCalledWith('http://localhost:9005/dte/preview-pdf', { Encabezado: { IdDoc: { TipoDTE: 33 } } }, expect.anything());
+		});
+
+		it('sin la variable (o con otro valor) va a api-factura como siempre', async () => {
+			process.env.DTE_SIMULATED = 'false';
+			const { service, oauth } = build();
+			oauth.getDteAccessToken.mockResolvedValue('dte-token');
+			const post = jest.spyOn(axios, 'post').mockResolvedValue({ data: { data: { trackId: 99 } } });
+
+			await expect(service.enviarDte(COMPANY, 'dte-1')).resolves.toEqual({ trackId: '99' });
+			expect(simulada.enviarDte).not.toHaveBeenCalled();
+			expect(post).toHaveBeenCalled();
 		});
 	});
 });

@@ -100,6 +100,11 @@
   "file": "src/databases/postgresql/entities/base-tenancy/currency.entity.ts",
   "import": "@/databases/postgresql/entities/base-tenancy/currency.entity"
  },
+ "dte_simulations": {
+  "class": "DteSimulation",
+  "file": "src/databases/postgresql/entities/facturacion/dte-simulation.entity.ts",
+  "import": "@/databases/postgresql/entities/facturacion/dte-simulation.entity"
+ },
  "erp_exports": {
   "class": "ErpExport",
   "file": "src/databases/postgresql/entities/integraciones/kame/erp-export.entity.ts",
