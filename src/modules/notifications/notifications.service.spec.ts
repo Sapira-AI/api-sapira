@@ -243,6 +243,36 @@ describe('NotificationsService', () => {
 			expect(result.recipient_count).toBe(3);
 		});
 
+		it('el recurso sigue al productor (28-10): un grupo que pasa de 1 a N facturas deja resource_id vacío; sin resource_type en el dto no se toca', async () => {
+			const { service, notificationRepository, roleSubscriptionRepository, userQueryBuilder } = buildService();
+			notificationRepository.findOne.mockResolvedValue(existing({ resource_type: 'invoice', resource_id: 'invoice-1' }));
+			notificationRepository.findOneByOrFail.mockResolvedValue({ id: 'notification-1' });
+			roleSubscriptionRepository.find.mockResolvedValue([]);
+			userQueryBuilder.getRawMany.mockResolvedValue([]);
+
+			await service.createOrUpdate('holding-1', {
+				source: 'invoices',
+				type: 'invoice_odoo_failure',
+				severity: 'error',
+				title: 'No se pudieron enviar 2 facturas de Simplit SpA al ERP',
+				message: 'Se acabaron los folios',
+				resource_type: 'invoice',
+				deduplication_key: 'invoice-odoo-failure:c1:2026-10-28:post_invoice:folios_exhausted:abcd1234',
+			});
+			expect(notificationRepository.update).toHaveBeenCalledWith('notification-1', expect.objectContaining({ resource_type: 'invoice', resource_id: null }));
+
+			notificationRepository.update.mockClear();
+			await service.createOrUpdate('holding-1', {
+				source: 'contracts',
+				type: 'contract_renewal_reminder',
+				severity: 'warning',
+				title: 'CTR-1',
+				message: 'x',
+				deduplication_key: 'contracts:renewal-reminder:c-1:2026-11-01',
+			});
+			expect(notificationRepository.update).toHaveBeenCalledWith('notification-1', expect.not.objectContaining({ resource_id: expect.anything() }));
+		});
+
 		it('si cambia el escalón vuelve a "sin leer" y desarchiva para todos', async () => {
 			const { service, notificationRepository, recipientRepository } = buildService();
 			notificationRepository.findOne.mockResolvedValue(existing());

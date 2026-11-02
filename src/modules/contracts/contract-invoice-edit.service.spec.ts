@@ -381,7 +381,8 @@ describe('ContractInvoiceEditService (spec facturas §3.4)', () => {
 			);
 			const [header] = calls(runner.query, 'UPDATE invoices SET issue_date');
 
-			expect((header[1] as unknown[]).slice(-3)).toEqual(['Cancelada', null, 'Por Emitir']);
+			// …, status, nc_revenue_treatment, status esperado, document_type (la familia se reescribe igual salvo que se elija otro documento).
+			expect((header[1] as unknown[]).slice(-4)).toEqual(['Cancelada', null, 'Por Emitir', 'FACTURA']);
 			expect(calls(runner.query, 'DELETE FROM invoice_items')).toHaveLength(0);
 			expect(events(runner.query).map((event) => event.type)).toEqual(['INVOICE_EDITED', 'INVOICE_NO_CHARGE']);
 			expect(events(runner.query)[1].metadata).toMatchObject({
@@ -412,7 +413,7 @@ describe('ContractInvoiceEditService (spec facturas §3.4)', () => {
 			await service.edit(CONTRACT_ID, INV_A, { lines: [lineEdit({ quantity: 10 })] }, HOLDING, 'auth-1', TODAY);
 			const [header] = calls(runner.query, 'UPDATE invoices SET issue_date');
 
-			expect((header[1] as unknown[]).slice(-3)).toEqual(['Por Emitir', null, 'Cancelada']);
+			expect((header[1] as unknown[]).slice(-4)).toEqual(['Por Emitir', null, 'Cancelada', 'FACTURA']);
 			expect(events(runner.query).map((event) => event.type)).toEqual(['INVOICE_EDITED', 'INVOICE_NO_CHARGE_REVERTED']);
 		});
 
@@ -431,7 +432,7 @@ describe('ContractInvoiceEditService (spec facturas §3.4)', () => {
 			);
 			const [header] = calls(runner.query, 'UPDATE invoices SET issue_date');
 
-			expect((header[1] as unknown[]).slice(-3)).toEqual(['Por Emitir', 'impact_month', 'Por Emitir']);
+			expect((header[1] as unknown[]).slice(-4)).toEqual(['Por Emitir', 'impact_month', 'Por Emitir', 'FACTURA']);
 			const [lineUpdate] = calls(runner.query, 'UPDATE invoice_items SET description');
 			const breakdown = JSON.parse((lineUpdate[1] as unknown[])[18] as string) as Row[];
 

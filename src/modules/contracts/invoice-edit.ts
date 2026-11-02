@@ -47,6 +47,7 @@ import {
 	type PriceSpec,
 	splitInvoiceLines,
 } from './pricing-engine';
+import { documentTypeFromKind } from './tax-document-types';
 
 /**
  * Facturas en el Contrato 360, etapa 4 (`docs/v2-rediseno/spec-facturas-en-contrato-360.md` §3.4): editar una Por Emitir como un todo
@@ -130,6 +131,8 @@ export interface InvoiceEditInput {
 	issue_date?: string | null;
 	due_date?: string | null;
 	client_entity_id?: string | null;
+	/** Documento tributario de esta sola factura (catálogo de la compañía emisora): familia, tipo de exportación e IVA (Domi 02-11). */
+	tax_document_type_id?: string | null;
 	invoice_terms_and_conditions?: string | null;
 	notes?: string | null;
 	auto_invoice?: boolean | null;
@@ -218,6 +221,15 @@ export interface ReceiverRow {
 	belongs_to_client: boolean;
 }
 
+/** Documento tributario del catálogo elegido para una factura (`tax_document_types`, kind invoice | export_invoice). */
+export interface EditDocumentRow {
+	id: string;
+	code: string;
+	name: string;
+	kind: string;
+	tax_rate: number | string | null;
+}
+
 /** Lo que el plan espera por ítem y período (motor de facturación con los ítems vigentes y los consumos) y lo que ya llevan otras facturas. */
 export interface DeviationPlan {
 	/** `item|period_start` → subtotal esperado en moneda de contrato (Σ filas del motor). */
@@ -245,6 +257,8 @@ export interface EditContext {
 	issued_periods: IssuedPeriod[];
 	/** Receptor pedido (`client_entity_id` del cuerpo), null si no se pidió o no existe en el holding. */
 	receiver: ReceiverRow | null;
+	/** Documento pedido (`tax_document_type_id` del cuerpo): null si no se pidió, no existe, está inactivo o no es de la compañía emisora. */
+	document?: EditDocumentRow | null;
 	references: DescriptionReference[];
 	plan: DeviationPlan;
 	/** Multimoneda: contexto por par del contrato (`requires_multicurrency_billing`); ausente/null = valorización de siempre (una tasa por factura). */
@@ -942,7 +956,10 @@ interface HeaderPlan {
 
 /** Fechas, receptor (re-deriva RUT, IVA y exportación; aviso de documento) y condiciones. No cambia el tipo de documento. */
 function planHeader(
-	ctx: Pick<EditContext, 'invoice' | 'context' | 'company_tax_rate' | 'receiver'> & { tax_document?: TaxDocumentRate | null },
+	ctx: Pick<EditContext, 'invoice' | 'context' | 'company_tax_rate' | 'receiver'> & {
+		tax_document?: TaxDocumentRate | null;
+		document?: EditDocumentRow | null;
+	},
 	input: Omit<InvoiceEditInput, 'lines' | 'line_mode'>
 ): HeaderPlan {
 	const { invoice, context } = ctx;
@@ -978,6 +995,32 @@ function planHeader(
 			next_step: 'Corrige la fecha de vencimiento o deja que se calcule por la condición de pago',
 		});
 	}
+	// Documento tributario de esta sola factura (Domi 02-11, bug B): familia, tipo de exportación (`export_type`, lo que el ERP mira para
+	// saber si es exportación) e IVA del documento elegido; el contrato y las demás facturas no cambian (para todo el contrato: Modificar
+	// facturación › Condiciones de facturación). El mismo documento que ya tiene no cuenta como cambio.
+	let documentType = invoice.document_type;
+	let documentRate: TaxDocumentRate | null = ctx.tax_document ?? null;
+	let documentChosen = false;
+
+	if (input.tax_document_type_id) {
+		const document = ctx.document;
+
+		if (!document)
+			errors.push({
+				field: 'tax_document_type_id',
+				message: 'El documento tributario no existe o no corresponde al país de la compañía emisora',
+			});
+		else {
+			documentType = documentTypeFromKind(document.kind);
+			documentRate = { kind: document.kind, tax_rate: document.tax_rate ?? null };
+			documentChosen = true;
+			taxRate = taxRateForDocument(documentType, context.company_country, ctx.company_tax_rate, documentRate);
+			const exportType = documentType === 'FACTURA_EXPORTACION' ? 1 : 0;
+
+			if (documentType !== invoice.document_type) after.document_type = documentType;
+			if (exportType !== (invoice.export_type ?? 0)) after.export_type = exportType;
+		}
+	}
 	if (input.client_entity_id && input.client_entity_id !== invoice.client_entity_id) {
 		const receiver = ctx.receiver;
 
@@ -985,22 +1028,22 @@ function planHeader(
 		else if (!receiver.belongs_to_client)
 			errors.push({ field: 'client_entity_id', message: 'La razón social no pertenece al cliente comercial del contrato' });
 		else {
-			// Mismo criterio que la activación y `change_entity`: el IVA sale del tipo de documento (que aquí NO cambia: vive en Condiciones de
-			// facturación); RUT del receptor nuevo; aviso si el receptor es de otro país que la compañía emisora.
-			taxRate = taxRateForDocument(invoice.document_type, context.company_country, ctx.company_tax_rate, ctx.tax_document ?? null);
+			// Mismo criterio que la activación y `change_entity`: el IVA sale del tipo de documento (el elegido aquí o el de la factura); RUT
+			// del receptor nuevo; aviso si el receptor es de otro país que la compañía emisora y no se eligió documento en esta edición.
+			taxRate = taxRateForDocument(documentType, context.company_country, ctx.company_tax_rate, documentRate);
 			after.client_entity_id = receiver.id;
 			after.client_tax_id = receiver.tax_id;
 			after.legal_name = receiver.legal_name;
-			after.export_type = invoice.document_type === 'FACTURA_EXPORTACION' ? 1 : 0;
+			after.export_type = documentType === 'FACTURA_EXPORTACION' ? 1 : 0;
 			const entityCountry = normalizeCountry(receiver.country);
 			const companyCountry = normalizeCountry(context.company_country);
 
-			if (entityCountry && companyCountry && entityCountry !== companyCountry) {
+			if (!documentChosen && entityCountry && companyCountry && entityCountry !== companyCountry) {
 				warnings.push({
 					code: 'document_type_review',
 					message: `El receptor nuevo es de ${receiver.country} y la compañía emisora de ${context.company_country}: revisa el tipo de documento (${
 						invoice.document_type ?? 'sin tipo'
-					}); se cambia en Condiciones de facturación del contrato`,
+					}); se cambia aquí en "Documento tributario" o, para todo el contrato, en Condiciones de facturación`,
 				});
 			}
 		}
@@ -1069,7 +1112,11 @@ export function planInvoiceEdit(ctx: EditContext, input: InvoiceEditInput): Edit
 	// encabezado y condiciones siguen editables en una factura por OC.
 	if (
 		partial &&
-		((input.lines ?? []).length > 0 || (input.line_mode ?? []).length > 0 || !!input.client_entity_id || header.after.tax_rate !== undefined)
+		((input.lines ?? []).length > 0 ||
+			(input.line_mode ?? []).length > 0 ||
+			!!input.client_entity_id ||
+			!!input.tax_document_type_id ||
+			header.after.tax_rate !== undefined)
 	)
 		blockers.push(partial);
 	blockers.push(...header.blockers);

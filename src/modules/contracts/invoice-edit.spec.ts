@@ -457,6 +457,63 @@ describe('invoice-edit (spec facturas §3.4, lógica pura)', () => {
 			expect(other.errors).toEqual([{ field: 'client_entity_id', message: 'La razón social no pertenece al cliente comercial del contrato' }]);
 		});
 
+		it('documento tributario de una sola factura (Domi 02-11): familia, export_type e IVA del documento elegido; el mismo documento no cambia nada', () => {
+			const exportDocument = {
+				id: 'tdt-exp',
+				code: 'CFDI-I-EXP',
+				name: 'Factura CFDI de ingreso de exportación',
+				kind: 'export_invoice',
+				tax_rate: 0,
+			};
+			const result = planInvoiceEdit(ctx({ document: exportDocument }), body([], { tax_document_type_id: 'tdt-exp' }));
+
+			expect(result.errors).toEqual([]);
+			expect(result.header.after).toMatchObject({
+				document_type: 'FACTURA_EXPORTACION',
+				export_type: 1,
+				tax_rate: 0,
+				vat: 0,
+				amount_contract_currency: 1000,
+			});
+			expect(result.lines[0].after).toMatchObject({
+				subtotal_contract_currency: 1000,
+				tax_contract_currency: 0,
+				total_contract_currency: 1000,
+			});
+			expect(codes(result.warnings)).toEqual([]);
+			expect(result.write.header_changed).toBe(true);
+			// Receptor de otro país + documento elegido en la misma edición: sin aviso document_type_review (ya se eligió el documento).
+			const both = planInvoiceEdit(
+				ctx({
+					document: exportDocument,
+					receiver: { id: 'entity-2', legal_name: 'Avon MX', tax_id: 'AVO', country: 'México', belongs_to_client: true },
+				}),
+				body([], { tax_document_type_id: 'tdt-exp', client_entity_id: 'entity-2' })
+			);
+
+			expect(both.header.after).toMatchObject({
+				client_entity_id: 'entity-2',
+				document_type: 'FACTURA_EXPORTACION',
+				export_type: 1,
+				tax_rate: 0,
+			});
+			expect(codes(both.warnings)).toEqual([]);
+			// El mismo documento que ya tiene (factura nacional 19 %): nada cambia.
+			const same = planInvoiceEdit(
+				ctx({ document: { id: 'tdt-33', code: '33', name: 'Factura electrónica', kind: 'invoice', tax_rate: 19 } }),
+				body([], { tax_document_type_id: 'tdt-33' })
+			);
+
+			expect(same.write.header_changed).toBe(false);
+			expect(same.header.after).toMatchObject({ document_type: 'FACTURA', export_type: 0, tax_rate: 19 });
+			// Documento inexistente, inactivo o de otro país (el servicio lo deja en null) → error de campo.
+			const missing = planInvoiceEdit(ctx(), body([], { tax_document_type_id: 'tdt-x' }));
+
+			expect(missing.errors).toEqual([
+				{ field: 'tax_document_type_id', message: 'El documento tributario no existe o no corresponde al país de la compañía emisora' },
+			]);
+		});
+
 		it('receptor con documento de exportación: IVA 0 y el IVA de todas las líneas se recalcula (sin tocar subtotales)', () => {
 			const result = planInvoiceEdit(
 				ctx({

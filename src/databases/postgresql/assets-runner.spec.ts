@@ -389,9 +389,11 @@ describe('Corpus de assets SQL', () => {
 			if (/USING\s+(?!btree)/i.test(cuerpo)) return false;
 			if (/\sDESC|\bNULLS\s+(FIRST|LAST)\b/i.test(cuerpo)) return false;
 
-			// Lo que va entre los paréntesis del índice: si no es una lista simple de
-			// identificadores, es una expresión y `@Index` no puede representarla.
-			const columnas = /\(([\s\S]*)\)\s*;?\s*$/.exec(definicion.trim())?.[1] ?? '';
+			// Lo que va entre los paréntesis del índice (sin el `WHERE` de un índice parcial, que `@Index`
+			// sí representa): si no es una lista simple de identificadores, es una expresión y `@Index`
+			// no puede representarla.
+			const sinWhere = definicion.trim().replace(/\)\s*WHERE\b[\s\S]*$/i, ')');
+			const columnas = /\(([\s\S]*)\)\s*;?\s*$/.exec(sinWhere)?.[1] ?? '';
 			return /^[\s"'\w,]*$/.test(columnas);
 		});
 

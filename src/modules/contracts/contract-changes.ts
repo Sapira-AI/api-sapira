@@ -36,7 +36,6 @@ import {
 	itemEndDate,
 	itemPeriods,
 	itemPricing,
-	lineDescription,
 	monthsBetween,
 	nextPeriodStart,
 	type PreviewInvoice,
@@ -65,7 +64,7 @@ import {
 import { hasPricingModel, type PriceSpecDto, UF_CURRENCY } from './dtos/create-contract.dto';
 import { lastPartialPeriod } from './end-off-cycle';
 import { PER_INVOICE_FX_SOURCES } from './fx-rate-sources';
-import { DESCRIPTION_FITTED_CODE, type DescriptionTemplate } from './invoice-description';
+import { DESCRIPTION_FITTED_CODE, type DescriptionTemplate, fitDescription } from './invoice-description';
 import {
 	type CodedFieldError,
 	codedValidationException,
@@ -91,6 +90,7 @@ import {
 	validatePriceSpec,
 } from './pricing-engine';
 import { frequencyOfMonths, type ScheduledChangeRow } from './scheduled-change-rows';
+import { documentTypeFromKind } from './tax-document-types';
 
 // ------------------------------------------------------------------ contexto (lo que lee el servicio)
 
@@ -467,6 +467,12 @@ export interface ChangeInvoiceDetailLine {
 	/** `same` = no cambia; `changed` = cambia (con `before`); `added` = línea nueva; `removed` = se quita. */
 	status: 'same' | 'changed' | 'added' | 'removed';
 	before: { quantity: number; unit_price: number; subtotal: number } | null;
+	/**
+	 * Línea de un tramo parcial (02-11, Carelis): días del tramo, días del ciclo completo y el unitario mensual del que sale el unitario de
+	 * la línea (`unit_price = monthly_unit_price / cycle_days × days`), para que la vista previa muestre la cuenta. Solo en líneas que cambian
+	 * o se agregan; null en un período completo.
+	 */
+	proration?: { days: number; cycle_days: number; monthly_unit_price: number } | null;
 }
 
 /**
@@ -664,6 +670,8 @@ export interface ChangeLineAmounts {
 	/** Pausa (§9.3.3): la línea queda desde el día siguiente al fin de la pausa. */
 	billing_period_start?: string;
 	description_suffix?: string;
+	/** Glosa completa nueva (tramo prorrateado con su período real, 02-11); gana al sufijo. Una glosa escrita a mano no se toca. */
+	description?: string;
 	/** Línea con consumo registrado: desglose del motor recalculado con la cantidad registrada (null/ausente = no se toca). */
 	pricing_breakdown?: PricedSubline[] | null;
 	quantity_source?: string | null;
@@ -996,6 +1004,40 @@ export const isIssued = (invoice: ChangeInvoiceRow) =>
 
 /** Por Emitir facturada por OC (§3.7b: tiene líneas internas con `visible_line_id`): fija en el calendario, las modificaciones no la tocan. */
 export const isPartialBilled = (invoice: ChangeInvoiceRow) => invoice.lines.some((line) => Boolean(line.visible_line_id));
+
+/**
+ * Glosa de una línea que el planificador escribe a mano (tramos prorrateados del downsell, 02-11): la misma plantilla del contrato que usa
+ * el generador (`invoice_description_template`, o la glosa de hoy), con el período **real** del tramo y ajustada al límite del documento.
+ */
+export function lineGlosa(
+	contract: Pick<
+		ChangeContractRow,
+		'invoice_description_template' | 'description_max_chars' | 'contract_currency' | 'invoice_currency' | 'contract_number'
+	>,
+	item: Pick<ChangeItemRow, 'product_name' | 'account' | 'unit_of_measure' | 'currency'>,
+	line: { start: string; end: string; quantity: number; unit_price: number; amount: number }
+): string {
+	return fitDescription(
+		contract.invoice_description_template ?? null,
+		{
+			line_kind: 'standard',
+			product_name: item.product_name ?? 'Producto',
+			account: item.account ?? null,
+			period_start: line.start,
+			period_end: line.end,
+			quantity: line.quantity,
+			unit: item.unit_of_measure ?? null,
+			quantity_final: true,
+			unit_price: line.unit_price,
+			amount: line.amount,
+			contract_currency: item.currency ?? contract.contract_currency ?? null,
+			invoice_currency: contract.invoice_currency ?? contract.contract_currency ?? null,
+			fx_rate: null,
+			contract_number: contract.contract_number ?? null,
+		},
+		contract.description_max_chars ?? null
+	).text;
+}
 
 /**
  * Downsell prorrateado (Domi 28-10): la Por Emitir editable cuya línea base del ítem cubre la fecha efectiva **por dentro** (inicio del
@@ -1566,6 +1608,28 @@ class Planner {
 		this.headersTouched.clear();
 	}
 
+	/**
+	 * Cuenta del prorrateo de una línea de tramo parcial dentro de un ciclo (02-11, Carelis): días del tramo, días del ciclo y el unitario
+	 * mensual del que sale el de la línea. null en un período completo, en varios ciclos o sin ítem.
+	 */
+	private prorationOf(itemId: string | null | undefined, start: string | null | undefined, end: string | null | undefined, unitPrice: number) {
+		const item = this.itemOf(itemId);
+
+		if (!item || !start || !end || end < start) return null;
+		const months = monthsBetween(start, end, anchorOfItem(item, anchorDayOf(this.ctx.contract, this.ctx.items)));
+
+		if (!(months > 0) || months >= 1) return null;
+		const days = diffDays(start, end) + 1;
+		// El unitario de la línea viene redondeado a 6 decimales: al deshacer el prorrateo, 38,499999 es 38,50.
+		const monthly = unitPrice / months;
+
+		return {
+			days,
+			cycle_days: Math.round(days / months),
+			monthly_unit_price: Math.abs(monthly - round2(monthly)) < 5e-5 ? round2(monthly) : round6(monthly),
+		};
+	}
+
 	private itemOf(itemId: string | null | undefined) {
 		if (!itemId) return null;
 
@@ -1610,7 +1674,7 @@ class Planner {
 			if (cancelled || deleted.has(line.id)) return { ...base, ...was, status: 'removed' as const, before: was };
 			const values = updates.get(line.id);
 
-			if (!values) return { ...base, ...was, status: 'same' as const, before: null };
+			if (!values) return { ...base, ...was, status: 'same' as const, before: null, proration: null };
 			const now = { quantity: num(values.quantity), unit_price: num(values.unit_price), subtotal: num(values.subtotal) };
 			const changed = now.quantity !== was.quantity || now.unit_price !== was.unit_price || now.subtotal !== was.subtotal;
 
@@ -1621,6 +1685,14 @@ class Planner {
 				billing_period_end: values.billing_period_end ?? line.billing_period_end,
 				status: changed ? ('changed' as const) : ('same' as const),
 				before: changed ? was : null,
+				proration: changed
+					? this.prorationOf(
+							line.contract_item_id,
+							values.billing_period_start ?? line.billing_period_start,
+							values.billing_period_end ?? line.billing_period_end,
+							now.unit_price
+						)
+					: null,
 			};
 		});
 
@@ -1640,6 +1712,7 @@ class Planner {
 				billing_period_end: line.billing_period_end,
 				status: 'added',
 				before: null,
+				proration: this.prorationOf(line.item_key, line.billing_period_start, line.billing_period_end, line.unit_price),
 			});
 		const totals = (subtotal: number, tax: number) => ({ subtotal: round2(subtotal), tax: round2(tax), total: round2(subtotal + tax) });
 		const beforeTotals = totals(num(before.subtotal), num(before.vat));
@@ -4347,7 +4420,8 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 		// el próximo inicio de período sin prorrateo (S3-5/S3-6). Con modelo de precio, siempre desde el próximo período.
 		let start = p.effective;
 		const groupIdsEarly = new Set(group.item_ids);
-		const prorated = delta.categoria === 'DOWNSELL' && !pricedSpec && !p.multicurrency ? coveringPendingLine(ctx, item, groupIdsEarly, p.effective) : null;
+		const prorated =
+			delta.categoria === 'DOWNSELL' && !pricedSpec && !p.multicurrency ? coveringPendingLine(ctx, item, groupIdsEarly, p.effective) : null;
 
 		if ((delta.categoria === 'DOWNSELL' && !prorated) || pricedSpec) {
 			const next = nextPeriodStart(engineShape(item), itemAnchor, p.effective) ?? p.effective;
@@ -4385,7 +4459,11 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 					(invoice) =>
 						!isPartialBilled(invoice) &&
 						invoice.lines.some(
-							(line) => line.contract_item_id && groupIds.has(line.contract_item_id) && (line.billing_period_start ?? '') >= from && isConsumptionLine(line)
+							(line) =>
+								line.contract_item_id &&
+								groupIds.has(line.contract_item_id) &&
+								(line.billing_period_start ?? '') >= from &&
+								isConsumptionLine(line)
 						)
 				);
 
@@ -4397,7 +4475,9 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 				p.warn(
 					'upsell_within_issued_period',
 					`"${item.product_name}" ya está facturado hasta el ${frontier}: la diferencia del ${start} al ${frontier} se prorratea por días y ${
-						(req.change.first_period_invoice ?? 'cycle') === 'immediate' ? 'va en una factura aparte' : 'se suma a la factura del próximo ciclo'
+						(req.change.first_period_invoice ?? 'cycle') === 'immediate'
+							? 'va en una factura aparte'
+							: 'se suma a la factura del próximo ciclo'
 					}; la factura emitida no se toca`
 				);
 			} else if (delta.categoria === 'UPSELL') {
@@ -4510,7 +4590,9 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 				const headMonths = monthsBetween(periodStart, headEnd, itemAnchor);
 				const tailMonths = monthsBetween(start, periodEnd, itemAnchor);
 				const ratio = periodMonths > 0 ? headMonths / periodMonths : 0;
-				const groupLines = invoice.lines.filter((line) => line.contract_item_id && groupIds.has(line.contract_item_id) && !isConsumptionLine(line));
+				const groupLines = invoice.lines.filter(
+					(line) => line.contract_item_id && groupIds.has(line.contract_item_id) && !isConsumptionLine(line)
+				);
 				const current = round2(groupLines.reduce((sum, line) => sum + line.subtotal, 0));
 
 				// Los ajustes previos del grupo en ese período se funden en el tramo actual (una sola línea por tramo, nunca negativas hacia el ERP).
@@ -4524,7 +4606,11 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 				const headQuantity = num(baseLine.quantity) || 1;
 				const discountFactor = 1 - num(baseLine.discount_pct) / 100;
 				const headUnit =
-					groupLines.length === 1 ? round6(num(baseLine.unit_price) * ratio) : discountFactor > 0 ? round6(headSubtotal / headQuantity / discountFactor) : 0;
+					groupLines.length === 1
+						? round6(num(baseLine.unit_price) * ratio)
+						: discountFactor > 0
+							? round6(headSubtotal / headQuantity / discountFactor)
+							: 0;
 				const baseBefore = baseLine.subtotal;
 
 				p.updateLine(
@@ -4538,7 +4624,14 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 						tax_amount: headTax,
 						total: round2(headSubtotal + headTax),
 						billing_period_end: headEnd,
-						description_suffix: ` (hasta ${headEnd}: ${headDays}/${totalDays} días)`,
+						// Glosa con el período real del tramo (02-11): nada de "Periodo 01/11 a 30/11 (hasta 07-11)".
+						description: lineGlosa(ctx.contract, item, {
+							start: periodStart,
+							end: headEnd,
+							quantity: num(baseLine.quantity),
+							unit_price: headUnit,
+							amount: headSubtotal,
+						}),
 					},
 					'tramo actual prorrateado por días'
 				);
@@ -4549,7 +4642,13 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 				const tailLine: PreviewLine = {
 					item_key: item.id,
 					product_name: item.product_name ?? 'Producto',
-					description: lineDescription(item.product_name ?? 'Producto', item.account, start, periodEnd),
+					description: lineGlosa(ctx.contract, item, {
+						start,
+						end: periodEnd,
+						quantity: num(ref.quantity),
+						unit_price: round6(unitNew * tailMonths),
+						amount: tailSubtotal,
+					}),
 					quantity: num(ref.quantity),
 					unit_price: round6(unitNew * tailMonths),
 					discount_pct: round6(pct),
@@ -5039,17 +5138,10 @@ export const taxRateFor = (
 ): number =>
 	resolveTaxRate({ documentType, companyCountry: contract.company.country, companyTaxRate: contract.company.tax_rate, document }).rate ?? 0;
 
-/** Bloqueo del documento tributario cambiado por sí solo (ronda 4): aplicar responde 409 con este mensaje. */
-export const TAX_DOCUMENT_REQUIRES_PARTY_CHANGE = 'tax_document_requires_party_change';
-export const TAX_DOCUMENT_REQUIRES_PARTY_CHANGE_MESSAGE = 'El documento tributario solo cambia junto con la razón social emisora o receptora';
-const blockDocumentAlone = (p: Planner) =>
-	p.block(
-		TAX_DOCUMENT_REQUIRES_PARTY_CHANGE,
-		TAX_DOCUMENT_REQUIRES_PARTY_CHANGE_MESSAGE,
-		'Si cambia la razón social receptora, elige el documento nuevo en "Cambiar razón social"'
-	);
-
-/** Documento y IVA nuevos en las Por Emitir desde la fecha efectiva (cambio de documento junto con la razón social). */
+/**
+ * Documento, tipo de exportación e IVA nuevos en las Por Emitir desde la fecha efectiva (cambio de documento, solo o junto con la razón
+ * social). `export_type` es lo que el envío al ERP mira para saber si la factura es de exportación.
+ */
 const retaxPending = (p: Planner, pending: ChangeInvoiceRow[], documentType: string, taxRate: number) => {
 	if (!pending.length) return;
 	p.ops.push({
@@ -5111,15 +5203,56 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 	}
 	if (change.apply_to_pending === true && !('invoice_terms_and_conditions' in after))
 		p.error('apply_to_pending', 'apply_to_pending requiere un cambio en las condiciones de factura (invoice_terms_and_conditions)');
-	// Decisión de Domi (03-10, ronda 4 de Configuración): el documento tributario no cambia solo; solo junto con la razón social emisora o
-	// receptora (`change_entity` con `tax_document_type_id`). Mandar el mismo documento no cuenta como cambio.
+	// Documento tributario del contrato (Domi 02-11, bug B: facturas de exportación MX/PE con IVA nacional). Cambia solo, para todo el
+	// contrato: las Por Emitir desde la fecha efectiva toman documento, tipo de exportación (`export_type`, lo que el ERP mira) e IVA nuevos;
+	// las emitidas no se tocan. Mandar el mismo documento no cuenta como cambio. Hasta el 02-11 el cambio sin razón social se bloqueaba
+	// (ronda 4, Domi 03-10); con razón social nueva sigue viajando en `change_entity`.
+	let documentAfter: { id: string | null; family: string; label: string; rate: number } | null = null;
+
 	if (has('tax_document_type_id')) {
-		if (!ctx.tax_document_type)
-			p.error('change.tax_document_type_id', 'El documento tributario no existe o no corresponde al país de la compañía emisora');
-		else if (ctx.tax_document_type.id !== contract.tax_document_type_id) blockDocumentAlone(p);
+		const document = ctx.tax_document_type;
+
+		if (!document) p.error('change.tax_document_type_id', 'El documento tributario no existe o no corresponde al país de la compañía emisora');
+		else if (document.id !== contract.tax_document_type_id) {
+			const family = documentTypeFromKind(document.kind);
+
+			documentAfter = {
+				id: document.id,
+				family,
+				label: `${document.code} ${document.name}`,
+				rate: taxRateFor(family, contract, { kind: document.kind, tax_rate: document.tax_rate ?? null }),
+			};
+		}
 	} else if (has('document_type') && change.document_type !== contract.document_type) {
 		if (contract.tax_document_type_id) p.error('change.document_type', 'El contrato usa el catálogo de documentos: indica tax_document_type_id');
-		else blockDocumentAlone(p);
+		else
+			documentAfter = {
+				id: null,
+				family: change.document_type!,
+				label: change.document_type!,
+				rate: taxRateFor(change.document_type!, contract, null),
+			};
+	}
+	if (documentAfter) {
+		if (documentAfter.id) track('tax_document_type_id', contract.tax_document_type_id, documentAfter.id);
+		track('document_type', contract.document_type, documentAfter.family);
+		after.tax_rate = documentAfter.rate;
+		const retaxable = pending.filter((invoice) => !p.skipPartial(invoice));
+
+		if (retaxable.length) {
+			retaxPending(p, retaxable, documentAfter.family, documentAfter.rate);
+			for (const invoice of retaxable) {
+				p.updatedInvoices.push({
+					id: invoice.id,
+					invoice_number: invoice.invoice_number,
+					issue_date: invoice.issue_date,
+					lines_changed: invoice.lines.length,
+					subtotal_before: invoice.subtotal,
+					subtotal_after: invoice.subtotal,
+					change: `documento ${documentAfter.label}${documentAfter.family === 'FACTURA_EXPORTACION' ? ' (exportación)' : ''}, IVA ${documentAfter.rate} %`,
+				});
+			}
+		}
 	}
 
 	// Envío al ERP y emisión automática (S6-10) y referencias: contrato + Por Emitir desde la fecha efectiva.
@@ -5385,22 +5518,12 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 		after.auto_renew = change.auto_renew;
 		after.auto_renew_items = autoRenewItems.map((item) => item.id);
 	}
-	// Un documento cambiado solo ya quedó bloqueado (`tax_document_requires_party_change`): se informa el bloqueo, no "sin diferencias".
-	const documentBlocked = p.blockers.some((blocker) => blocker.code === TAX_DOCUMENT_REQUIRES_PARTY_CHANGE);
-
 	// Multimoneda desde las condiciones: encendida/apagada (op) o apagado bloqueado por ítems en otra moneda (se informa el bloqueo).
 	const multicurrencyToggled =
 		p.ops.some((op) => op.kind === 'set_multicurrency') ||
 		p.blockers.some((blocker) => blocker.code === MULTICURRENCY_CODES.foreign_currency_items_present);
 
-	if (
-		!p.errors.length &&
-		!documentBlocked &&
-		!Object.keys(p.contractSet).length &&
-		!newRates.length &&
-		!autoRenewItems.length &&
-		!multicurrencyToggled
-	) {
+	if (!p.errors.length && !Object.keys(p.contractSet).length && !newRates.length && !autoRenewItems.length && !multicurrencyToggled) {
 		p.error('change', 'Indica qué condición cambiar: no hay diferencias con las condiciones actuales');
 	}
 	const changed = Object.keys(before);
@@ -5518,7 +5641,7 @@ export function planChangeEntity(ctx: ChangeContext, req: ContractChangeRequestD
 			newDocument = {
 				id: ctx.tax_document_type.id,
 				label: `${ctx.tax_document_type.code} ${ctx.tax_document_type.name}`,
-				family: ctx.tax_document_type.kind === 'export_invoice' ? 'FACTURA_EXPORTACION' : 'FACTURA',
+				family: documentTypeFromKind(ctx.tax_document_type.kind),
 				rate: { kind: ctx.tax_document_type.kind, tax_rate: ctx.tax_document_type.tax_rate ?? null },
 			};
 	} else if (change.document_type && contract.tax_document_type_id)

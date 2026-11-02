@@ -7,7 +7,7 @@ import { validationException } from '@/core/utils/validation-errors';
 
 import { setApiWriter } from './api-writer';
 import { refreshInvoiceSystemAmounts } from './api-written-fields';
-import { addDays, defaultAnchorDay, generateInvoices, round2, type TaxDocumentRate } from './billing-engine';
+import { addDays, defaultAnchorDay, generateInvoices, normalizeCountry, round2, type TaxDocumentRate } from './billing-engine';
 import { isCreditNote, PENDING_STATUS } from './contract-360';
 import { ContractActivationService } from './contract-activation.service';
 import { cleanPaymentTerms, resolveUserId } from './contract-drafts.service';
@@ -43,7 +43,7 @@ import {
 } from './invoice-edit';
 import { loadPairRateContext, revalueMulticurrencyInvoices } from './multicurrency-invoices';
 import { PRICE_COLUMNS, priceSpecFromRow } from './price-rows';
-import { DESCRIPTION_LIMITS_SQL, type DescriptionLimitRow, resolveDescriptionMaxChars } from './tax-document-types';
+import { CONTRACT_TAX_DOCUMENT_KINDS, DESCRIPTION_LIMITS_SQL, type DescriptionLimitRow, resolveDescriptionMaxChars } from './tax-document-types';
 
 import type { BulkEditInvoicesDto, EditInvoiceDto, ExplainInvoiceDeviationDto } from './dtos/contract-invoice-edit.dto';
 import type { PricedSubline } from './pricing-engine';
@@ -145,6 +145,9 @@ const RECEIVER_SQL = `SELECT ce.id, ce.legal_name, ce.tax_id, ce.country,
 	FROM client_entities ce CROSS JOIN contracts c
 	WHERE ce.id = $1 AND ce.holding_id = $2 AND c.id = $3`;
 
+/** Documento tributario pedido para una factura; el país y la clase se validan en TS con la misma regla que `change_entity`. */
+const DOCUMENT_SQL = `SELECT id, code, name, kind, country_code, tax_rate FROM tax_document_types WHERE id = $1 AND active = true`;
+
 /** Último ajuste registrado por factura (motivo del desvío). */
 const LATEST_ADJUSTMENTS_SQL = `SELECT DISTINCT ON (a.invoice_id) a.invoice_id, a.id, a.type, a.amount_diff, a.notes, a.adjusted_at
 	FROM invoice_adjustments a WHERE a.invoice_id = ANY($1::uuid[]) AND a.holding_id = $2
@@ -231,7 +234,16 @@ export class ContractInvoiceEditService {
 		today = new Date()
 	): Promise<InvoiceEditPreview> {
 		const contract = await this.contracts.resolveContract(idOrNumber, holdingId);
-		const ctx = await this.loadEditContext(this.dataSource, contract.id, invoiceId, holdingId, isoDate(today), dto.client_entity_id ?? null);
+		const ctx = await this.loadEditContext(
+			this.dataSource,
+			contract.id,
+			invoiceId,
+			holdingId,
+			isoDate(today),
+			dto.client_entity_id ?? null,
+			false,
+			dto.tax_document_type_id ?? null
+		);
 		const plan = planInvoiceEdit(ctx, dto);
 
 		if (plan.errors.length) throw validationException(plan.errors);
@@ -250,7 +262,16 @@ export class ContractInvoiceEditService {
 		const userId = await resolveUserId(this.dataSource, authId);
 
 		const result = await this.transaction(contract.id, holdingId, async (runner) => {
-			const ctx = await this.loadEditContext(runner, contract.id, invoiceId, holdingId, isoDate(today), dto.client_entity_id ?? null, true);
+			const ctx = await this.loadEditContext(
+				runner,
+				contract.id,
+				invoiceId,
+				holdingId,
+				isoDate(today),
+				dto.client_entity_id ?? null,
+				true,
+				dto.tax_document_type_id ?? null
+			);
 			const plan = planInvoiceEdit(ctx, dto);
 
 			if (plan.errors.length) throw validationException(plan.errors);
@@ -872,7 +893,7 @@ export class ContractInvoiceEditService {
 			`UPDATE invoices SET issue_date = $3::date, scheduled_at = $4::date, original_issue_date = $5::date, due_date = $6::date,
 				client_entity_id = $7, client_tax_id = $8, export_type = $9, tax_rate = $10, invoice_terms_and_conditions = $11, notes = $12,
 				auto_invoice = $13, amount_contract_currency = $14, vat = $15, amount_invoice_currency = $16, total_invoice_currency = $17,
-				status = $18, nc_revenue_treatment = $19
+				status = $18, nc_revenue_treatment = $19, document_type = $21
 			WHERE id = $1 AND holding_id = $2 AND status = $20`,
 			[
 				invoiceId,
@@ -895,6 +916,7 @@ export class ContractInvoiceEditService {
 				after.status ?? expectedStatus,
 				after.nc_revenue_treatment,
 				expectedStatus,
+				after.document_type,
 			]
 		);
 	}
@@ -1117,18 +1139,27 @@ export class ContractInvoiceEditService {
 		holdingId: string,
 		today: string,
 		receiverId: string | null,
-		lock = false
+		lock = false,
+		documentId: string | null = null
 	): Promise<EditContext> {
 		const context = await this.invoices.loadContext(db, contractId, holdingId, today);
 		const invoice = await this.invoices.loadInvoice(db, contractId, invoiceId, holdingId, lock);
-		const [[extra], data, lines, referenceRows, receiverRows] = await Promise.all([
+		const [[extra], data, lines, referenceRows, receiverRows, documentRows] = await Promise.all([
 			db.query(HEADER_EXTRA_SQL, [[invoice.id], holdingId]) as Promise<Row[]>,
 			this.loadPlanData(db, contractId, holdingId),
 			this.loadLines(db, [invoice.id], holdingId),
 			db.query(REFERENCES_SQL, [invoice.id, holdingId]) as Promise<Row[]>,
 			receiverId ? (db.query(RECEIVER_SQL, [receiverId, holdingId, contractId]) as Promise<Row[]>) : Promise.resolve([] as Row[]),
+			documentId ? (db.query(DOCUMENT_SQL, [documentId]) as Promise<Row[]>) : Promise.resolve([] as Row[]),
 		]);
 		const contract = data.contract;
+		// Documento de la compañía emisora (su país o genérico `*`) y de clase factura: misma regla que `change_entity`.
+		const [documentRow] = documentRows;
+		const companyCountry = normalizeCountry(context.company_country);
+		const documentAllowed =
+			documentRow &&
+			(toText(documentRow.country_code) === '*' || !companyCountry || toText(documentRow.country_code) === companyCountry) &&
+			(CONTRACT_TAX_DOCUMENT_KINDS as readonly string[]).includes(toText(documentRow.kind) ?? '');
 		// Multimoneda (spec-multimoneda §4): con el flag, contexto por par y líneas con su moneda, tasa y origen.
 		const multicurrency = contract.requires_multicurrency_billing === true ? await loadPairRateContext(db, contractId, holdingId) : null;
 		const pairLines = multicurrency ? await this.loadLines(db, [invoice.id], holdingId, true) : lines;
@@ -1141,6 +1172,15 @@ export class ContractInvoiceEditService {
 			context,
 			company_tax_rate: (contract.company_tax_rate as number | string | null) ?? null,
 			tax_document: taxDocumentOf(contract),
+			document: documentAllowed
+				? {
+						id: String(documentRow.id),
+						code: toText(documentRow.code) ?? '',
+						name: toText(documentRow.name) ?? '',
+						kind: toText(documentRow.kind) ?? '',
+						tax_rate: (documentRow.tax_rate as number | string | null) ?? null,
+					}
+				: null,
 			contract_number: toText(contract.contract_number),
 			client_name: invoice.legal_name ?? toText(contract.entity_legal_name),
 			template: parseStoredTemplate(contract.invoice_description_template),
