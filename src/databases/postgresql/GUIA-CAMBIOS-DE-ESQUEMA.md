@@ -242,6 +242,8 @@ DOTENV_CONFIG_PATH=.env.qa.db yarn schema:status --target qa
 # ② Migraciones primero: un asset puede depender de una tabla o columna que crea una migración.
 DOTENV_CONFIG_PATH=.env.qa.db yarn migration:show --target qa      # solo lectura: lista las pendientes
 DOTENV_CONFIG_PATH=.env.qa.db yarn migration:run  --target qa
+# Para aplicar solo algunas pendientes (y dejar las de otra persona para después): --only <Nombre> repetible.
+# DOTENV_CONFIG_PATH=.env.qa.db yarn migration:run --target qa --only TaxDocumentTypesExportMxPe1792500000000
 
 # ③ Assets: ver qué haría, y aplicar lo tuyo.
 DOTENV_CONFIG_PATH=.env.qa.db yarn postgres:assets --dry-run --target qa
