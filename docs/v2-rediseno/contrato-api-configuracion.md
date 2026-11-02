@@ -662,14 +662,20 @@ por delante de hoy (constante `HORIZON_PERIODS_AHEAD`). Sin columna en `holding_
 - **360 del cliente**: `GET /clients/form-options` **agrega** `renewal_notice_days` (= `auto_renewal_notice_days`), la ventana del aviso
   "vence pronto" (reemplaza los 90 días fijos del front).
 
-### 9.7 Documento tributario del contrato: solo con cambio de razón social (Contratos, autorizado)
+### 9.7 Documento tributario del contrato (Contratos, autorizado)
 
-Decisión de Domi (03-10): el documento tributario de un contrato **no cambia solo**; solo en el mismo cambio en que cambia la razón social
-receptora (o la emisora, que hoy no tiene camino de cambio en un contrato activo).
-- `POST /contracts/:id/changes[/preview]` con `change.type = billing_conditions` y un `tax_document_type_id` (o `document_type`) distinto del
-  actual → **bloqueo** `tax_document_requires_party_change`: el preview responde `can_apply: false` con el bloqueo y aplicar responde **409**
-  `No se puede aplicar el cambio: El documento tributario solo cambia junto con la razón social emisora o receptora` (`code: blocked`).
-  Mandar el mismo documento que ya tiene no cuenta como cambio.
+Hasta el 02-11 el documento tributario **no cambiaba solo** (decisión de Domi 03-10: solo junto con la razón social, bloqueo
+`tax_document_requires_party_change`). Desde el 02-11 (bug B de soporte: MX y PE no tenían factura de exportación y las facturas a
+razones sociales extranjeras salían con IVA nacional) el documento cambia por dos caminos:
+- `POST /contracts/:id/changes[/preview]` con `change.type = billing_conditions` y `tax_document_type_id` (o `document_type` sin catálogo)
+  distinto del actual → el contrato guarda el documento nuevo (y su familia) y las Por Emitir desde la fecha efectiva toman
+  `document_type`, `export_type` (1 si la familia es FACTURA_EXPORTACION: es lo que el envío al ERP mira para saber si es exportación) y
+  el IVA del documento (`resolveTaxRate`); las emitidas no se tocan; las facturadas por OC se omiten con aviso. Metadata `fields_before /
+  fields_after` con `tax_document_type_id`, `document_type` y `tax_rate`. Mandar el mismo documento que ya tiene no cuenta como cambio.
+  Documento inexistente, inactivo, de otro país o que no es factura → 400 `El documento tributario no existe o no corresponde al país de la
+  compañía emisora`.
+- `PUT /contracts/:id/invoices/:invoiceId` (y su preview) con `tax_document_type_id`: **una sola factura** toma familia, `export_type` e IVA
+  del documento elegido (misma validación de país y clase); el contrato y las demás facturas no cambian.
 - `change.type = change_entity` **agrega** `tax_document_type_id?` (y `document_type?` para holdings sin catálogo): el documento nuevo
   (del país de la compañía emisora; si no → 400 `El documento tributario no existe o no corresponde al país de la compañía emisora`) se
   guarda en el contrato y el IVA de las Por Emitir desde la fecha efectiva se **recalcula con el resolver único** (`resolveTaxRate`)

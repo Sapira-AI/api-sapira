@@ -585,7 +585,7 @@ export class ContractChangeDto {
 
 	@ApiPropertyOptional({
 		description:
-			'Documento tributario del catálogo (debe corresponder a la compañía emisora). Solo cambia junto con la razón social (`change_entity`): en `billing_conditions` un documento distinto del actual queda bloqueado (`tax_document_requires_party_change`, 409 al aplicar). En `change_entity` recalcula el IVA de las Por Emitir desde la fecha efectiva',
+			'Documento tributario del catálogo (debe corresponder a la compañía emisora). En `billing_conditions` cambia el documento de todo el contrato (desde el 02-11, antes se bloqueaba): las Por Emitir desde la fecha efectiva toman documento, tipo de exportación e IVA nuevos. En `change_entity` viaja junto con la razón social nueva y recalcula igual',
 	})
 	@IsUUID(undefined, { message: 'Documento tributario inválido' })
 	@IsOptional()
@@ -593,7 +593,7 @@ export class ContractChangeDto {
 
 	@ApiPropertyOptional({
 		enum: ['FACTURA', 'FACTURA_EXPORTACION'],
-		description: 'Familia del documento cuando el contrato no usa catálogo; como `tax_document_type_id`, solo cambia con `change_entity`',
+		description: 'Familia del documento cuando el contrato no usa catálogo; mismas reglas que `tax_document_type_id`',
 	})
 	@IsIn(['FACTURA', 'FACTURA_EXPORTACION'], { message: 'Tipo de documento inválido' })
 	@IsOptional()

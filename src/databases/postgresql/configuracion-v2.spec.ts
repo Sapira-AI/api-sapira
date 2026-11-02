@@ -15,6 +15,7 @@ import { ClientsCountryCode1790840000000 } from './migrations/1790840000000-Clie
 import { HoldingSettingsPreferencesV41790850000000 } from './migrations/1790850000000-HoldingSettingsPreferencesV4';
 import { UserAccessEvents1790860000000 } from './migrations/1790860000000-UserAccessEvents';
 import { UserHoldingsReadOnlyForClients1790870000000 } from './migrations/1790870000000-UserHoldingsReadOnlyForClients';
+import { TaxDocumentTypesExportMxPe1792500000000 } from './migrations/1792500000000-TaxDocumentTypesExportMxPe';
 
 /**
  * Migraciones y assets de Configuración v2 (M2, M3, M4, M7, M8, M9), escritos a mano y **sin aplicar**: se verifica el SQL que emiten
@@ -285,5 +286,29 @@ describe('Configuración v2 · ronda 4 (M14)', () => {
 
 	it('sync_user_on_login queda intacta (decisión de Domi 03-10: se elimina al switch)', () => {
 		expect(read('functions/sync_user_on_login.sql')).toContain(`status = 'Activo',  -- Cambiar de 'Pendiente' a 'Activo'`);
+	});
+});
+
+describe('Documentos tributarios · facturas de exportación MX y PE (Domi 02-11)', () => {
+	it('inserta MX CFDI-I-EXP y PE 01-EXP como export_invoice exentas, idempotente; el seed 009 replica las filas', async () => {
+		const calls = await run(new TaxDocumentTypesExportMxPe1792500000000());
+		const [insert] = calls;
+		const [countries, codes, names, sorts] = insert.params as [string[], string[], string[], number[]];
+
+		expect(insert.sql).toContain('INSERT INTO "tax_document_types"');
+		expect(insert.sql).toContain(`'export_invoice', TRUE, v.sort, TRUE, 0`);
+		expect(insert.sql).toContain('ON CONFLICT ("country_code", "code") DO NOTHING');
+		expect(countries).toEqual(['MX', 'PE']);
+		expect(codes).toEqual(['CFDI-I-EXP', '01-EXP']);
+		expect(names).toEqual(['Factura CFDI de ingreso de exportación', 'Factura electrónica de exportación']);
+		expect(sorts).toEqual([15, 15]);
+		const seed = read('seed/009-tax-document-types-export-mx-pe.sql');
+
+		expect(seed).toContain("('MX', 'CFDI-I-EXP', 'Factura CFDI de ingreso de exportación', 'export_invoice', TRUE, 15, TRUE, 0)");
+		expect(seed).toContain("('PE', '01-EXP', 'Factura electrónica de exportación', 'export_invoice', TRUE, 15, TRUE, 0)");
+		expect(seed).toContain('ON CONFLICT (country_code, code) DO NOTHING');
+		const down = await run(new TaxDocumentTypesExportMxPe1792500000000(), 'down');
+
+		expect(down[0].sql).toContain(`DELETE FROM "tax_document_types" WHERE ("country_code", "code") IN (('MX', 'CFDI-I-EXP'), ('PE', '01-EXP'))`);
 	});
 });

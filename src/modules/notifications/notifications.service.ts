@@ -240,6 +240,9 @@ export class NotificationsService {
 					action_payload: dto.action_payload || {},
 					metadata: this.metadataOf(dto),
 					company_id: companyId,
+					// El recurso sigue al productor (code review 28-10): un aviso agrupado que crece de 1 a N facturas deja de apuntar a la
+					// primera (`resource_id` vacío), si no el cierre automático por recurso de esa factura lo resolvía entero.
+					...(dto.resource_type !== undefined ? { resource_type: dto.resource_type, resource_id: dto.resource_id ?? null } : {}),
 					updated_at: new Date(),
 				});
 				if (newIds.length) {

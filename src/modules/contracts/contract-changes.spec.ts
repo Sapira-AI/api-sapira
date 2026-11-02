@@ -884,11 +884,17 @@ describe('item_change (M1 precio/cantidad)', () => {
 		const octubreEmitido = (lineOverrides: (mm: string) => Record<string, unknown> = () => ({})) =>
 			context({
 				today: '2026-10-20',
-				items: [itemRow({ product_name: 'PATHFINDER+', quantity: 8, unit_price: 48.4, monthly_price: 387.2, final_price: 4646.4 }), soporteRow()],
+				items: [
+					itemRow({ product_name: 'PATHFINDER+', quantity: 8, unit_price: 48.4, monthly_price: 387.2, final_price: 4646.4 }),
+					soporteRow(),
+				],
 				invoices: MONTHS_ALL.map((mm) => {
 					const row = invoiceRow(mm, mm === '10' ? { status: 'Emitida', invoice_number: 'F-10' } : {});
 
-					return { ...row, lines: row.lines.map((line) => (line.contract_item_id === LICENCIA ? { ...line, ...lineOverrides(mm) } : line)) };
+					return {
+						...row,
+						lines: row.lines.map((line) => (line.contract_item_id === LICENCIA ? { ...line, ...lineOverrides(mm) } : line)),
+					};
 				}),
 			});
 		const cambio = (items: Array<Record<string, unknown>>, change: Record<string, unknown> = {}, effective = '2026-10-15') =>
@@ -901,9 +907,20 @@ describe('item_change (M1 precio/cantidad)', () => {
 			expect(plan.preview.warnings.find((warning) => warning.code === 'upsell_within_issued_period')?.message).toBe(
 				'"PATHFINDER+" ya está facturado hasta el 2026-10-31: la diferencia del 2026-10-15 al 2026-10-31 se prorratea por días y va en una factura aparte; la factura emitida no se toca'
 			);
-			expect(inserted(plan)[0]).toMatchObject({ categoria: 'UPSELL', quantity: 4, unit_price: 48.4, start_date: '2026-10-15', end_date: '2026-12-31', related_item_id: LICENCIA });
+			expect(inserted(plan)[0]).toMatchObject({
+				categoria: 'UPSELL',
+				quantity: 4,
+				unit_price: 48.4,
+				start_date: '2026-10-15',
+				end_date: '2026-12-31',
+				related_item_id: LICENCIA,
+			});
 			const [create] = ops(plan, 'create_invoices') as Array<{
-				invoices: Array<{ issue_date: string; billing_period_start: string; lines: Array<{ subtotal: number; billing_period_start: string; billing_period_end: string }> }>;
+				invoices: Array<{
+					issue_date: string;
+					billing_period_start: string;
+					lines: Array<{ subtotal: number; billing_period_start: string; billing_period_end: string }>;
+				}>;
 				merge_into: Array<string | null>;
 			}>;
 
@@ -922,7 +939,10 @@ describe('item_change (M1 precio/cantidad)', () => {
 
 		it('misma cotización en ciclo: el tramo 15–31 oct se suma a la factura de noviembre junto con su +193,60', () => {
 			const plan = cambio([{ item_id: LICENCIA, quantity: 12, unit_price: 48.4 }]);
-			const [create] = ops(plan, 'create_invoices') as Array<{ invoices: Array<{ lines: Array<{ subtotal: number }> }>; merge_into: Array<string | null> }>;
+			const [create] = ops(plan, 'create_invoices') as Array<{
+				invoices: Array<{ lines: Array<{ subtotal: number }> }>;
+				merge_into: Array<string | null>;
+			}>;
 
 			expect(plan.preview.blockers).toEqual([]);
 			expect(create.invoices.map((invoice) => invoice.lines.map((line) => line.subtotal))).toEqual([[106.17, 193.6], [193.6]]);
@@ -952,17 +972,25 @@ describe('item_change (M1 precio/cantidad)', () => {
 
 			const bloqueado = cambio([{ item_id: LICENCIA, quantity: 6, unit_price: 48.4 }], {}, '2026-09-15');
 
-			expect(bloqueado.preview.blockers[0]).toMatchObject({ code: 'issued_after_effective_date', next_step: expect.stringContaining('2026-11-01') });
+			expect(bloqueado.preview.blockers[0]).toMatchObject({
+				code: 'issued_after_effective_date',
+				next_step: expect.stringContaining('2026-11-01'),
+			});
 		});
 
 		it('upsell como línea neta (consumo registrado en una PE): no bloquea, rige desde el día siguiente a lo emitido', () => {
 			const plan = planChange(
 				octubreEmitido((mm) => (mm === '11' ? { quantity_source: 'consumption' } : {})),
-				request({ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 12, unit_price: 48.4 }] }, { effective_date: '2026-10-15', reason: 'ok' })
+				request(
+					{ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 12, unit_price: 48.4 }] },
+					{ effective_date: '2026-10-15', reason: 'ok' }
+				)
 			);
 
 			expect(plan.preview.blockers).toEqual([]);
-			expect(plan.preview.warnings.map((warning) => warning.code)).toEqual(expect.arrayContaining(['upsell_net_line_from_next_period', 'consumption_quantity_kept']));
+			expect(plan.preview.warnings.map((warning) => warning.code)).toEqual(
+				expect.arrayContaining(['upsell_net_line_from_next_period', 'consumption_quantity_kept'])
+			);
 			expect(inserted(plan)[0]).toMatchObject({ categoria: 'UPSELL', start_date: '2026-11-01' });
 			expect(ops(plan, 'create_invoices')).toEqual([]);
 		});
@@ -970,7 +998,10 @@ describe('item_change (M1 precio/cantidad)', () => {
 		it('mes vencido: el tramo prorrateado se cobra con la factura que cierra ese período, sin bloqueo', () => {
 			const plan = planChange(
 				context({ items: [itemRow({ billing_method: 'Vencido' }), soporteRow()] }),
-				request({ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 12, unit_price: 100 }] }, { effective_date: '2026-09-15', reason: 'ok' })
+				request(
+					{ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 12, unit_price: 100 }] },
+					{ effective_date: '2026-09-15', reason: 'ok' }
+				)
 			);
 			const [create] = ops(plan, 'create_invoices') as Array<{ invoices: Array<{ issue_date: string; lines: Array<{ subtotal: number }> }> }>;
 
@@ -1012,7 +1043,8 @@ describe('item_change (M1 precio/cantidad)', () => {
 					tax_amount: 88.67,
 					total: 555.34,
 					billing_period_end: '2026-11-14',
-					description_suffix: ' (hasta 2026-11-14: 14/30 días)',
+					// Glosa con el período real del tramo (02-11), con la plantilla del contrato (aquí la de siempre).
+					description: 'Licencia - Periodo 01/11/2026 a 14/11/2026',
 				},
 			},
 			{
@@ -1022,7 +1054,10 @@ describe('item_change (M1 precio/cantidad)', () => {
 				values: { quantity: 8, unit_price: 100, discount_pct: 0, subtotal: 800, tax_amount: 152, total: 952 },
 			},
 		]);
-		const [create] = ops(plan, 'create_invoices') as Array<{ invoices: Array<{ lines: Array<Record<string, unknown>> }>; merge_into: Array<string | null> }>;
+		const [create] = ops(plan, 'create_invoices') as Array<{
+			invoices: Array<{ lines: Array<Record<string, unknown>> }>;
+			merge_into: Array<string | null>;
+		}>;
 
 		expect(create.merge_into).toEqual(['inv-11']);
 		expect(create.invoices[0].lines).toEqual([
@@ -1051,7 +1086,14 @@ describe('item_change (M1 precio/cantidad)', () => {
 			context({
 				today: '2026-10-20',
 				items: [
-					itemRow({ product_name: 'PATHFINDER+', quantity: 30, unit_price: 38.5, monthly_price: 1155, final_price: 13860, ...(overrides.billing_method ? { billing_method: overrides.billing_method } : {}) }),
+					itemRow({
+						product_name: 'PATHFINDER+',
+						quantity: 30,
+						unit_price: 38.5,
+						monthly_price: 1155,
+						final_price: 13860,
+						...(overrides.billing_method ? { billing_method: overrides.billing_method } : {}),
+					}),
 					soporteRow(),
 				],
 				invoices: MONTHS_ALL.map((mm) => {
@@ -1063,14 +1105,28 @@ describe('item_change (M1 precio/cantidad)', () => {
 						subtotal: 1355,
 						lines: row.lines.map((line) =>
 							line.contract_item_id === LICENCIA
-								? { ...line, quantity: 30, unit_price: 38.5, subtotal: 1155, tax_amount: 219.45, total: 1374.45, ...(overrides.lineOverrides?.(mm) ?? {}) }
+								? {
+										...line,
+										quantity: 30,
+										unit_price: 38.5,
+										subtotal: 1155,
+										tax_amount: 219.45,
+										total: 1374.45,
+										...(overrides.lineOverrides?.(mm) ?? {}),
+									}
 								: line
 						),
 					};
 				}),
 			});
 		const rebaja = (ctx = s06879(), effective = '2026-11-08') =>
-			planChange(ctx, request({ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 5, unit_price: 47.96 }] }, { effective_date: effective, reason: 'ok' }));
+			planChange(
+				ctx,
+				request(
+					{ type: 'item_change', items: [{ item_id: LICENCIA, quantity: 5, unit_price: 47.96 }] },
+					{ effective_date: effective, reason: 'ok' }
+				)
+			);
 
 		it('5 × 47,96 desde el 08-11 con noviembre Por Emitir: 1–7 nov 30 × 38,50 × 7/30 = 269,50; 8–30 nov 5 × 47,96 × 23/30 = 183,85; diciembre 239,80', () => {
 			const plan = rebaja();
@@ -1082,22 +1138,62 @@ describe('item_change (M1 precio/cantidad)', () => {
 				'La rebaja de "PATHFINDER+" rige desde el 2026-11-08: el período 2026-11-01 → 2026-11-30 se prorratea por días (2026-11-01 a 2026-11-07 con 30, 2026-11-08 a 2026-11-30 con 5)'
 			);
 			// ΔMRR = 5 × 47,96 − 1.155 = −915,20; valor por días −915,20 × (23/30 + 1) = −1.616,85.
-			expect(delta).toMatchObject({ categoria: 'DOWNSELL', start_date: '2026-11-08', end_date: '2026-12-31', term_months: 2, final_price: -1616.85 });
+			expect(delta).toMatchObject({
+				categoria: 'DOWNSELL',
+				start_date: '2026-11-08',
+				end_date: '2026-12-31',
+				term_months: 2,
+				final_price: -1616.85,
+			});
 			expect(Math.round(Number(delta.quantity) * Number(delta.unit_price) * 100) / 100).toBe(-915.2);
 			expect(ops(plan, 'update_line')).toEqual([
 				expect.objectContaining({
 					invoice_id: 'inv-11',
 					line_id: 'line-11-lic',
-					values: expect.objectContaining({ quantity: 30, subtotal: 269.5, billing_period_end: '2026-11-07', description_suffix: ' (hasta 2026-11-07: 7/30 días)' }),
+					values: expect.objectContaining({
+						quantity: 30,
+						subtotal: 269.5,
+						billing_period_end: '2026-11-07',
+						description: 'PATHFINDER+ - Periodo 01/11/2026 a 07/11/2026',
+					}),
 				}),
-				expect.objectContaining({ invoice_id: 'inv-12', line_id: 'line-12-lic', values: expect.objectContaining({ quantity: 5, unit_price: 47.96, subtotal: 239.8 }) }),
+				expect.objectContaining({
+					invoice_id: 'inv-12',
+					line_id: 'line-12-lic',
+					values: expect.objectContaining({ quantity: 5, unit_price: 47.96, subtotal: 239.8 }),
+				}),
 			]);
-			const [create] = ops(plan, 'create_invoices') as Array<{ invoices: Array<{ lines: Array<Record<string, unknown>> }>; merge_into: Array<string | null> }>;
+			const [create] = ops(plan, 'create_invoices') as Array<{
+				invoices: Array<{ lines: Array<Record<string, unknown>> }>;
+				merge_into: Array<string | null>;
+			}>;
 
 			expect(create.merge_into).toEqual(['inv-11']);
-			expect(create.invoices[0].lines[0]).toMatchObject({ quantity: 5, unit_price: 36.769333, subtotal: 183.85, billing_period_start: '2026-11-08', billing_period_end: '2026-11-30' });
+			expect(create.invoices[0].lines[0]).toMatchObject({
+				quantity: 5,
+				unit_price: 36.769333,
+				subtotal: 183.85,
+				billing_period_start: '2026-11-08',
+				billing_period_end: '2026-11-30',
+				description: 'PATHFINDER+ - Periodo 08/11/2026 a 30/11/2026',
+			});
+			// La vista previa trae la cuenta del prorrateo de cada tramo (02-11): 38,50 / 30 × 7 = 8,983 y 47,96 / 30 × 23 = 36,769.
+			const detail = plan.preview.invoices.updated.find((entry) => entry.id === 'inv-11')!.detail!;
+
+			expect(detail.lines.map((line) => [line.status, line.proration])).toEqual([
+				['changed', { days: 7, cycle_days: 30, monthly_unit_price: 38.5 }],
+				['same', null],
+				['added', { days: 23, cycle_days: 30, monthly_unit_price: 47.96 }],
+			]);
+			expect(
+				plan.preview.invoices.updated.find((entry) => entry.id === 'inv-12')!.detail!.lines.find((line) => line.status === 'changed')
+					?.proration
+			).toBeNull();
 			// Noviembre (con Soporte 200): 1.355 → 200 + 269,50 + 183,85 = 653,35. Octubre emitido intacto.
-			expect(plan.preview.invoices.updated.find((entry) => entry.id === 'inv-11')).toMatchObject({ subtotal_before: 1355, subtotal_after: 653.35 });
+			expect(plan.preview.invoices.updated.find((entry) => entry.id === 'inv-11')).toMatchObject({
+				subtotal_before: 1355,
+				subtotal_after: 653.35,
+			});
 			expect(plan.ops.some((op) => JSON.stringify(op).includes('inv-10'))).toBe(false);
 			// TCV después = Σ final de los ítems: 13.860 (PATHFINDER+) + 2.400 (Soporte) − 1.616,85 (ajuste por días) = Σ facturas.
 			expect(plan.preview.contract.after.total_value).toBe(14643.15);
@@ -1108,8 +1204,13 @@ describe('item_change (M1 precio/cantidad)', () => {
 			const plan = rebaja(s06879({ billing_method: 'Vencido' }));
 
 			expect(plan.preview.warnings.map((warning) => warning.code)).toEqual(['downsell_prorated']);
-			expect(ops(plan, 'update_line')[0]).toMatchObject({ invoice_id: 'inv-11', values: expect.objectContaining({ subtotal: 269.5, billing_period_end: '2026-11-07' }) });
-			expect((ops(plan, 'create_invoices')[0] as { invoices: Array<{ lines: Array<{ subtotal: number }> }> }).invoices[0].lines[0].subtotal).toBe(183.85);
+			expect(ops(plan, 'update_line')[0]).toMatchObject({
+				invoice_id: 'inv-11',
+				values: expect.objectContaining({ subtotal: 269.5, billing_period_end: '2026-11-07' }),
+			});
+			expect(
+				(ops(plan, 'create_invoices')[0] as { invoices: Array<{ lines: Array<{ subtotal: number }> }> }).invoices[0].lines[0].subtotal
+			).toBe(183.85);
 		});
 
 		it('la factura del período ya emitida: rige desde el próximo inicio de período como hoy; si lo emitido cubre más, bloquea con fecha sugerida', () => {
@@ -1122,7 +1223,10 @@ describe('item_change (M1 precio/cantidad)', () => {
 
 			const bloqueado = rebaja(s06879(), '2026-09-15');
 
-			expect(bloqueado.preview.blockers[0]).toMatchObject({ code: 'issued_after_effective_date', next_step: expect.stringContaining('2026-11-01') });
+			expect(bloqueado.preview.blockers[0]).toMatchObject({
+				code: 'issued_after_effective_date',
+				next_step: expect.stringContaining('2026-11-01'),
+			});
 		});
 
 		it('fecha efectiva = inicio de período: sin tramo ni aviso', () => {
@@ -1170,7 +1274,10 @@ describe('item_change (M1 precio/cantidad)', () => {
 		expect(upsell.preview.warnings.find((warning) => warning.code === 'upsell_within_issued_period')?.message).toBe(
 			'"Licencia" ya está facturado hasta el 2026-09-30: la diferencia del 2026-09-15 al 2026-09-30 se prorratea por días y se suma a la factura del próximo ciclo; la factura emitida no se toca'
 		);
-		const [create] = ops(upsell, 'create_invoices') as Array<{ invoices: Array<{ lines: Array<{ subtotal: number }> }>; merge_into: Array<string | null> }>;
+		const [create] = ops(upsell, 'create_invoices') as Array<{
+			invoices: Array<{ lines: Array<{ subtotal: number }> }>;
+			merge_into: Array<string | null>;
+		}>;
 
 		// Tramo 15-09 → 30-09 (16/30 × 200 = 106,67) en la factura del ciclo 01-10 → PE de octubre; nov y dic +200 en sus PE. F-09 no se toca.
 		expect(create.invoices.map((invoice) => invoice.lines.map((line) => line.subtotal))).toEqual([[106.67, 200], [200], [200]]);
@@ -1522,31 +1629,62 @@ describe('billing_conditions (fase A)', () => {
 			{ invoice_id: 'inv-12', fx: null },
 		]);
 	});
-	it('documento tributario solo (ronda 4, Domi 03-10): bloqueo tax_document_requires_party_change (409 al aplicar); no toca facturas', () => {
+	it('documento tributario solo (Domi 02-11, bug B): el contrato lo guarda y las Por Emitir desde la fecha efectiva toman documento, export_type e IVA', () => {
 		const plan = planChange(
-			context({ tax_document_type: { id: 'tdt-110', code: '110', name: 'Factura de exportación electrónica', kind: 'export_invoice' } }),
+			context({
+				tax_document_type: { id: 'tdt-110', code: '110', name: 'Factura de exportación electrónica', kind: 'export_invoice', tax_rate: 0 },
+			}),
 			request({ type: 'billing_conditions', tax_document_type_id: 'tdt-110' }, { effective_date: '2026-11-01' })
 		);
+		const pendingIds = context()
+			.invoices.filter((invoice) => invoice.status === 'Por Emitir' && (invoice.issue_date ?? '') >= '2026-11-01')
+			.map((invoice) => invoice.id);
 
-		expect(plan.preview.can_apply).toBe(false);
-		expect(plan.preview.blockers).toEqual([
-			expect.objectContaining({
-				code: 'tax_document_requires_party_change',
-				message: 'El documento tributario solo cambia junto con la razón social emisora o receptora',
-			}),
+		expect(pendingIds.length).toBeGreaterThan(0);
+		expect(plan.preview.can_apply).toBe(true);
+		expect(plan.preview.blockers).toEqual([]);
+		expect(ops(plan, 'update_contract')[0].set).toMatchObject({ tax_document_type_id: 'tdt-110', document_type: 'FACTURA_EXPORTACION' });
+		expect(ops(plan, 'update_invoices_document')).toEqual([
+			{ kind: 'update_invoices_document', invoice_ids: pendingIds, document_type: 'FACTURA_EXPORTACION', export_type: 1, tax_rate: 0 },
 		]);
-		expect(ops(plan, 'update_invoices_document')).toEqual([]);
-		// Sin catálogo: la familia sola tampoco cambia.
+		expect(plan.preview.invoices.updated.map((row) => row.id)).toEqual(pendingIds);
+		expect(plan.preview.invoices.updated[0].change).toBe('documento 110 Factura de exportación electrónica (exportación), IVA 0 %');
+		expect(plan.event.metadata).toMatchObject({
+			fields_before: { tax_document_type_id: null, document_type: 'FACTURA' },
+			fields_after: { tax_document_type_id: 'tdt-110', document_type: 'FACTURA_EXPORTACION', tax_rate: 0 },
+		});
+		// Nunca toca emitidas.
+		expect(plan.ops.some((op) => 'invoice_ids' in op && (op.invoice_ids as string[]).some((id) => /inv-0\d/.test(id)))).toBe(false);
+		// Sin catálogo: la familia sola también cambia (exportación → IVA 0, export_type 1); de vuelta a FACTURA → IVA de la compañía.
 		const family = planChange(context(), request({ type: 'billing_conditions', document_type: 'FACTURA_EXPORTACION' }));
 
-		expect(family.preview.blockers.map((blocker) => blocker.code)).toEqual(['tax_document_requires_party_change']);
-		// Documento inexistente o de otro país → 400 (como antes); sin cambios → 400.
+		expect(family.preview.blockers).toEqual([]);
+		expect(ops(family, 'update_invoices_document')[0]).toMatchObject({ document_type: 'FACTURA_EXPORTACION', export_type: 1, tax_rate: 0 });
+		expect(ops(family, 'update_contract')[0].set).toMatchObject({ document_type: 'FACTURA_EXPORTACION' });
+		expect(ops(family, 'update_contract')[0].set).not.toHaveProperty('tax_document_type_id');
+		// Documento inexistente o de otro país → 400 (como antes); sin cambios → 400; con catálogo, la familia sola → 400.
 		expect(fields(() => planChange(context(), request({ type: 'billing_conditions', tax_document_type_id: 'tdt-x' })))).toEqual([
 			'change.tax_document_type_id',
 		]);
 		expect(fields(() => planChange(context(), request({ type: 'billing_conditions', payment_terms: { kind: 'net', days: 30 } })))).toEqual([
 			'change',
 		]);
+		expect(
+			fields(() =>
+				planChange(
+					context({ contract: { ...context().contract, tax_document_type_id: 'tdt-33' } }),
+					request({ type: 'billing_conditions', document_type: 'FACTURA_EXPORTACION' })
+				)
+			)
+		).toEqual(['change.document_type']);
+	});
+	it('documento tributario nacional con tasa propia (PE 01 = 18 %): las Por Emitir toman esa tasa y export_type 0', () => {
+		const plan = planChange(
+			context({ tax_document_type: { id: 'tdt-pe-01', code: '01', name: 'Factura electrónica', kind: 'invoice', tax_rate: 18 } }),
+			request({ type: 'billing_conditions', tax_document_type_id: 'tdt-pe-01' }, { effective_date: '2026-11-01' })
+		);
+
+		expect(ops(plan, 'update_invoices_document')[0]).toMatchObject({ document_type: 'FACTURA', export_type: 0, tax_rate: 18 });
 	});
 	it('mismo documento que ya tiene no cuenta como cambio (no bloquea)', () => {
 		const base = context().contract;
