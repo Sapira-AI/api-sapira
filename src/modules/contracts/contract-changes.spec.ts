@@ -1012,7 +1012,8 @@ describe('item_change (M1 precio/cantidad)', () => {
 					tax_amount: 88.67,
 					total: 555.34,
 					billing_period_end: '2026-11-14',
-					description_suffix: ' (hasta 2026-11-14: 14/30 días)',
+					// Glosa con el período real del tramo (02-11), con la plantilla del contrato (aquí la de siempre).
+					description: 'Licencia - Periodo 01/11/2026 a 14/11/2026',
 				},
 			},
 			{
@@ -1088,14 +1089,30 @@ describe('item_change (M1 precio/cantidad)', () => {
 				expect.objectContaining({
 					invoice_id: 'inv-11',
 					line_id: 'line-11-lic',
-					values: expect.objectContaining({ quantity: 30, subtotal: 269.5, billing_period_end: '2026-11-07', description_suffix: ' (hasta 2026-11-07: 7/30 días)' }),
+					values: expect.objectContaining({ quantity: 30, subtotal: 269.5, billing_period_end: '2026-11-07', description: 'PATHFINDER+ - Periodo 01/11/2026 a 07/11/2026' }),
 				}),
 				expect.objectContaining({ invoice_id: 'inv-12', line_id: 'line-12-lic', values: expect.objectContaining({ quantity: 5, unit_price: 47.96, subtotal: 239.8 }) }),
 			]);
 			const [create] = ops(plan, 'create_invoices') as Array<{ invoices: Array<{ lines: Array<Record<string, unknown>> }>; merge_into: Array<string | null> }>;
 
 			expect(create.merge_into).toEqual(['inv-11']);
-			expect(create.invoices[0].lines[0]).toMatchObject({ quantity: 5, unit_price: 36.769333, subtotal: 183.85, billing_period_start: '2026-11-08', billing_period_end: '2026-11-30' });
+			expect(create.invoices[0].lines[0]).toMatchObject({
+				quantity: 5,
+				unit_price: 36.769333,
+				subtotal: 183.85,
+				billing_period_start: '2026-11-08',
+				billing_period_end: '2026-11-30',
+				description: 'PATHFINDER+ - Periodo 08/11/2026 a 30/11/2026',
+			});
+			// La vista previa trae la cuenta del prorrateo de cada tramo (02-11): 38,50 / 30 × 7 = 8,983 y 47,96 / 30 × 23 = 36,769.
+			const detail = plan.preview.invoices.updated.find((entry) => entry.id === 'inv-11')!.detail!;
+
+			expect(detail.lines.map((line) => [line.status, line.proration])).toEqual([
+				['changed', { days: 7, cycle_days: 30, monthly_unit_price: 38.5 }],
+				['same', null],
+				['added', { days: 23, cycle_days: 30, monthly_unit_price: 47.96 }],
+			]);
+			expect(plan.preview.invoices.updated.find((entry) => entry.id === 'inv-12')!.detail!.lines.find((line) => line.status === 'changed')?.proration).toBeNull();
 			// Noviembre (con Soporte 200): 1.355 → 200 + 269,50 + 183,85 = 653,35. Octubre emitido intacto.
 			expect(plan.preview.invoices.updated.find((entry) => entry.id === 'inv-11')).toMatchObject({ subtotal_before: 1355, subtotal_after: 653.35 });
 			expect(plan.ops.some((op) => JSON.stringify(op).includes('inv-10'))).toBe(false);

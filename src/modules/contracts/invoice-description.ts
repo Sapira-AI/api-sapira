@@ -164,22 +164,29 @@ const shortMonth = (iso: string) => {
 	return `${MONTHS_SHORT[m - 1]}-${pad(y % 100)}`;
 };
 
-/** Período en el formato del bloque. `month_year`/`mmm_yy` de un período de varios meses: "septiembre a noviembre 2026" / "sep-26 a nov-26". */
+/** ¿El período es exactamente un mes calendario (del 1 al último día del mismo mes)? */
+export function isWholeCalendarMonth(start: string, end: string): boolean {
+	if (start.slice(0, 7) !== end.slice(0, 7) || start.slice(8, 10) !== '01') return false;
+	const { y, m } = parseIso(start);
+
+	return Number(end.slice(8, 10)) === new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+/**
+ * Período en el formato del bloque. `month_year`/`mmm_yy` solo nombran el mes cuando la línea cubre el mes calendario completo
+ * ("noviembre 2026"); un tramo parcial (1–7 nov), un ciclo que cruza meses (21-10 → 20-11) o varios meses van con fechas, porque nombrar
+ * el mes mentiría o no diría qué días cubre (Domi 02-11).
+ */
 export function formatPeriod(start: string | null | undefined, end: string | null | undefined, format: string | undefined): string {
 	if (!isIsoDate(start)) return '';
 	const until = isIsoDate(end) ? end : start;
-	const sameMonth = start.slice(0, 7) === until.slice(0, 7);
+	const wholeMonth = isWholeCalendarMonth(start, until);
 
 	switch (format) {
-		case 'month_year': {
-			if (sameMonth) return monthYear(start);
-			const a = parseIso(start);
-			const b = parseIso(until);
-
-			return a.y === b.y ? `${MONTHS[a.m - 1]} a ${monthYear(until)}` : `${monthYear(start)} a ${monthYear(until)}`;
-		}
+		case 'month_year':
+			return wholeMonth ? monthYear(start) : `${slashDate(start)} a ${slashDate(until)}`;
 		case 'mmm_yy':
-			return sameMonth ? shortMonth(start) : `${shortMonth(start)} a ${shortMonth(until)}`;
+			return wholeMonth ? shortMonth(start) : `${slashDate(start)} a ${slashDate(until)}`;
 		case 'range_dash':
 			return `${dashDate(start)} al ${dashDate(until)}`;
 		default:

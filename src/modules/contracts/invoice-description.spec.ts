@@ -171,10 +171,16 @@ describe('invoice-description (constructor de descripción, spec facturas §3.6)
 		it('período en los cuatro formatos (un mes y varios meses)', () => {
 			expect(formatPeriod('2026-09-01', '2026-09-30', 'range_slash')).toBe('01/09/2026 a 30/09/2026');
 			expect(formatPeriod('2026-09-01', '2026-09-30', 'month_year')).toBe('septiembre 2026');
-			expect(formatPeriod('2026-09-01', '2026-11-30', 'month_year')).toBe('septiembre a noviembre 2026');
-			expect(formatPeriod('2026-12-01', '2027-02-28', 'month_year')).toBe('diciembre 2026 a febrero 2027');
+			// Domi 02-11: el mes en palabras solo cuando la línea cubre el mes calendario completo; tramos, ciclos que cruzan meses y varios
+			// meses van con fechas (nombrar el mes no diría qué días cubre).
+			expect(formatPeriod('2026-11-01', '2026-11-07', 'month_year')).toBe('01/11/2026 a 07/11/2026');
+			expect(formatPeriod('2026-10-21', '2026-11-20', 'month_year')).toBe('21/10/2026 a 20/11/2026');
+			expect(formatPeriod('2026-09-01', '2026-11-30', 'month_year')).toBe('01/09/2026 a 30/11/2026');
+			expect(formatPeriod('2026-12-01', '2027-02-28', 'month_year')).toBe('01/12/2026 a 28/02/2027');
+			expect(formatPeriod('2026-02-01', '2026-02-28', 'month_year')).toBe('febrero 2026');
 			expect(formatPeriod('2026-09-01', '2026-09-30', 'mmm_yy')).toBe('sep-26');
-			expect(formatPeriod('2026-09-01', '2026-11-30', 'mmm_yy')).toBe('sep-26 a nov-26');
+			expect(formatPeriod('2026-11-08', '2026-11-30', 'mmm_yy')).toBe('08/11/2026 a 30/11/2026');
+			expect(formatPeriod('2026-09-01', '2026-11-30', 'mmm_yy')).toBe('01/09/2026 a 30/11/2026');
 			expect(formatPeriod('2026-09-01', '2026-09-30', 'range_dash')).toBe('01-09-26 al 30-09-26');
 			expect(formatPeriod(null, null, 'range_slash')).toBe('');
 		});
@@ -472,14 +478,14 @@ describe('invoice-description (constructor de descripción, spec facturas §3.6)
 			expect(fitted).toMatchObject({ text: 'Licencia Cuenta Casa Matriz - 15-09-26 al 14-10-26', step_codes: ['short_period', 'no_labels'] });
 		});
 
-		it('varios meses completos: "sep-26 a nov-26"', () => {
+		it('varios meses: siempre con fechas (02-11); al límite, el ajuste pasa al formato corto de fechas y recorta el producto', () => {
 			const fitted = fitDescription(
 				{ blocks: [{ type: 'product' }, { type: 'period' }] },
 				ctx({ period_start: '2026-09-01', period_end: '2026-11-30' }),
 				27
 			);
 
-			expect(fitted.text).toBe('Licencia - sep-26 a nov-26');
+			expect(fitted.text).toBe('Lice - 01-09-26 al 30-11-26');
 		});
 
 		it('tramo resumido: una línea única deja el detalle "Tramos: …" antes de recortar texto', () => {

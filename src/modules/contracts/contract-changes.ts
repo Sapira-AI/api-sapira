@@ -36,7 +36,6 @@ import {
 	itemEndDate,
 	itemPeriods,
 	itemPricing,
-	lineDescription,
 	monthsBetween,
 	nextPeriodStart,
 	type PreviewInvoice,
@@ -65,7 +64,7 @@ import {
 import { hasPricingModel, type PriceSpecDto, UF_CURRENCY } from './dtos/create-contract.dto';
 import { lastPartialPeriod } from './end-off-cycle';
 import { PER_INVOICE_FX_SOURCES } from './fx-rate-sources';
-import { DESCRIPTION_FITTED_CODE, type DescriptionTemplate } from './invoice-description';
+import { DESCRIPTION_FITTED_CODE, type DescriptionTemplate, fitDescription } from './invoice-description';
 import {
 	type CodedFieldError,
 	codedValidationException,
@@ -467,6 +466,12 @@ export interface ChangeInvoiceDetailLine {
 	/** `same` = no cambia; `changed` = cambia (con `before`); `added` = línea nueva; `removed` = se quita. */
 	status: 'same' | 'changed' | 'added' | 'removed';
 	before: { quantity: number; unit_price: number; subtotal: number } | null;
+	/**
+	 * Línea de un tramo parcial (02-11, Carelis): días del tramo, días del ciclo completo y el unitario mensual del que sale el unitario de
+	 * la línea (`unit_price = monthly_unit_price / cycle_days × days`), para que la vista previa muestre la cuenta. Solo en líneas que cambian
+	 * o se agregan; null en un período completo.
+	 */
+	proration?: { days: number; cycle_days: number; monthly_unit_price: number } | null;
 }
 
 /**
@@ -664,6 +669,8 @@ export interface ChangeLineAmounts {
 	/** Pausa (§9.3.3): la línea queda desde el día siguiente al fin de la pausa. */
 	billing_period_start?: string;
 	description_suffix?: string;
+	/** Glosa completa nueva (tramo prorrateado con su período real, 02-11); gana al sufijo. Una glosa escrita a mano no se toca. */
+	description?: string;
 	/** Línea con consumo registrado: desglose del motor recalculado con la cantidad registrada (null/ausente = no se toca). */
 	pricing_breakdown?: PricedSubline[] | null;
 	quantity_source?: string | null;
@@ -996,6 +1003,37 @@ export const isIssued = (invoice: ChangeInvoiceRow) =>
 
 /** Por Emitir facturada por OC (§3.7b: tiene líneas internas con `visible_line_id`): fija en el calendario, las modificaciones no la tocan. */
 export const isPartialBilled = (invoice: ChangeInvoiceRow) => invoice.lines.some((line) => Boolean(line.visible_line_id));
+
+/**
+ * Glosa de una línea que el planificador escribe a mano (tramos prorrateados del downsell, 02-11): la misma plantilla del contrato que usa
+ * el generador (`invoice_description_template`, o la glosa de hoy), con el período **real** del tramo y ajustada al límite del documento.
+ */
+export function lineGlosa(
+	contract: Pick<ChangeContractRow, 'invoice_description_template' | 'description_max_chars' | 'contract_currency' | 'invoice_currency' | 'contract_number'>,
+	item: Pick<ChangeItemRow, 'product_name' | 'account' | 'unit_of_measure' | 'currency'>,
+	line: { start: string; end: string; quantity: number; unit_price: number; amount: number }
+): string {
+	return fitDescription(
+		contract.invoice_description_template ?? null,
+		{
+			line_kind: 'standard',
+			product_name: item.product_name ?? 'Producto',
+			account: item.account ?? null,
+			period_start: line.start,
+			period_end: line.end,
+			quantity: line.quantity,
+			unit: item.unit_of_measure ?? null,
+			quantity_final: true,
+			unit_price: line.unit_price,
+			amount: line.amount,
+			contract_currency: item.currency ?? contract.contract_currency ?? null,
+			invoice_currency: contract.invoice_currency ?? contract.contract_currency ?? null,
+			fx_rate: null,
+			contract_number: contract.contract_number ?? null,
+		},
+		contract.description_max_chars ?? null
+	).text;
+}
 
 /**
  * Downsell prorrateado (Domi 28-10): la Por Emitir editable cuya línea base del ítem cubre la fecha efectiva **por dentro** (inicio del
@@ -1566,6 +1604,24 @@ class Planner {
 		this.headersTouched.clear();
 	}
 
+	/**
+	 * Cuenta del prorrateo de una línea de tramo parcial dentro de un ciclo (02-11, Carelis): días del tramo, días del ciclo y el unitario
+	 * mensual del que sale el de la línea. null en un período completo, en varios ciclos o sin ítem.
+	 */
+	private prorationOf(itemId: string | null | undefined, start: string | null | undefined, end: string | null | undefined, unitPrice: number) {
+		const item = this.itemOf(itemId);
+
+		if (!item || !start || !end || end < start) return null;
+		const months = monthsBetween(start, end, anchorOfItem(item, anchorDayOf(this.ctx.contract, this.ctx.items)));
+
+		if (!(months > 0) || months >= 1) return null;
+		const days = diffDays(start, end) + 1;
+		// El unitario de la línea viene redondeado a 6 decimales: al deshacer el prorrateo, 38,499999 es 38,50.
+		const monthly = unitPrice / months;
+
+		return { days, cycle_days: Math.round(days / months), monthly_unit_price: Math.abs(monthly - round2(monthly)) < 5e-5 ? round2(monthly) : round6(monthly) };
+	}
+
 	private itemOf(itemId: string | null | undefined) {
 		if (!itemId) return null;
 
@@ -1610,7 +1666,7 @@ class Planner {
 			if (cancelled || deleted.has(line.id)) return { ...base, ...was, status: 'removed' as const, before: was };
 			const values = updates.get(line.id);
 
-			if (!values) return { ...base, ...was, status: 'same' as const, before: null };
+			if (!values) return { ...base, ...was, status: 'same' as const, before: null, proration: null };
 			const now = { quantity: num(values.quantity), unit_price: num(values.unit_price), subtotal: num(values.subtotal) };
 			const changed = now.quantity !== was.quantity || now.unit_price !== was.unit_price || now.subtotal !== was.subtotal;
 
@@ -1621,6 +1677,9 @@ class Planner {
 				billing_period_end: values.billing_period_end ?? line.billing_period_end,
 				status: changed ? ('changed' as const) : ('same' as const),
 				before: changed ? was : null,
+				proration: changed
+					? this.prorationOf(line.contract_item_id, values.billing_period_start ?? line.billing_period_start, values.billing_period_end ?? line.billing_period_end, now.unit_price)
+					: null,
 			};
 		});
 
@@ -1640,6 +1699,7 @@ class Planner {
 				billing_period_end: line.billing_period_end,
 				status: 'added',
 				before: null,
+				proration: this.prorationOf(line.item_key, line.billing_period_start, line.billing_period_end, line.unit_price),
 			});
 		const totals = (subtotal: number, tax: number) => ({ subtotal: round2(subtotal), tax: round2(tax), total: round2(subtotal + tax) });
 		const beforeTotals = totals(num(before.subtotal), num(before.vat));
@@ -4538,7 +4598,8 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 						tax_amount: headTax,
 						total: round2(headSubtotal + headTax),
 						billing_period_end: headEnd,
-						description_suffix: ` (hasta ${headEnd}: ${headDays}/${totalDays} días)`,
+						// Glosa con el período real del tramo (02-11): nada de "Periodo 01/11 a 30/11 (hasta 07-11)".
+						description: lineGlosa(ctx.contract, item, { start: periodStart, end: headEnd, quantity: num(baseLine.quantity), unit_price: headUnit, amount: headSubtotal }),
 					},
 					'tramo actual prorrateado por días'
 				);
@@ -4549,7 +4610,7 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 				const tailLine: PreviewLine = {
 					item_key: item.id,
 					product_name: item.product_name ?? 'Producto',
-					description: lineDescription(item.product_name ?? 'Producto', item.account, start, periodEnd),
+					description: lineGlosa(ctx.contract, item, { start, end: periodEnd, quantity: num(ref.quantity), unit_price: round6(unitNew * tailMonths), amount: tailSubtotal }),
 					quantity: num(ref.quantity),
 					unit_price: round6(unitNew * tailMonths),
 					discount_pct: round6(pct),

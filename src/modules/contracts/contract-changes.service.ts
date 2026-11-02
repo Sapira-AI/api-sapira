@@ -960,8 +960,8 @@ export class ContractChangesService {
 							billing_period_end = COALESCE($13::date, billing_period_end),
 							-- Pausa (§9.3.3): la línea cuyo período empieza en la pausa queda desde el día siguiente a su fin.
 							billing_period_start = COALESCE($18::date, billing_period_start),
-							-- Una glosa escrita a mano (description_locked, spec facturas §3.6) no se toca.
-							description = CASE WHEN description_locked THEN description ELSE description || $14 END,
+							-- Una glosa escrita a mano (description_locked, spec facturas §3.6) no se toca; con glosa nueva completa ($19) se reemplaza.
+							description = CASE WHEN description_locked THEN description ELSE COALESCE($19, description || $14) END,
 							-- Línea con consumo registrado: el desglose del motor se reescribe con la cantidad registrada (las demás lo conservan).
 							pricing_breakdown = COALESCE($16::jsonb, pricing_breakdown), quantity_source = COALESCE($17, quantity_source), updated_at = now()
 						WHERE id = $1 AND invoice_id = $2 AND holding_id = $15`,
@@ -984,6 +984,7 @@ export class ContractChangesService {
 							values.pricing_breakdown ? JSON.stringify(values.pricing_breakdown) : null,
 							values.quantity_source ?? null,
 							values.billing_period_start ?? null,
+							values.description ?? null,
 						]
 					);
 					break;
