@@ -952,7 +952,7 @@
  "quote_events": {
   "name": "public.quote_events",
   "rls_enabled": true,
-  "rows": 27,
+  "rows": 51,
   "columns": [
    {
     "name": "id",

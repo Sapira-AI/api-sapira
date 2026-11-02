@@ -17714,8 +17714,8 @@
 			],
 			"indexes": [
 				{
-					"name": "contracts_holding_number_unique",
-					"def": "CREATE UNIQUE INDEX contracts_holding_number_unique ON public.contracts USING btree (holding_id, contract_number) WHERE (deleted_at IS NULL)",
+					"name": "contracts_holding_number_unique_ci",
+					"def": "CREATE UNIQUE INDEX contracts_holding_number_unique_ci ON public.contracts USING btree (holding_id, lower(contract_number)) WHERE (deleted_at IS NULL)",
 					"unique": true,
 					"primary": false
 				},

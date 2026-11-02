@@ -728,7 +728,7 @@
  "invoice_items": {
   "name": "public.invoice_items",
   "rls_enabled": true,
-  "rows": 12158,
+  "rows": 12306,
   "columns": [
    {
     "name": "id",
@@ -1558,7 +1558,7 @@
  "invoice_references": {
   "name": "public.invoice_references",
   "rls_enabled": true,
-  "rows": 292,
+  "rows": 368,
   "columns": [
    {
     "name": "id",
@@ -1945,7 +1945,7 @@
  "invoices": {
   "name": "public.invoices",
   "rls_enabled": true,
-  "rows": 10157,
+  "rows": 10292,
   "columns": [
    {
     "name": "id",

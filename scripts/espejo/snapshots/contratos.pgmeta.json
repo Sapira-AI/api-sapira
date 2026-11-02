@@ -2,7 +2,7 @@
  "contracts": {
   "name": "public.contracts",
   "rls_enabled": true,
-  "rows": 701,
+  "rows": 898,
   "columns": [
    {
     "name": "id",
@@ -1030,7 +1030,7 @@
  "contract_items": {
   "name": "public.contract_items",
   "rls_enabled": true,
-  "rows": 1235,
+  "rows": 1333,
   "columns": [
    {
     "name": "id",
@@ -2032,7 +2032,7 @@
  "contract_lifecycle_events": {
   "name": "public.contract_lifecycle_events",
   "rls_enabled": true,
-  "rows": 1031,
+  "rows": 1551,
   "columns": [
    {
     "name": "id",
@@ -4139,7 +4139,7 @@
  "tax_document_types": {
   "name": "public.tax_document_types",
   "rls_enabled": true,
-  "rows": 17,
+  "rows": 19,
   "columns": [
    {
     "name": "id",
@@ -4275,7 +4275,7 @@
  "billable_metrics": {
   "name": "public.billable_metrics",
   "rls_enabled": true,
-  "rows": 7,
+  "rows": 8,
   "columns": [
    {
     "name": "id",
@@ -4954,7 +4954,7 @@
  "consumption_entries": {
   "name": "public.consumption_entries",
   "rls_enabled": true,
-  "rows": 315,
+  "rows": 385,
   "columns": [
    {
     "name": "id",
@@ -5259,7 +5259,7 @@
  "consumption_entry_revisions": {
   "name": "public.consumption_entry_revisions",
   "rls_enabled": true,
-  "rows": 315,
+  "rows": 397,
   "columns": [
    {
     "name": "id",
