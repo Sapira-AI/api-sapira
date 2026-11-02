@@ -220,6 +220,14 @@ export class EditInvoiceDto {
 	@IsUUID(undefined, { message: 'Razón social inválida' })
 	client_entity_id?: string | null;
 
+	@ApiPropertyOptional({
+		description:
+			'Documento tributario de esta sola factura (catálogo de la compañía emisora, factura o factura de exportación): fija la familia, el tipo de exportación y el IVA; el contrato no cambia',
+	})
+	@ValidateIf((_dto: EditInvoiceDto, value: unknown) => present(value))
+	@IsUUID(undefined, { message: 'Documento tributario inválido' })
+	tax_document_type_id?: string | null;
+
 	@ApiPropertyOptional({ description: 'Términos y condiciones de la factura (null = sin términos)' })
 	@ValidateIf((_dto: EditInvoiceDto, value: unknown) => present(value))
 	@IsString({ message: 'Los términos deben ser texto' })
