@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
 import { holdingTimezone, loadHoldingPreferences } from '@/core/utils/holding-preferences';
+import { esDteSimulado } from '@/modules/factura/dte-simulado';
 import { HoldingMetricsService } from '@/modules/metrics/holding-metrics.service';
 // MRR del mes sin "pendiente de renovar" (S5-3): la regla vive en Métricas (D-CTR-1), una sola definición.
 import { NOT_PENDING_RENEWAL } from '@/modules/metrics/rsm-momentum';
@@ -101,6 +102,8 @@ export const dteSummaryOf = (row: Record<string, unknown>) => {
 		receptor_email: toTextOrNull(row.dte_receptor_email),
 		receptor_sent_at: iso(row.dte_receptor_sent_at),
 		receptor_error: toTextOrNull(row.dte_receptor_error),
+		/** Emitido en simulación (`DTE_SIMULATED`, solo QA): no pasó por api-factura ni por el SII. */
+		simulated: esDteSimulado(String(row.dte_id)),
 	};
 };
 

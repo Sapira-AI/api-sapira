@@ -85,6 +85,7 @@ export { QuoteItem } from '@/databases/postgresql/entities/cotizaciones-catalogo
 export { QuoteStage } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote-stage.entity';
 export { Quote } from '@/databases/postgresql/entities/cotizaciones-catalogo/quote.entity';
 export { BillingReference } from '@/databases/postgresql/entities/facturacion/billing-reference.entity';
+export { DteSimulation } from '@/databases/postgresql/entities/facturacion/dte-simulation.entity';
 export { InvoiceAdjustment } from '@/databases/postgresql/entities/facturacion/invoice-adjustment.entity';
 export { InvoiceCollectionLog } from '@/databases/postgresql/entities/facturacion/invoice-collection-log.entity';
 export { InvoiceCollectionSettings } from '@/databases/postgresql/entities/facturacion/invoice-collection-settings.entity';

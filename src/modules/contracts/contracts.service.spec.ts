@@ -1280,7 +1280,19 @@ describe('electronicEmissionOf (NC creadas por la API, decisión 01-10)', () => 
 			receptor_email: 'dte@cliente.cl',
 			receptor_sent_at: null,
 			receptor_error: null,
+			simulated: false,
 		});
+		// Emitido en simulación (DTE_SIMULATED, QA): el front lo marca «Simulado».
+		expect(
+			electronicEmissionOf({
+				document_type: 'FACTURA',
+				status: 'Emitida',
+				invoice_number: '3',
+				dte_id: 'sim_4b1f',
+				dte_tipo: 33,
+				dte_folio: '3',
+			} as any).dte?.simulated
+		).toBe(true);
 	});
 });
 
