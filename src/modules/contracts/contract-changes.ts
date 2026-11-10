@@ -650,6 +650,11 @@ export interface NewItemRow {
 	price_name?: string | null;
 	/** Ciclo propio (§9.3.9): día de ciclo del ítem; null/ausente = ciclo del contrato. */
 	billing_anchor_day?: number | null;
+	/**
+	 * `price_model_change` solo de modo de cobro (Stanhome 10-11): el RENEWAL apunta a la misma fila de `prices` del ítem (`price_id`) y
+	 * `price_spec` queda solo para que el motor tarife las Por Emitir; no se crea una versión nueva.
+	 */
+	reuse_price?: boolean;
 	/** `price_model_change`: el precio nuevo es la versión siguiente del anterior (`prices.version`, `supersedes_price_id`). */
 	price_version?: number | null;
 	supersedes_price_id?: string | null;
@@ -4927,6 +4932,13 @@ export const PRICE_MODEL_CHANGE_CODES = {
  * mensualizado (`pricedMonthlyEquivalent`), con el descuento % del ítem; con tramos es el precio de esa cantidad por tramos. El delta va
  * en el mismo RENEWAL (`renewal_base_unit_price`: el RSM separa el delta como UPSELL / DOWNSELL, `apply_renewal_price_split`). El
  * devengo sigue lo facturado en los períodos con consumo (regla D2-c del rebuild).
+ *
+ * **Solo el modo de cobro** (Stanhome 10-11): `{ item_id, billing_method }` sin `price` (o con el mismo modelo) cambia Anticipado ↔ Vencido
+ * con el mismo corte y la misma regeneración; el RENEWAL conserva precio, descuento y fila de `prices` (`reuse_price`), el MRR no cambia
+ * (evento RENEWAL subtipo `billing_method`, título "Cambio de modo de cobro"). Anticipado → Vencido: el período ya cobrado por adelantado
+ * no se repite y el que comienza en el corte sale al cerrarlo (aviso `billing_method_to_arrears`). Vencido → Anticipado: el día del corte
+ * salen dos facturas, la del período vencido y la del que comienza (aviso `two_invoices_in_transition`). Por Emitir con borrador en el ERP:
+ * el mismo aviso que cualquier cambio (`closeInvoiceWarnings`).
  */
 export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequestDto): ChangePlan {
 	const p = new Planner(ctx, req, 'price_model_change');
@@ -4943,43 +4955,54 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 	if (refs.length !== 1) p.error('change.items', 'Cambia el modelo de precio de un ítem a la vez');
 	const item = p.findItem(String(ref.item_id ?? ''), `${field}.item_id`);
 	const priceDto = (ref.price ?? null) as PriceSpec | null;
+	const specDto = priceDto && typeof priceDto === 'object' ? normalizePriceSpec(priceDto) : null;
+	// Modo de cobro del ítem que continúa (07-10, caso Ninja): pasar a consumo exige Vencido y el ítem vigente puede venir Anticipado.
+	const requestedMethod = ref.billing_method === undefined || ref.billing_method === null ? null : String(ref.billing_method);
+	const methodValid = requestedMethod === null || (BILLING_METHODS as readonly string[]).includes(requestedMethod);
+	const billingMethod = methodValid ? (requestedMethod ?? item?.billing_method ?? 'Anticipado') : (item?.billing_method ?? 'Anticipado');
+	const methodBefore = item?.billing_method ?? 'Anticipado';
+	const current = item ? priceSpecFromRow(item.raw) : null;
+	const sameSpec = (spec: PriceSpec | null) => Boolean(current && spec && JSON.stringify(normalizePriceSpec(current)) === JSON.stringify(spec));
+	// Solo cambia el modo de cobro (Stanhome 10-11): sin `price` (o con el mismo modelo que ya tiene) y otro modo de cobro. El ítem que
+	// continúa conserva el precio, el descuento y la fila de `prices`; solo cambia cuándo sale la factura de cada período.
+	const methodOnly = Boolean(item) && methodValid && billingMethod !== methodBefore && (!specDto || sameSpec(specDto));
 
-	if (!priceDto || typeof priceDto !== 'object') p.error(`${field}.price`, 'Indica el modelo de precio nuevo');
-	const spec = priceDto && typeof priceDto === 'object' ? normalizePriceSpec(priceDto) : null;
-	let valid = Boolean(spec);
+	if (!specDto && !methodOnly) {
+		if (item && requestedMethod !== null && methodValid)
+			p.error(`${field}.billing_method`, `"${item.product_name}" ya se cobra ${methodBefore.toLowerCase()}: elige el otro modo de cobro`);
+		else p.error(`${field}.price`, 'Indica el modelo de precio nuevo');
+	}
+	const spec = specDto ?? (methodOnly ? current : null);
+	let valid = Boolean(specDto) || methodOnly;
 
-	for (const error of spec ? validatePriceSpec(spec) : []) {
+	for (const error of specDto ? validatePriceSpec(specDto) : []) {
 		p.error(`${field}.price.${error.field}`, error.message);
 		valid = false;
 	}
-	// Modo de cobro del ítem que continúa (07-10, caso Ninja): pasar a consumo exige Vencido y el ítem vigente puede venir Anticipado.
-	const requestedMethod = ref.billing_method === undefined || ref.billing_method === null ? null : String(ref.billing_method);
-
-	if (requestedMethod !== null && !(BILLING_METHODS as readonly string[]).includes(requestedMethod)) {
+	if (!methodValid) {
 		p.error(`${field}.billing_method`, 'Modo de cobro inválido: Anticipado o Vencido');
 		valid = false;
 	}
-	const billingMethod = requestedMethod ?? item?.billing_method ?? 'Anticipado';
 
 	if (item && spec && valid) {
 		if (isMetered(spec)) {
 			const metricId = spec.billable_metric_id ?? null;
 			const status = metricId ? ctx.billable_metrics?.get(metricId) : undefined;
 
-			if (!metricId) p.error(`${field}.price.billable_metric_id`, 'Elige la métrica que se mide');
-			else if (!status) p.error(`${field}.price.billable_metric_id`, 'La métrica facturable no existe en el holding');
-			else if (status !== 'active') p.error(`${field}.price.billable_metric_id`, 'La métrica facturable está archivada');
+			// La métrica se valida con un modelo nuevo; con solo el modo de cobro, el ítem ya la tiene y no cambia.
+			if (!methodOnly && !metricId) p.error(`${field}.price.billable_metric_id`, 'Elige la métrica que se mide');
+			else if (!methodOnly && !status) p.error(`${field}.price.billable_metric_id`, 'La métrica facturable no existe en el holding');
+			else if (!methodOnly && status !== 'active') p.error(`${field}.price.billable_metric_id`, 'La métrica facturable está archivada');
 			if (billingMethod === 'Anticipado' && spec.model !== 'seat') p.error(`${field}.billing_method`, METERED_ADVANCE_MESSAGE);
 		}
 		if (item.is_recurring === false || !item.start_date)
 			p.error(`${field}.item_id`, `"${item.product_name}" no es recurrente o no tiene inicio: su precio se corrige como dato del ítem`);
 	}
-	const current = item ? priceSpecFromRow(item.raw) : null;
 
-	if (item && spec && current && JSON.stringify(normalizePriceSpec(current)) === JSON.stringify(spec))
+	if (item && specDto && !methodOnly && sameSpec(specDto))
 		p.error(`${field}.price`, `"${item.product_name}" ya tiene ese modelo de precio`, PRICE_MODEL_CHANGE_CODES.same_model);
 
-	if (item && spec && valid && item.is_recurring !== false && item.start_date && p.assertRemovable(item)) {
+	if (item && (spec || methodOnly) && valid && item.is_recurring !== false && item.start_date && p.assertRemovable(item)) {
 		const anchor = anchorOfItem(item, contractAnchor);
 		const cut = nextPeriodStart(engineShape(item), anchor, p.effective);
 
@@ -4989,7 +5012,9 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 			if (cut !== p.effective)
 				p.warn(
 					'price_model_from_next_period',
-					`El modelo nuevo de "${item.product_name}" rige desde el próximo inicio de período (${cut}): el período en curso sigue con el anterior`
+					methodOnly
+						? `El cobro ${billingMethod.toLowerCase()} de "${item.product_name}" rige desde el próximo inicio de período (${cut}): el período en curso sigue ${methodBefore.toLowerCase()}`
+						: `El modelo nuevo de "${item.product_name}" rige desde el próximo inicio de período (${cut}): el período en curso sigue con el anterior`
 				);
 			p.assertOpenPeriod(cut, `El corte de "${item.product_name}"`);
 			const group = buildItemGroups(ctx.items, addDays(cut, -1)).find((row) => row.item_ids.includes(item.id));
@@ -5020,11 +5045,15 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 			p.assertNoUnified(cutIds, cut);
 			const recorded = recordedConsumption(ctx, item.id, cut);
 
-			if (recorded.length && !isMetered(spec))
+			if (recorded.length && !(spec && isMetered(spec)))
 				p.block(
 					PRICE_MODEL_CHANGE_CODES.corrections_on_fixed,
-					`"${item.product_name}" tiene consumos registrados desde el ${cut} (${recorded.map((entry) => entry.period_start).join(', ')}) y el modelo nuevo es de cantidad fija`,
-					'Elige cantidad por consumo, o usa como fecha efectiva el período siguiente a la última corrección'
+					`"${item.product_name}" tiene consumos registrados desde el ${cut} (${recorded.map((entry) => entry.period_start).join(', ')}) y ${
+						methodOnly ? 'es' : 'el modelo nuevo es'
+					} de cantidad fija`,
+					methodOnly
+						? 'Usa como fecha efectiva el período siguiente a la última corrección'
+						: 'Elige cantidad por consumo, o usa como fecha efectiva el período siguiente a la última corrección'
 				);
 			if (
 				ctx.invoices.some(
@@ -5043,15 +5072,17 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 					'manual_edit_replaced',
 					`Hay líneas de "${item.product_name}" editadas a mano desde el ${cut}: se reemplazan por las del modelo nuevo`
 				);
-			const quantity = ref.quantity !== undefined && ref.quantity !== null ? num(ref.quantity) : (group?.quantity ?? num(item.quantity));
+			// Solo el modo de cobro: la cantidad y el descuento del ítem tal cual (el pedido no los cambia).
+			const quantity =
+				!methodOnly && ref.quantity !== undefined && ref.quantity !== null ? num(ref.quantity) : (group?.quantity ?? num(item.quantity));
 			const pct =
-				ref.discount_value !== undefined && ref.discount_value !== null
+				!methodOnly && ref.discount_value !== undefined && ref.discount_value !== null
 					? num(ref.discount_value)
 					: item.discount_type === 'Porcentaje'
 						? num(item.discount_value)
 						: 0;
 
-			if (item.discount_type === 'Monto fijo' && num(item.discount_value) > 0)
+			if (!methodOnly && item.discount_type === 'Monto fijo' && num(item.discount_value) > 0)
 				p.warn(
 					'fixed_discount_dropped',
 					`El descuento en monto fijo de "${item.product_name}" no aplica a un modelo de precio: el modelo nuevo se tarifa sin él`
@@ -5059,13 +5090,19 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 			const frequency = (item.billing_frequency ?? 'Mensual') as BillingFrequency;
 			const term = monthsCeil(cut, item.end_date);
 			const oldMonthly = round2(group?.mrr ?? itemMonthly(item));
-			const monthlyNew = round2(
-				pricedMonthlyEquivalent(spec, { quantity, billing_frequency: frequency, is_recurring: true, term_months: term }, pct)
-			);
+			// Solo el modo de cobro: mismo mensual (sin delta de MRR) y mismo unitario; con modelo nuevo, el modelo a la cantidad base.
+			const monthlyNew = methodOnly
+				? oldMonthly
+				: round2(pricedMonthlyEquivalent(spec!, { quantity, billing_frequency: frequency, is_recurring: true, term_months: term }, pct));
 
 			if (quantity <= 0) p.error(`${field}.quantity`, 'La cantidad base debe ser mayor que 0');
-			const unit = quantity > 0 && pct < 100 ? round6(monthlyNew / (quantity * (1 - pct / 100))) : 0;
+			const unit = methodOnly
+				? num(item.unit_price ?? num(item.annual_unit_price) / 12)
+				: quantity > 0 && pct < 100
+					? round6(monthlyNew / (quantity * (1 - pct / 100)))
+					: 0;
 			const origQuantity = num(item.quantity) > 0 ? num(item.quantity) : 1;
+			const oldTermMonths = num(item.term_months);
 			const key = p.newKey();
 			const renewalRow: NewItemRow = {
 				key,
@@ -5076,12 +5113,15 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 				unit_of_measure: item.unit_of_measure,
 				categoria: 'RENEWAL',
 				quantity,
-				unit_price: unit,
-				annual_unit_price: round6(unit * 12),
-				price_entry_mode: 'monthly',
-				discount_type: pct > 0 ? 'Porcentaje' : null,
-				discount_value: pct,
-				price: round2(unit * quantity * term),
+				unit_price: methodOnly && item.price_entry_mode === 'annual' ? null : unit,
+				annual_unit_price:
+					methodOnly && item.annual_unit_price !== null && item.annual_unit_price !== undefined
+						? num(item.annual_unit_price)
+						: round6(unit * 12),
+				price_entry_mode: methodOnly && item.price_entry_mode === 'annual' ? 'annual' : 'monthly',
+				discount_type: methodOnly ? (item.discount_type ?? null) : pct > 0 ? 'Porcentaje' : null,
+				discount_value: methodOnly ? num(item.discount_value) : pct,
+				price: methodOnly && oldTermMonths > 0 ? round2((num(item.price) * term) / oldTermMonths) : round2(unit * quantity * term),
 				final_price: round2(monthlyNew * term),
 				currency: item.currency ?? ctx.contract.contract_currency,
 				billing_frequency: frequency,
@@ -5094,16 +5134,48 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 				renews_item_id: item.id,
 				booking_date: ctx.today,
 				auto_renew: item.auto_renew,
-				price_id: null,
+				// Solo el modo de cobro: el mismo precio (misma fila de `prices`); con modelo nuevo, una versión siguiente.
+				price_id: methodOnly ? item.price_id : null,
 				quote_item_id: null,
 				billing_anchor_day: validAnchorDay(item.billing_anchor_day),
 				price_spec: spec,
+				reuse_price: methodOnly,
 				price_name: typeof item.raw.price_name === 'string' && item.raw.price_name ? item.raw.price_name : null,
-				price_version: item.price_id ? num(item.raw.price_version ?? 1) + 1 : 1,
-				supersedes_price_id: item.price_id ?? null,
-				renewal_base_unit_price: Math.abs(monthlyNew - oldMonthly) >= 0.01 ? round6(oldMonthly / origQuantity) : null,
+				price_version: methodOnly ? null : item.price_id ? num(item.raw.price_version ?? 1) + 1 : 1,
+				supersedes_price_id: methodOnly ? null : (item.price_id ?? null),
+				renewal_base_unit_price: !methodOnly && Math.abs(monthlyNew - oldMonthly) >= 0.01 ? round6(oldMonthly / origQuantity) : null,
 				consumption: recorded,
 			};
+
+			if (methodOnly) {
+				const previousEnd = addDays(cut, -1);
+				const linesOf = (invoice: ChangeInvoiceRow) =>
+					invoice.lines.filter(
+						(line) => line.contract_item_id && cutIds.has(line.contract_item_id) && line.billing_period_end === previousEnd
+					);
+				const previousIssued = ctx.invoices.filter(isIssued).some((invoice) => linesOf(invoice).length > 0);
+				const previousPending = ctx.invoices.filter(isEditablePending).flatMap(linesOf)[0] ?? null;
+
+				if (billingMethod === 'Vencido') {
+					// a) Anticipado → Vencido: el período ya cobrado por adelantado no se repite; el que comienza en el corte sale al cerrarlo.
+					const firstIssue = nextPeriodStart(engineShape(item), anchor, addDays(cut, 1)) ?? addDays(item.end_date, 1);
+
+					p.warn(
+						'billing_method_to_arrears',
+						`"${item.product_name}" pasa a cobro vencido: el período que comienza el ${cut} se factura al cerrarlo (${firstIssue})${
+							previousIssued ? '; el período ya facturado por adelantado no se repite' : ''
+						}`
+					);
+				} else if (previousPending) {
+					// b) Vencido → Anticipado: el día del corte salen dos facturas, la del período vencido y la del que comienza.
+					p.warn(
+						'two_invoices_in_transition',
+						`"${item.product_name}" pasa a cobro anticipado desde el ${cut}: ese día salen dos facturas, la del período vencido (${
+							previousPending.billing_period_start ?? '…'
+						} a ${previousEnd}) y la del período que comienza`
+					);
+				}
+			}
 
 			p.insertItem(renewalRow);
 			// El original y sus ajustes vivos terminan el día antes del corte (mismo mensual: valor = mensual × meses que quedan).
@@ -5159,10 +5231,11 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 			summary = {
 				item_id: item.id,
 				cut,
+				billing_method_only: methodOnly,
 				model_before: current?.model ?? 'standard',
 				quantity_type_before: current?.quantity_type ?? 'fixed',
-				model_after: spec.model,
-				quantity_type_after: spec.quantity_type,
+				model_after: spec?.model ?? 'standard',
+				quantity_type_after: spec?.quantity_type ?? 'fixed',
 				base_quantity: quantity,
 				billing_method_before: item.billing_method ?? 'Anticipado',
 				billing_method_after: billingMethod,
@@ -5174,7 +5247,7 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 		}
 	}
 	if (engineItem) p.addGeneratedInvoices([engineItem], 'cycle');
-	p.closeHeaders('Cambio de modelo de precio');
+	p.closeHeaders(methodOnly ? 'Cambio de modo de cobro' : 'Cambio de modelo de precio');
 	p.mrrDelta = round2(mrrDelta);
 	const type = Math.abs(mrrDelta) < 0.005 ? 'RENEWAL' : mrrDelta > 0 ? 'UPSELL' : 'DOWNSELL';
 	const label: Record<string, string> = {
@@ -5184,6 +5257,19 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 		package: 'por paquete',
 		seat: 'por asiento',
 	};
+
+	if (methodOnly)
+		return p.finish({
+			type,
+			subtype: 'billing_method',
+			title: 'Cambio de modo de cobro',
+			description: item
+				? `"${item.product_name}" pasa a cobro ${billingMethod.toLowerCase()} desde el ${String(summary.cut ?? p.effective)}`
+				: 'Cambio de modo de cobro',
+			amount_delta: 0,
+			items_affected: item ? [item.id] : [],
+			metadata: { price_model: summary },
+		});
 
 	return p.finish({
 		type,

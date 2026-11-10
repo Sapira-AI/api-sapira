@@ -437,6 +437,7 @@ Reemplaza los chips técnicos de §5 por un paso 1 **"¿Qué pasó con el contra
 |---|---|---|
 | Cambió el precio o la cantidad de un producto | ¿Qué producto? ¿Valores nuevos? | `item_change` |
 | Cambiar el modelo de precio (Domi 05-10) | ¿Qué producto? ¿Modelo nuevo (tramos, volumen, paquete, asiento o por consumo)? | `price_model_change` (9.3.11) |
+| Cambió cuándo se factura (anticipado o vencido) (Stanhome 10-11) | ¿Qué producto? ¿Anticipado o vencido? ¿Desde cuándo? | `price_model_change` solo con `billing_method` (9.3.11) |
 | Cambió cada cuánto se factura o el plazo | ¿Frecuencia / plazo nuevo? ¿Desde cuándo? | `item_change` con `billing_frequency`/`term_months` (9.3.7) |
 | Agregó un producto (incl. otra moneda o desde una cotización) | ¿Qué producto y para qué cuenta? (¿mismo ciclo del contrato o su propio día?) | `item_add` (+ `enable_multicurrency`) |
 | Corregir un dato mal cargado (F4, reemplaza "Cambia la cuenta de un producto") | ¿Qué producto? ¿Qué dato estaba mal? | `item_update` (ver 9.2.1) |
@@ -635,6 +636,15 @@ tope, `invoice_line_mode`; estándar fijo viaja con `unit_amount`). Estados: Act
   de precio del asistente con su vista previa en vivo `POST /contracts/price-preview`; luego vista previa y aplicar como cualquier cambio).
 - Verificación en la copia local (`rebuild-devengo-comparacion.md` §11.4): ítem por consumo de SimpliRoute → tramos → consumo → Por Emitir por
   tramo y devengo = facturado.
+- **Solo el modo de cobro (Stanhome 10-11, CTR-2026-884106)**: `{ items: [{ item_id, billing_method }] }` sin `price` (o con el mismo modelo
+  que ya tiene) cambia Anticipado ↔ Vencido con el mismo corte (próximo inicio de período desde la fecha efectiva) y la misma regeneración de
+  Por Emitir; el RENEWAL conserva unitario, descuento (también en monto fijo), cantidad y **la misma fila de `prices`** (`reuse_price`: no nace
+  versión), MRR sin delta. Evento `RENEWAL` subtipo `billing_method`, título "Cambio de modo de cobro", `metadata.price_model.billing_method_only`.
+  Avisos: `billing_method_to_arrears` (Anticipado → Vencido: el período que comienza en el corte se factura al cerrarlo; si el anterior está
+  emitido, "no se repite"), `two_invoices_in_transition` (Vencido → Anticipado con el período anterior Por Emitir: el día del corte salen dos
+  facturas), `price_model_from_next_period` en palabras de cobro. Errores: el mismo modo que ya tiene (`change.items.0.billing_method`),
+  Anticipado en un ítem por consumo salvo asiento (`METERED_ADVANCE_MESSAGE`); la métrica no se vuelve a validar. Front: intención
+  **"Cambió cuándo se factura (anticipado o vencido)"** (`ModoCobroForm`), misma sugerencia de fecha efectiva que el modelo de precio.
 
 ### 9.4 Migración del bloque (una, `1790710000000-ContractModificationsBlock2`; entity a mano, commit antes de aplicar, `schema:status` + `schema:log` en QA)
 
