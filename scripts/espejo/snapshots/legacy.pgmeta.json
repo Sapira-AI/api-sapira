@@ -2,7 +2,7 @@
  "invoices_legacy": {
   "name": "public.invoices_legacy",
   "rls_enabled": true,
-  "rows": 9348,
+  "rows": 9581,
   "columns": [
    {
     "name": "id",
@@ -414,7 +414,7 @@
  "invoice_items_legacy": {
   "name": "public.invoice_items_legacy",
   "rls_enabled": true,
-  "rows": 11698,
+  "rows": 11775,
   "columns": [
    {
     "name": "id",
@@ -916,7 +916,7 @@
  "mrr_legacy": {
   "name": "public.mrr_legacy",
   "rls_enabled": true,
-  "rows": 11848,
+  "rows": 11847,
   "columns": [
    {
     "name": "id",
@@ -1461,7 +1461,7 @@
  "onboarding_events": {
   "name": "public.onboarding_events",
   "rls_enabled": true,
-  "rows": 0,
+  "rows": 673,
   "columns": [
    {
     "name": "id",

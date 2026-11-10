@@ -202,6 +202,21 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 	});
 
 	describe('planSendNow (enviar al ERP ahora)', () => {
+		it('emisión automática encendida en la factura: aviso will_post_on_send (se emite al enviarse, no queda como borrador); apagada, nada', () => {
+			const encendida = planSendNow(invoice({ auto_invoice: true }), context());
+
+			expect(encendida.warnings).toContainEqual(
+				expect.objectContaining({
+					code: 'will_post_on_send',
+					message: expect.stringContaining('se emite sin revisión y no queda como borrador'),
+				})
+			);
+			expect(encendida.blockers.map((blocker) => blocker.code)).not.toContain('will_post_on_send');
+			expect(planSendNow(invoice({ auto_invoice: false }), context()).warnings.map((warning) => warning.code)).not.toContain(
+				'will_post_on_send'
+			);
+		});
+
 		it('sin bloqueos → can_apply con el resumen para la confirmación', () => {
 			const plan = planSendNow(invoice({ fx_contract_to_invoice: 950 }), context());
 

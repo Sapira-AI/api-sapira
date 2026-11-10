@@ -373,6 +373,10 @@ export function planReissue(ctx: EditContext, changes: InvoiceEditInput | null |
 	// La fecha ya es la del contexto; las notas de la reemisión siempre dicen a quién reemplaza (las del cuerpo se agregan).
 	delete input.issue_date;
 	delete input.notes;
+	// Emisión automática: la reemisión nace con el interruptor VIGENTE del contrato, no con el de la anulada (Domi 02-11, CTR-2026-419: la
+	// usuaria lo apagó, reemitió, la copia heredó el encendido y se timbró). Un valor explícito en los cambios manda.
+	if ((input.auto_invoice === undefined || input.auto_invoice === null) && ctx.context.auto_invoice !== undefined)
+		input.auto_invoice = ctx.context.auto_invoice;
 	const plan = planInvoiceEdit(reissueCtx, input);
 	const extra = changes?.notes?.trim();
 

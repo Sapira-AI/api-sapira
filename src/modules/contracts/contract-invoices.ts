@@ -170,6 +170,11 @@ export interface ContractInvoiceRow {
 export const EXPLICIT_FX_SOURCES: readonly string[] = [...PER_INVOICE_FX_SOURCES];
 
 /** Contrato, compañía y razón social que gobiernan la factura. */
+/** Aviso del envío manual: la factura tiene la emisión automática encendida y se emitirá al enviarse (no queda como borrador). */
+export const WILL_POST_ON_SEND_CODE = 'will_post_on_send';
+export const WILL_POST_ON_SEND_MESSAGE =
+	'Esta factura tiene la emisión automática encendida: al enviarse se emite sin revisión y no queda como borrador en el ERP. Si quieres un borrador, apágala en Editar factura';
+
 export interface ContractInvoiceContext {
 	contract_id: string;
 	contract_number: string | null;
@@ -178,6 +183,8 @@ export interface ContractInvoiceContext {
 	contract_requires_references: boolean;
 	/** `auto_send_to_odoo` con NULL = sí (mismo criterio que el scheduler). */
 	auto_send_to_erp: boolean;
+	/** `contracts.auto_invoice` vigente: la reemisión lo toma de aquí, no de la factura anulada (Domi 02-11). Ausente = se conserva el de la factura. */
+	auto_invoice?: boolean;
 	payment_terms: unknown;
 	entity_payment_terms: unknown;
 	company_country: string | null;
@@ -472,6 +479,9 @@ export function planSendNow(invoice: ContractInvoiceRow, context: ContractInvoic
 	} else if (references === 'warning') {
 		warnings.push({ code: NEEDS_REFERENCE_CODE, message: DRAFT_WITHOUT_REFERENCE_MESSAGE });
 	}
+	// Emisión automática encendida en ESTA factura (Domi 02-11): al enviarse se emite sin revisión, no queda como borrador. Aviso, no bloqueo:
+	// el interruptor del contrato ya baja a las Por Emitir, y este es el caso de una factura encendida a mano desde Editar factura.
+	if (invoice.auto_invoice) warnings.push({ code: WILL_POST_ON_SEND_CODE, message: WILL_POST_ON_SEND_MESSAGE });
 	if (invoice.lines_count === 0) {
 		blockers.push({ code: 'no_lines', message: 'La factura no tiene líneas', next_step: null });
 	}

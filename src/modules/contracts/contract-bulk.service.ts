@@ -82,6 +82,9 @@ export class ContractBulkService {
 	 * - contratos cuyos ítems no están en la moneda del contrato → 400 (el trigger de moneda rechazaría el UPDATE);
 	 * - Multimoneda apagada con ítems en otra moneda → el contrato queda `blocked` en el resumen (la acción sigue con los demás);
 	 * - Requiere OC/HES se escribe también en todas las Por Emitir vivas del contrato (`pending_invoices_updated`);
+	 * - Emisión automática (Domi 02-11, caso Fernanda CTR-2026-419): el envío al ERP lee `invoices.auto_invoice`, así que el interruptor se
+	 *   escribe también, en los dos sentidos, en las Por Emitir vivas que todavía no están en el ERP (sin `odoo_invoice_id`: las que ya
+	 *   tienen borrador allá viajaron con su `auto_post`); cuentan en `pending_invoices_updated`;
 	 * - los que ya tienen el valor pedido no se escriben (`changed: false`).
 	 */
 	async updateSettings(dto: BulkContractSettingsDto, holdingId: string, authId: string) {
@@ -180,7 +183,19 @@ export class ContractBulkService {
 			if (errors.length) throw validationException(errors);
 			// Un id común a todos los eventos de la misma acción masiva (como `bulk_id` de las facturas): se audita y revierte en bloque.
 			const bulkId = randomUUID();
-			const pendingUpdated = new Map<string, number>();
+			// Por Emitir tocadas por contrato (ids, para no contar dos veces una factura que recibe dos marcas en la misma acción).
+			const pendingTouched = new Map<string, Set<string>>();
+			const markTouched = (contractId: string, updated: Row[] | [Row[], number]) => {
+				const rows = (Array.isArray(updated[0]) ? updated[0] : updated) as Row[];
+				const ids = pendingTouched.get(contractId) ?? new Set<string>();
+
+				for (const row of rows) ids.add(String(row.id));
+				pendingTouched.set(contractId, ids);
+			};
+			const pendingUpdated = {
+				has: (contractId: string) => pendingTouched.has(contractId),
+				get: (contractId: string) => pendingTouched.get(contractId)?.size ?? 0,
+			};
 
 			for (const entry of plan.filter((item) => item.changed)) {
 				await runner.query(
@@ -199,14 +214,25 @@ export class ContractBulkService {
 				);
 				if (entry.before.requires_references_for_billing !== entry.after.requires_references_for_billing) {
 					// Requiere OC/HES: todas las Por Emitir vivas del contrato, también las atrasadas (Domi 26-10, caso NUR SRL).
-					const updated = (await runner.query(
-						`UPDATE invoices SET requires_references_for_billing = $3
-						WHERE contract_id = $1 AND holding_id = $2 AND ${PENDING_INVOICES_FOR_FLAGS_SQL} RETURNING id`,
-						[entry.id, holdingId, entry.after.requires_references_for_billing]
-					)) as Row[] | [Row[], number];
-					const touched = (Array.isArray(updated[0]) ? updated[0] : updated) as Row[];
-
-					pendingUpdated.set(entry.id, touched.length);
+					markTouched(
+						entry.id,
+						(await runner.query(
+							`UPDATE invoices SET requires_references_for_billing = $3
+							WHERE contract_id = $1 AND holding_id = $2 AND ${PENDING_INVOICES_FOR_FLAGS_SQL} RETURNING id`,
+							[entry.id, holdingId, entry.after.requires_references_for_billing]
+						)) as Row[] | [Row[], number]
+					);
+				}
+				if (entry.before.auto_invoice !== entry.after.auto_invoice) {
+					// Emisión automática: las Por Emitir vivas que aún no están en el ERP toman el valor nuevo (encender y apagar).
+					markTouched(
+						entry.id,
+						(await runner.query(
+							`UPDATE invoices SET auto_invoice = $3
+							WHERE contract_id = $1 AND holding_id = $2 AND odoo_invoice_id IS NULL AND ${PENDING_INVOICES_FOR_FLAGS_SQL} RETURNING id`,
+							[entry.id, holdingId, entry.after.auto_invoice === true]
+						)) as Row[] | [Row[], number]
+					);
 				}
 				await runner.query(
 					`INSERT INTO contract_lifecycle_events (

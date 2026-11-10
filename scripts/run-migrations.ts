@@ -15,6 +15,11 @@
  *   yarn migration:run    --target qa
  *   yarn migration:revert --target qa
  *   yarn migration:run    --target production --allow-production --confirm-target production
+ *   yarn migration:run    --target production ... --only TaxDocumentTypesExportMxPe1792500000000 --only Otra1792510000000
+ *
+ * `--only <Nombre>` (repetible) aplica solo esas migraciones pendientes y deja el resto para después (p. ej. una de otra
+ * persona que todavía no se consultó). Las demás siguen pendientes; esta versión de TypeORM no rechaza correr después una
+ * migración con fecha anterior a las ya ejecutadas.
  */
 import * as path from 'path';
 
@@ -31,6 +36,8 @@ export interface MigrationArguments {
 	target: string;
 	allowProduction: boolean;
 	confirmTarget?: string;
+	/** Nombres exactos de las migraciones a aplicar (`--only`, repetible); vacío = todas las pendientes. */
+	only: string[];
 }
 
 const MIGRATIONS_DIR = path.resolve(__dirname, '../src/databases/postgresql/migrations');
@@ -44,18 +51,24 @@ export function parseMigrationArgs(args: string[]): MigrationArguments {
 	let target: string | undefined;
 	let allowProduction = false;
 	let confirmTarget: string | undefined;
+	const only: string[] = [];
 	for (let index = 1; index < args.length; index += 1) {
 		const argument = args[index];
 		if (argument === '--target') target = args[++index];
-		else if (argument === '--confirm-target') confirmTarget = args[++index];
+		else if (argument === '--only') {
+			const nombre = args[++index];
+			if (!nombre || nombre.startsWith('--')) throw new Error('--only requiere el nombre de una migración (clase con sus 13 dígitos).');
+			only.push(nombre);
+		} else if (argument === '--confirm-target') confirmTarget = args[++index];
 		else if (argument === '--allow-production') allowProduction = true;
 		// Una bandera mal escrita (`--allow-prod`) no puede ignorarse en silencio.
 		else throw new Error(`Argumento no reconocido: ${argument}`);
 	}
 
 	if (!target) throw new Error('Falta --target <entorno>. Debe coincidir con la base de SUPABASE_DATABASE_URL.');
+	if (only.length && accion !== 'run') throw new Error('--only solo aplica a run.');
 
-	return { accion, target, allowProduction, confirmTarget };
+	return { accion, target, allowProduction, confirmTarget, only };
 }
 
 /** Aplicar o revertir en producción exige la misma confirmación doble que los assets. `show` no escribe. */
@@ -65,6 +78,19 @@ export function assertMigrationAllowed(arguments_: MigrationArguments, environme
 	if (!arguments_.allowProduction || arguments_.confirmTarget !== 'production') {
 		throw new Error(`${arguments_.accion} en producción requiere --allow-production y --confirm-target production.`);
 	}
+}
+
+/**
+ * Con `--only`, deja en el DataSource solo las migraciones pedidas (más las ya ejecutadas no importan: TypeORM salta las
+ * registradas). Un nombre que no exista entre las declaradas es un error: nada se aplica a medias.
+ */
+export function seleccionarMigraciones<T extends { name?: string; constructor: { name: string } }>(declaradas: T[], only: string[]): T[] {
+	if (!only.length) return declaradas;
+	const nombreDe = (migracion: T) => migracion.name ?? migracion.constructor.name;
+	const desconocidas = only.filter((nombre) => !declaradas.some((migracion) => nombreDe(migracion) === nombre));
+	if (desconocidas.length) throw new Error(`Migración desconocida en --only: ${desconocidas.join(', ')}`);
+
+	return declaradas.filter((migracion) => only.includes(nombreDe(migracion)));
 }
 
 async function main(): Promise<void> {
@@ -87,6 +113,12 @@ async function main(): Promise<void> {
 	const { default: dataSource } = await import('../src/databases/postgresql/data-source');
 	await dataSource.initialize();
 	try {
+		if (arguments_.only.length) {
+			const seleccion = seleccionarMigraciones(dataSource.migrations, arguments_.only);
+
+			dataSource.migrations.splice(0, dataSource.migrations.length, ...seleccion);
+			console.log(`Solo: ${arguments_.only.join(', ')}`);
+		}
 		const resultado =
 			arguments_.accion === 'run' ? await dataSource.runMigrations({ transaction: 'each' }) : [await dataSource.undoLastMigration()];
 		console.log(arguments_.accion === 'run' ? `Aplicadas ${resultado.length} migraciones.` : 'Revertida la última migración.');

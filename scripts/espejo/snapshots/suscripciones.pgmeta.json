@@ -420,7 +420,7 @@
  "subscription_items": {
   "name": "public.subscription_items",
   "rls_enabled": true,
-  "rows": 462,
+  "rows": 464,
   "columns": [
    {
     "name": "id",

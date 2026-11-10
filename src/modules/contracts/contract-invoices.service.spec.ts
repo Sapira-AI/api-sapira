@@ -176,7 +176,8 @@ describe('ContractInvoicesService (spec facturas §3.1–3.3)', () => {
 				can_apply: false,
 			});
 			expect(preview.blockers.map((blocker) => blocker.code)).toEqual(['needs_reference']);
-			expect(preview.warnings.map((warning) => warning.code)).toEqual(['spot_fx']);
+			// Con la emisión automática encendida avisa que se emitirá al enviarse (Domi 02-11).
+			expect(preview.warnings.map((warning) => warning.code)).toEqual(['will_post_on_send', 'spot_fx']);
 
 			// Prefactura sin OC: como borrador (sin emisión automática) se puede enviar con el aviso.
 			const { service: draftService } = build({ [INV_A]: invoiceRow(INV_A, { requires_references_for_billing: true, auto_invoice: false }) });
