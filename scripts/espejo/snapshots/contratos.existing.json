@@ -680,6 +680,11 @@
     "unique": false,
     "where": "(salesforce_opportunity_id IS NOT NULL)"
    },
+   "contracts_holding_number_unique_ci": {
+    "columns": [],
+    "unique": false,
+    "where": null
+   },
    "contracts_holding_number_unique": {
     "columns": [
      "holding_id",

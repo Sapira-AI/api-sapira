@@ -187,13 +187,11 @@
   ],
   "indexes": [
    {
-    "name": "contracts_holding_number_unique",
-    "cols": [
-     "holding_id",
-     "contract_number"
-    ],
+    "name": "contracts_holding_number_unique_ci",
+    "cols": null,
     "unique": true,
-    "where": "deleted_at IS NULL"
+    "where": "deleted_at IS NULL",
+    "expr": "CREATE UNIQUE INDEX contracts_holding_number_unique_ci ON public.contracts USING btree (holding_id, lower(contract_number)) WHERE (deleted_at IS NULL)"
    },
    {
     "name": "idx_contracts_auto_invoice",

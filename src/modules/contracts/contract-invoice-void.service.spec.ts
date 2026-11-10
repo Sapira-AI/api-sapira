@@ -38,6 +38,7 @@ const contextRow: Row = {
 	fx_invoice_policy: 'fixed',
 	requires_references_for_billing: false,
 	auto_send_to_odoo: true,
+	auto_invoice: false,
 	payment_terms: { kind: 'net', days: 30 },
 	client_entity_id: 'entity-1',
 	odoo_partner_id: 1,
@@ -173,6 +174,8 @@ interface Fixture {
 	taken?: boolean;
 	/** NC que carga "Registrar folio". */
 	creditNote?: Row;
+	/** Columnas del contexto del contrato que cambian en el caso (p. ej. `auto_invoice`). */
+	context?: Row;
 }
 
 const build = (fixture: Fixture = {}) => {
@@ -183,7 +186,7 @@ const build = (fixture: Fixture = {}) => {
 		if (sql.includes('FROM users WHERE auth_id')) return [{ id: 'user-1' }];
 		if (sql.includes('upper(trim(invoice_number))')) return fixture.taken ? [{ exists: 1 }] : [];
 		if (sql.includes('FOR UPDATE OF n')) return fixture.creditNote ? [fixture.creditNote] : [];
-		if (sql.includes('get_cutoff_date')) return [contextRow];
+		if (sql.includes('get_cutoff_date')) return [{ ...contextRow, ...(fixture.context ?? {}) }];
 		if (sql.includes('priced_base')) return [invoice];
 		if (sql.includes('AS paid')) return [fixture.extra ?? { voided: false, paid: false }];
 		if (sql.includes('ii.visible_line_id') && sql.includes('ANY($1::uuid[])')) return lines;
@@ -336,7 +339,25 @@ describe('ContractInvoiceVoidService (spec facturas §3.8 y §8)', () => {
 			[470000, 940, LINE_B],
 		]);
 		// La fecha de la tasa se copia de la línea origen cuando la tasa es la misma; si no, hoy.
-		expect(reissueLines[0][0]).toContain('o.fx_rate_date FROM invoice_items o WHERE o.id = $24::uuid AND o.fx_contract_to_invoice = $18::numeric');
+		expect(reissueLines[0][0]).toContain(
+			'o.fx_rate_date FROM invoice_items o WHERE o.id = $24::uuid AND o.fx_contract_to_invoice = $18::numeric'
+		);
+	});
+
+	it('la reemisión nace con la emisión automática vigente del contrato, no con la de la anulada (Domi 02-11, CTR-2026-419)', async () => {
+		// Anulada encendida, contrato apagado → reemisión apagada; anulada apagada, contrato encendido → reemisión encendida.
+		for (const [invoiceFlag, contractFlag] of [
+			[true, false],
+			[false, true],
+		] as const) {
+			const { service, runner } = build({ invoice: invoiceRow({ auto_invoice: invoiceFlag }), context: { auto_invoice: contractFlag } });
+
+			await service.voidInvoice(CONTRACT_ID, INV, { reason: 'issue_error', reissue: true } as VoidInvoiceDto, HOLDING, 'auth-1', TODAY);
+			const [reissue] = calls(runner.query, 'INSERT INTO invoices').filter(([sql]) => !(sql as string).includes(`'NC', $17`));
+
+			// Orden de parámetros de `writeReissue`: …, $11 export_type, $12 client_tax_id, $13 auto_invoice.
+			expect((reissue[1] as unknown[])[12]).toBe(contractFlag);
+		}
 	});
 
 	it('anular sin reemitir: los consumos del período quedan libres (invoice_id NULL) y un solo evento INVOICE_VOIDED', async () => {

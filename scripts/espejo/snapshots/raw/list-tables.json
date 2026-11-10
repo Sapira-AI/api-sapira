@@ -1052,7 +1052,7 @@
 		{
 			"name": "public.app_notification_recipients",
 			"rls_enabled": true,
-			"rows": 420,
+			"rows": 1008,
 			"columns": [
 				{
 					"name": "id",
@@ -1155,7 +1155,7 @@
 		{
 			"name": "public.app_notifications",
 			"rls_enabled": true,
-			"rows": 72,
+			"rows": 155,
 			"columns": [
 				{
 					"name": "id",
@@ -2069,7 +2069,7 @@
 		{
 			"name": "public.billable_metrics",
 			"rls_enabled": true,
-			"rows": 7,
+			"rows": 8,
 			"columns": [
 				{
 					"name": "id",
@@ -3264,7 +3264,7 @@
 		{
 			"name": "public.client_contacts",
 			"rls_enabled": true,
-			"rows": 262,
+			"rows": 394,
 			"columns": [
 				{
 					"name": "id",
@@ -3581,7 +3581,7 @@
 		{
 			"name": "public.client_entities",
 			"rls_enabled": true,
-			"rows": 1553,
+			"rows": 1702,
 			"columns": [
 				{
 					"name": "id",
@@ -3892,7 +3892,7 @@
 		{
 			"name": "public.client_entity_clients",
 			"rls_enabled": true,
-			"rows": 1512,
+			"rows": 1696,
 			"columns": [
 				{
 					"name": "id",
@@ -4111,7 +4111,7 @@
 		{
 			"name": "public.clients",
 			"rls_enabled": true,
-			"rows": 1816,
+			"rows": 1823,
 			"columns": [
 				{
 					"name": "id",
@@ -6728,7 +6728,7 @@
 		{
 			"name": "public.consumption_entries",
 			"rls_enabled": true,
-			"rows": 315,
+			"rows": 385,
 			"columns": [
 				{
 					"name": "id",
@@ -7033,7 +7033,7 @@
 		{
 			"name": "public.consumption_entry_revisions",
 			"rls_enabled": true,
-			"rows": 315,
+			"rows": 397,
 			"columns": [
 				{
 					"name": "id",
@@ -8937,7 +8937,7 @@
 		{
 			"name": "public.contract_items",
 			"rls_enabled": true,
-			"rows": 1235,
+			"rows": 1333,
 			"columns": [
 				{
 					"name": "id",
@@ -9592,7 +9592,7 @@
 		{
 			"name": "public.contract_lifecycle_events",
 			"rls_enabled": true,
-			"rows": 1031,
+			"rows": 1551,
 			"columns": [
 				{
 					"name": "id",
@@ -10639,7 +10639,7 @@
 		{
 			"name": "public.contracts",
 			"rls_enabled": true,
-			"rows": 701,
+			"rows": 898,
 			"columns": [
 				{
 					"name": "id",
@@ -15214,7 +15214,7 @@
 		{
 			"name": "public.invoice_items",
 			"rls_enabled": true,
-			"rows": 12158,
+			"rows": 12306,
 			"columns": [
 				{
 					"name": "id",
@@ -15740,7 +15740,7 @@
 		{
 			"name": "public.invoice_items_legacy",
 			"rls_enabled": true,
-			"rows": 11698,
+			"rows": 11775,
 			"columns": [
 				{
 					"name": "id",
@@ -16546,7 +16546,7 @@
 		{
 			"name": "public.invoice_references",
 			"rls_enabled": true,
-			"rows": 292,
+			"rows": 368,
 			"columns": [
 				{
 					"name": "id",
@@ -16933,7 +16933,7 @@
 		{
 			"name": "public.invoices",
 			"rls_enabled": true,
-			"rows": 10157,
+			"rows": 10292,
 			"columns": [
 				{
 					"name": "id",
@@ -17978,7 +17978,7 @@
 		{
 			"name": "public.invoices_legacy",
 			"rls_enabled": true,
-			"rows": 9348,
+			"rows": 9581,
 			"columns": [
 				{
 					"name": "id",
@@ -19004,7 +19004,7 @@
 		{
 			"name": "public.mrr_legacy",
 			"rls_enabled": true,
-			"rows": 11848,
+			"rows": 11847,
 			"columns": [
 				{
 					"name": "id",
@@ -19549,7 +19549,7 @@
 		{
 			"name": "public.notification_email_log",
 			"rls_enabled": true,
-			"rows": 116,
+			"rows": 378,
 			"columns": [
 				{
 					"name": "id",
@@ -20730,7 +20730,7 @@
 		{
 			"name": "public.onboarding_events",
 			"rls_enabled": true,
-			"rows": 0,
+			"rows": 673,
 			"columns": [
 				{
 					"name": "id",
@@ -22285,7 +22285,7 @@
 		{
 			"name": "public.quote_events",
 			"rls_enabled": true,
-			"rows": 27,
+			"rows": 51,
 			"columns": [
 				{
 					"name": "id",
@@ -23738,7 +23738,7 @@
 		{
 			"name": "public.revenue_schedule_monthly",
 			"rls_enabled": true,
-			"rows": 21330,
+			"rows": 21653,
 			"columns": [
 				{
 					"name": "id",
@@ -24602,7 +24602,7 @@
 		{
 			"name": "public.salesforce_accounts_stg",
 			"rls_enabled": true,
-			"rows": 135,
+			"rows": 256,
 			"columns": [
 				{
 					"name": "id",
@@ -25153,7 +25153,7 @@
 		{
 			"name": "public.salesforce_line_items_stg",
 			"rls_enabled": true,
-			"rows": 205,
+			"rows": 211,
 			"columns": [
 				{
 					"name": "id",
@@ -25356,7 +25356,7 @@
 		{
 			"name": "public.salesforce_object_mappings",
 			"rls_enabled": true,
-			"rows": 1483,
+			"rows": 1760,
 			"columns": [
 				{
 					"name": "id",
@@ -25752,7 +25752,7 @@
 		{
 			"name": "public.salesforce_opportunities_stg",
 			"rls_enabled": true,
-			"rows": 188,
+			"rows": 194,
 			"columns": [
 				{
 					"name": "id",
@@ -27725,7 +27725,7 @@
 		{
 			"name": "public.stripe_customers_bigquery",
 			"rls_enabled": true,
-			"rows": 27682,
+			"rows": 27683,
 			"columns": [
 				{
 					"name": "id",
@@ -28252,7 +28252,7 @@
 		{
 			"name": "public.stripe_subscriptions_stg",
 			"rls_enabled": true,
-			"rows": 493,
+			"rows": 567,
 			"columns": [
 				{
 					"name": "id",
@@ -28394,7 +28394,7 @@
 		{
 			"name": "public.stripe_sync_jobs",
 			"rls_enabled": true,
-			"rows": 242,
+			"rows": 247,
 			"columns": [
 				{
 					"name": "id",
@@ -28508,7 +28508,7 @@
 		{
 			"name": "public.subscription_items",
 			"rls_enabled": true,
-			"rows": 462,
+			"rows": 464,
 			"columns": [
 				{
 					"name": "id",
@@ -29290,7 +29290,7 @@
 		{
 			"name": "public.tax_document_types",
 			"rls_enabled": true,
-			"rows": 17,
+			"rows": 19,
 			"columns": [
 				{
 					"name": "id",
