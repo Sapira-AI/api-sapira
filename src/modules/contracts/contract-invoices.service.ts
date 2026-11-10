@@ -93,7 +93,7 @@ export const CONTRACT_INVOICE_SELECT = `SELECT i.id, i.contract_id, i.invoice_nu
 	) l ON true`;
 
 /** Contrato, compañía y razón social que gobiernan sus facturas (alias `c`; se completa con el WHERE). Lo reutiliza `billing` por lote. */
-export const CONTRACT_CONTEXT_SELECT = `SELECT c.id, c.contract_number, c.status, c.fx_invoice_policy, c.requires_references_for_billing, c.auto_send_to_odoo, c.payment_terms,
+export const CONTRACT_CONTEXT_SELECT = `SELECT c.id, c.contract_number, c.status, c.fx_invoice_policy, c.requires_references_for_billing, c.auto_send_to_odoo, c.auto_invoice, c.payment_terms,
 		c.client_entity_id, ce.odoo_partner_id, ce.payment_terms AS entity_payment_terms, co.country AS company_country, co.odoo_integration_id,
 		public.get_cutoff_date(c.holding_id, c.company_id)::text AS cutoff_date
 	FROM contracts c
@@ -109,6 +109,7 @@ export function contractInvoiceContextOf(row: Row, today: string): ContractInvoi
 		contract_fx_invoice_policy: toText(row.fx_invoice_policy),
 		contract_requires_references: row.requires_references_for_billing === true,
 		auto_send_to_erp: row.auto_send_to_odoo !== false,
+		auto_invoice: row.auto_invoice === true,
 		payment_terms: parseJson(row.payment_terms),
 		entity_payment_terms: parseJson(row.entity_payment_terms),
 		company_country: toText(row.company_country),

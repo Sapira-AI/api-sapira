@@ -340,14 +340,25 @@ describe('invoice-void (spec facturas §3.8 y §8, lógica pura)', () => {
 				fx_rate_source: null,
 			});
 			const ctx = editCtx({
-				invoice: issued({ invoice_currency: 'PEN', fx_contract_to_invoice: null, amount_contract_currency: 2618.33, amount_invoice_currency: 8821.15 }),
+				invoice: issued({
+					invoice_currency: 'PEN',
+					fx_contract_to_invoice: null,
+					amount_contract_currency: 2618.33,
+					amount_invoice_currency: 8821.15,
+				}),
 				lines: [partial, advisory],
 				items: new Map([
 					[ITEM, { ...item(ITEM, 'PATHFINDER+'), quantity: 560, unit_price: 34.65 } as EditItem],
 					[OTHER, item(OTHER, 'ASESORIA TECNICA')],
 				]),
 				issued_periods: [
-					{ contract_item_id: ITEM, billing_period_start: '2026-09-01', billing_period_end: '2026-09-30', invoice_id: 'inv-other', invoice_number: 'F-098' },
+					{
+						contract_item_id: ITEM,
+						billing_period_start: '2026-09-01',
+						billing_period_end: '2026-09-30',
+						invoice_id: 'inv-other',
+						invoice_number: 'F-098',
+					},
 				],
 				plan: { ...deviationPlan(), expected: new Map([[`${ITEM}|2026-09-01`, 19404]]), others: new Map([[`${ITEM}|2026-09-01`, 17465.08]]) },
 			});
@@ -355,18 +366,62 @@ describe('invoice-void (spec facturas §3.8 y §8, lógica pura)', () => {
 
 			expect(plan.blockers).toEqual([]);
 			expect(plan.lines.map((entry) => entry.action)).toEqual(['unchanged', 'unchanged']);
-			expect(plan.lines[0].after).toMatchObject({ quantity: 55.9573, unit_price_contract_currency: 34.65, subtotal_contract_currency: 1938.92, subtotal_invoice_currency: 6532.22 });
+			expect(plan.lines[0].after).toMatchObject({
+				quantity: 55.9573,
+				unit_price_contract_currency: 34.65,
+				subtotal_contract_currency: 1938.92,
+				subtotal_invoice_currency: 6532.22,
+			});
 			expect(plan.lines[1].after).toMatchObject({ quantity: 1, subtotal_contract_currency: 679.41, subtotal_invoice_currency: 2288.93 });
 			// El encabezado conserva sus montos y su (falta de) tasa: la tasa de cada línea viaja en la fila origen (`writeReissue` la copia).
-			expect(plan.header.after).toMatchObject({ amount_contract_currency: 2618.33, amount_invoice_currency: 8821.15, fx_contract_to_invoice: null });
+			expect(plan.header.after).toMatchObject({
+				amount_contract_currency: 2618.33,
+				amount_invoice_currency: 8821.15,
+				fx_contract_to_invoice: null,
+			});
 			expect(ctx.lines.map((row) => row.fx)).toEqual([3.369, 3.369]);
 			// Corregir la otra línea no toca la parcial: sigue siendo copia, no el mensual del ítem.
 			const edited = planReissue(ctx, {
-				lines: [{ id: 'line-advisory', contract_item_id: OTHER, quantity: 2, unit_price: 679.41, billing_period_start: '2026-09-01', billing_period_end: '2026-09-30' }],
+				lines: [
+					{
+						id: 'line-advisory',
+						contract_item_id: OTHER,
+						quantity: 2,
+						unit_price: 679.41,
+						billing_period_start: '2026-09-01',
+						billing_period_end: '2026-09-30',
+					},
+				],
 			});
 
-			expect(edited.lines.find((entry) => entry.id === 'line-partial')).toMatchObject({ action: 'unchanged', after: { quantity: 55.9573, subtotal_contract_currency: 1938.92 } });
-			expect(edited.lines.find((entry) => entry.id === 'line-advisory')).toMatchObject({ action: 'update', after: { quantity: 2, subtotal_contract_currency: 1358.82 } });
+			expect(edited.lines.find((entry) => entry.id === 'line-partial')).toMatchObject({
+				action: 'unchanged',
+				after: { quantity: 55.9573, subtotal_contract_currency: 1938.92 },
+			});
+			expect(edited.lines.find((entry) => entry.id === 'line-advisory')).toMatchObject({
+				action: 'update',
+				after: { quantity: 2, subtotal_contract_currency: 1358.82 },
+			});
+		});
+
+		it('emisión automática: la reemisión nace con el interruptor vigente del contrato, no con el de la anulada (Domi 02-11); un valor explícito manda', () => {
+			// Anulada con emisión encendida, contrato apagado después (CTR-2026-419): la reemisión queda apagada.
+			const apagado = planReissue(
+				editCtx({ invoice: { ...editCtx().invoice, auto_invoice: true }, context: context({ auto_invoice: false }) }),
+				null
+			);
+
+			expect(apagado.header.after.auto_invoice).toBe(false);
+			// Contrato encendido, anulada apagada: la reemisión se enciende.
+			const encendido = planReissue(
+				editCtx({ invoice: { ...editCtx().invoice, auto_invoice: false }, context: context({ auto_invoice: true }) }),
+				null
+			);
+
+			expect(encendido.header.after.auto_invoice).toBe(true);
+			// Cambios explícitos de la reemisión mandan; sin dato del contrato (contexto viejo) se conserva el de la factura.
+			expect(planReissue(editCtx({ context: context({ auto_invoice: true }) }), { auto_invoice: false }).header.after.auto_invoice).toBe(false);
+			expect(planReissue(editCtx({ invoice: { ...editCtx().invoice, auto_invoice: true } }), null).header.after.auto_invoice).toBe(true);
 		});
 
 		it('el contexto de reemisión saca a la emitida de los períodos emitidos (no choca overlaps_issued)', () => {

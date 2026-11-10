@@ -221,6 +221,55 @@ describe('ContractBulkService.updateSettings', () => {
 		});
 	});
 
+	it('emisión automática (Domi 02-11, caso Fernanda): encender y apagar se escribe también en las Por Emitir vivas sin ERP, con conteo en resumen y evento', async () => {
+		const handler: Handler = (sql) => (sql.includes('UPDATE invoices SET auto_invoice') ? [{ id: 'inv-1' }, { id: 'inv-2' }] : undefined);
+		// Encender: A estaba apagado (B ya encendido, no cambia).
+		const on = build([contract(A, 'CTR-A', true, false), contract(B, 'CTR-B', true, true)], handler);
+		const encendido = await on.service.updateSettings({ ids: [A, B], auto_invoice: true }, 'h-1', 'auth-1');
+
+		expect(encendido.results).toEqual([
+			{ id: A, contract_number: 'CTR-A', changed: true, pending_invoices_updated: 2 },
+			{ id: B, contract_number: 'CTR-B', changed: false },
+		]);
+		const [[invoicesSql, invoicesParams]] = calls(on.runner.query, 'UPDATE invoices SET auto_invoice');
+
+		// Solo las Por Emitir vivas que todavía no están en el ERP (las que ya tienen borrador viajaron con su auto_post).
+		expect(invoicesSql).toContain('odoo_invoice_id IS NULL');
+		expect(invoicesSql).toContain("status = 'Por Emitir' AND is_active AND COALESCE(is_legacy, false) = false");
+		expect(invoicesSql).not.toContain('issue_date');
+		expect(invoicesParams).toEqual([A, 'h-1', true]);
+		const [, , title, , , metadata] = calls(on.runner.query, `'SETTINGS_CHANGED'`)[0][1] as unknown[];
+
+		expect(title).toBe('Emisión automática activada');
+		expect(JSON.parse(metadata as string)).toMatchObject({
+			before: { auto_invoice: false },
+			after: { auto_invoice: true },
+			pending_invoices_updated: 2,
+		});
+		// Apagar: mismo camino con false.
+		const off = build([contract(A, 'CTR-A', true, true)], handler);
+		const apagado = await off.service.updateSettings({ ids: [A], auto_invoice: false }, 'h-1', 'auth-1');
+
+		expect(apagado.results).toEqual([{ id: A, contract_number: 'CTR-A', changed: true, pending_invoices_updated: 2 }]);
+		expect(calls(off.runner.query, 'UPDATE invoices SET auto_invoice')[0][1]).toEqual([A, 'h-1', false]);
+		// Solo el envío automático: las facturas no se tocan.
+		const send = build([contract(A, 'CTR-A', false, false)], handler);
+
+		await send.service.updateSettings({ ids: [A], auto_send_to_odoo: true }, 'h-1', 'auth-1');
+		expect(calls(send.runner.query, 'UPDATE invoices SET auto_invoice')).toHaveLength(0);
+	});
+
+	it('emisión automática + Requiere OC/HES en la misma acción: una factura tocada por las dos marcas cuenta una sola vez', async () => {
+		const { service } = build([contract(A, 'CTR-A', true, false)], (sql) =>
+			sql.includes('UPDATE invoices SET auto_invoice') || sql.includes('UPDATE invoices SET requires_references_for_billing')
+				? [{ id: 'inv-1' }, { id: 'inv-2' }]
+				: undefined
+		);
+		const result = await service.updateSettings({ ids: [A], auto_invoice: true, requires_references_for_billing: true }, 'h-1', 'auth-1');
+
+		expect(result.results).toEqual([{ id: A, contract_number: 'CTR-A', changed: true, pending_invoices_updated: 2 }]);
+	});
+
 	it('marcas del contrato: apagar Multimoneda con ítems en otra moneda queda bloqueado en el resumen (la acción sigue con los demás); Multiempresa solo contrato y evento', async () => {
 		const { service, runner } = build([
 			contract(A, 'CTR-A', false, false, { requires_multicurrency_billing: true, currency_mismatch: true, foreign_currencies: 'USD, UF' }),
