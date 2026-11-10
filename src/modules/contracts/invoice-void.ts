@@ -1,6 +1,6 @@
 import type { FieldError } from '@/core/utils/validation-errors';
 
-import { round2 } from './billing-engine';
+import { normalizeCountry, round2 } from './billing-engine';
 import { isCreditNote, ISSUED_STATUSES } from './contract-360';
 import { type ChangeInvoiceLineRow, mirrorCreditNoteAmounts, type MirrorCreditNoteAmounts } from './contract-changes';
 import {
@@ -263,6 +263,29 @@ export interface VoidPlan {
  * van la visible del documento y sus internas (`insertMirrorCreditNote` le pone a la visible el unitario = Σ acreditado). Bloqueos de
  * emitida; aviso `paid_invoice_voided` si tiene pagos (Facturación decide la devolución).
  */
+/**
+ * Aviso de una NC (anulación o descuento) sobre una factura que está en el ERP, según el país emisor (Stanhome 10-11): en México el
+ * documento se cancela ante el SAT sin nota de crédito; en el resto la NC se emite en el ERP. Aquí siempre queda registrada.
+ */
+export const creditNoteToErpWarning = (companyCountry: string | null | undefined, kind: 'void' | 'discount' = 'void'): InvoiceWarning => {
+	if (normalizeCountry(companyCountry) === 'MX')
+		return {
+			code: 'credit_note_to_erp',
+			message:
+				kind === 'void'
+					? 'La factura está en el ERP: cancela el CFDI ante el SAT (en México no lleva nota de crédito). Aquí la nota de crédito queda registrada y la factura pasa a anulada'
+					: 'La factura está en el ERP: en México el descuento sobre un CFDI se documenta ante el SAT. Aquí la nota de crédito queda registrada',
+		};
+
+	return {
+		code: 'credit_note_to_erp',
+		message:
+			kind === 'void'
+				? 'La factura está en el ERP: emite la nota de crédito en el ERP. Aquí queda registrada y la factura pasa a anulada'
+				: 'La factura está en el ERP: emite la nota de crédito en el ERP. Aquí queda registrada',
+	};
+};
+
 export function planVoid(
 	invoice: IssuedInvoiceRow,
 	rows: EditLineRow[],
@@ -279,11 +302,7 @@ export function planVoid(
 			code: 'paid_invoice_voided',
 			message: `La factura ${invoice.invoice_number ?? invoice.id} tiene pagos registrados: la NC la anula y la devolución o aplicación del pago se decide en Facturación`,
 		});
-	if (invoice.odoo_invoice_id !== null || invoice.sent_to_odoo_at !== null)
-		warnings.push({
-			code: 'credit_note_to_erp',
-			message: 'La factura está en el ERP: emite la nota de crédito en el ERP. Aquí queda registrada y la factura pasa a anulada',
-		});
+	if (invoice.odoo_invoice_id !== null || invoice.sent_to_odoo_at !== null) warnings.push(creditNoteToErpWarning(context.company_country, 'void'));
 	const ratios = remainingRatios(invoice, rows, previous);
 	const mirror: MirrorInput = rows
 		.filter((row) => (row.quantity !== 0 || row.subtotal !== 0) && (ratios.get(row.id) ?? 1) > 0)
@@ -361,9 +380,17 @@ export function reissueEditContext(ctx: EditContext, issueDate: string): EditCon
 	};
 }
 
+export const REISSUE_AUTO_INVOICE_OFF_MESSAGE =
+	'La reemisión nace con la emisión automática apagada: revísala y envíala al ERP cuando corresponda, o enciéndela desde Editar factura';
+export const REISSUE_SENDS_TODAY_MESSAGE =
+	'La reemisión queda con emisión automática y fecha de hoy o anterior: se emite hoy sin revisión. Elige una fecha futura o déjala apagada';
+
 /**
  * Plan de la reemisión: el editor sobre el contexto de reemisión; sin cambios = copia exacta de las líneas y del encabezado. La fecha de
  * emisión es la de `changes.issue_date` o hoy (una nueva Por Emitir), con vencimiento por la condición de pago salvo `changes.due_date`.
+ * **Emisión automática: la reemisión nace apagada** (Domi 10-11, Stanhome A10198 → A10216: la reemisión se timbró el mismo día y hubo que
+ * cancelarla en el SAT); antes tomaba el interruptor del contrato (02-11). Un `auto_invoice: true` explícito manda y, con fecha de hoy o
+ * anterior, avisa `reissue_sends_today`. Si el contrato o la anulada tenían la emisión encendida, avisa `reissue_auto_invoice_off`.
  */
 export function planReissue(ctx: EditContext, changes: InvoiceEditInput | null | undefined): EditPlan {
 	const issueDate = changes?.issue_date ?? ctx.context.today;
@@ -373,14 +400,16 @@ export function planReissue(ctx: EditContext, changes: InvoiceEditInput | null |
 	// La fecha ya es la del contexto; las notas de la reemisión siempre dicen a quién reemplaza (las del cuerpo se agregan).
 	delete input.issue_date;
 	delete input.notes;
-	// Emisión automática: la reemisión nace con el interruptor VIGENTE del contrato, no con el de la anulada (Domi 02-11, CTR-2026-419: la
-	// usuaria lo apagó, reemitió, la copia heredó el encendido y se timbró). Un valor explícito en los cambios manda.
-	if ((input.auto_invoice === undefined || input.auto_invoice === null) && ctx.context.auto_invoice !== undefined)
-		input.auto_invoice = ctx.context.auto_invoice;
+	const explicitOn = input.auto_invoice === true;
+
+	if (input.auto_invoice === undefined || input.auto_invoice === null) input.auto_invoice = false;
 	const plan = planInvoiceEdit(reissueCtx, input);
 	const extra = changes?.notes?.trim();
 
 	plan.header.after = { ...plan.header.after, notes: extra ? `${reissueCtx.invoice.notes} · ${extra}` : reissueCtx.invoice.notes };
+	if (!explicitOn && (ctx.context.auto_invoice === true || ctx.invoice.auto_invoice === true))
+		plan.warnings.push({ code: 'reissue_auto_invoice_off', message: REISSUE_AUTO_INVOICE_OFF_MESSAGE });
+	if (explicitOn && issueDate <= ctx.context.today) plan.warnings.push({ code: 'reissue_sends_today', message: REISSUE_SENDS_TODAY_MESSAGE });
 
 	return plan;
 }
@@ -650,10 +679,7 @@ export function planDiscountCreditNote(
 	);
 
 	if (invoice.odoo_invoice_id !== null || invoice.sent_to_odoo_at !== null)
-		warnings.push({
-			code: 'credit_note_to_erp',
-			message: 'La factura está en el ERP: emite la nota de crédito en el ERP. Aquí queda registrada y la factura pasa a anulada',
-		});
+		warnings.push(creditNoteToErpWarning(context.company_country, 'discount'));
 	if (invoice.paid || invoice.status === 'Pagada')
 		warnings.push({
 			code: 'paid_invoice_discounted',
