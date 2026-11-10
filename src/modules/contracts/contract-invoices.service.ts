@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 
-import { ConflictException, HttpException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, HttpException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { DataSource, type QueryRunner } from 'typeorm';
 
 import { validationException } from '@/core/utils/validation-errors';
@@ -12,6 +12,7 @@ import { setApiWriter } from './api-writer';
 import { refreshInvoiceSystemAmounts } from './api-written-fields';
 import { noChargeSql, PENDING_STATUS, unifiedV2Sql } from './contract-360';
 import { resolveUserId } from './contract-drafts.service';
+import { ContractInvoiceConsolidationService } from './contract-invoice-consolidation.service';
 import {
 	type ContractInvoiceContext,
 	type ContractInvoiceLineRow,
@@ -19,12 +20,14 @@ import {
 	CREDIT_NOTE_SEND_PENDING_CODE,
 	type ErpResetPlan,
 	EXPLICIT_FX_SOURCES,
+	type FxInput,
 	type FxPlanItem,
 	type FxRateSource,
 	INVOICE_EVENT_TYPES,
 	type InvoiceBlocker,
 	type InvoiceEventType,
 	type InvoiceWarning,
+	isPendingUnifiedV2,
 	type MarkIssuedPlan,
 	planErpReset,
 	planFx,
@@ -38,6 +41,7 @@ import {
 	UNMAPPED_PRODUCTS_SQL,
 } from './contract-invoices';
 import { ContractsService } from './contracts.service';
+import { pairKey, upperCode } from './multicurrency';
 
 import type {
 	ErpResetInvoiceDto,
@@ -74,6 +78,8 @@ export const CONTRACT_INVOICE_SELECT = `SELECT i.id, i.contract_id, i.invoice_nu
 			WHERE e.contract_id = i.contract_id AND e.holding_id = i.holding_id AND e.event_type = 'INVOICE_ISSUED_EXTERNALLY' AND e.metadata->>'invoice_id' = i.id::text) AS issued_externally,
 		${noChargeSql('i')} AS no_charge, (i.invoice_type = 'Unificada' AND ${unifiedV2Sql('i')}) AS unified_v2,
 		i.odoo_invoice_id, i.sent_to_odoo_at, i.dte_id, i.dte_status, i.dte_folio, i.sent_at, i.auto_invoice, i.requires_references_for_billing, i.consolidated_into_invoice_id,
+		(SELECT jsonb_build_object('invoice_number', u.invoice_number, 'status', u.status, 'is_active', u.is_active, 'in_erp', u.odoo_invoice_id IS NOT NULL)
+			FROM invoices u WHERE u.id = i.consolidated_into_invoice_id AND u.holding_id = i.holding_id) AS consolidated_into,
 		i.client_entity_id, i.company_id, ce.legal_name,
 		l.period_start::text AS period_start, l.period_end::text AS period_end,
 		COALESCE(l.lines_count, 0) AS lines_count, COALESCE(l.lines_without_product, 0) AS lines_without_product, COALESCE(l.priced_base, 0) AS priced_base,
@@ -91,6 +97,11 @@ export const CONTRACT_INVOICE_SELECT = `SELECT i.id, i.contract_id, i.invoice_nu
 			bool_or(ii.fx_rate_source IN (${EXPLICIT_FX_SOURCES.map((source) => `'${source}'`).join(', ')})) AS fx_explicit
 		FROM invoice_items ii WHERE ii.invoice_id = i.id
 	) l ON true`;
+
+/** Origen (inactivo) de una unificada Por Emitir sin borrador en el ERP: se edita como Por Emitir y la unificada se re-copia (Brightcell 10-11). */
+export const EDITABLE_UNIFIED_ORIGIN_SQL = (alias: string) =>
+	`(${alias}.consolidated_into_invoice_id IS NOT NULL AND EXISTS (SELECT 1 FROM invoices u WHERE u.id = ${alias}.consolidated_into_invoice_id
+		AND u.status = '${PENDING_STATUS}' AND u.is_active = true AND u.odoo_invoice_id IS NULL))`;
 
 /** Contrato, compañía y razón social que gobiernan sus facturas (alias `c`; se completa con el WHERE). Lo reutiliza `billing` por lote. */
 export const CONTRACT_CONTEXT_SELECT = `SELECT c.id, c.contract_number, c.status, c.fx_invoice_policy, c.requires_references_for_billing, c.auto_send_to_odoo, c.auto_invoice, c.payment_terms,
@@ -118,6 +129,20 @@ export function contractInvoiceContextOf(row: Row, today: string): ContractInvoi
 		has_entity: !!row.client_entity_id,
 		cutoff_date: toText(row.cutoff_date),
 		today,
+	};
+}
+
+/** Unificada que contiene a la factura (`consolidated_into` de `CONTRACT_INVOICE_SELECT`), para el paso siguiente de sus bloqueos. */
+function consolidatedIntoOf(value: unknown): ContractInvoiceRow['consolidated_into'] {
+	const unified = parseJson(value) as Record<string, unknown> | null | undefined;
+
+	if (!unified || typeof unified !== 'object') return null;
+
+	return {
+		invoice_number: toText(unified.invoice_number),
+		status: toText(unified.status),
+		is_active: unified.is_active !== false,
+		in_erp: unified.in_erp === true,
 	};
 }
 
@@ -156,6 +181,7 @@ export function contractInvoiceRowOf(row: Row): ContractInvoiceRow {
 		auto_invoice: row.auto_invoice === true,
 		requires_references: row.requires_references_for_billing === true,
 		consolidated_into_invoice_id: toText(row.consolidated_into_invoice_id),
+		consolidated_into: consolidatedIntoOf(row.consolidated_into),
 		client_entity_id: toText(row.client_entity_id),
 		company_id: toText(row.company_id),
 		legal_name: toText(row.legal_name),
@@ -210,7 +236,8 @@ export class ContractInvoicesService {
 	constructor(
 		private readonly dataSource: DataSource,
 		private readonly contracts: ContractsService,
-		private readonly scheduler: InvoiceSchedulerService
+		private readonly scheduler: InvoiceSchedulerService,
+		@Optional() private readonly consolidation?: ContractInvoiceConsolidationService
 	) {}
 
 	// ---------------------------------------------------------------- enviar al ERP ahora (§3.1)
@@ -583,10 +610,88 @@ export class ContractInvoicesService {
 			const preview = this.fxPreview([plan]);
 
 			if (plan.blockers.length) throw this.blocked(plan.blockers, preview);
+			// Unificada Por Emitir (Brightcell 10-11): la tasa se escribe en sus facturas de origen y la unificada se vuelve a copiar.
+			if (isPendingUnifiedV2(invoice) && !invoice.odoo_invoice_id) {
+				const eventIds = await this.applyFxToUnified(runner, contract.id, holdingId, userId, invoice, plan, dto, isoDate(today));
+
+				return { ...preview, applied: true, event_ids: eventIds };
+			}
 			const eventIds = await this.applyFx(runner, contract.id, holdingId, userId, [plan], dto, isoDate(today), null);
 
 			return { ...preview, applied: true, event_ids: eventIds };
 		}).then(async (result) => ({ ...result, invoice: await this.contracts.invoiceDetail(contract.id, invoiceId, holdingId) }));
+	}
+
+	/**
+	 * Tipo de cambio sobre una unificada Por Emitir sin borrador en el ERP (Domi 10-11, caso Brightcell: la tasa de la OC se fijaba
+	 * desunificando y se perdían OC, fecha y glosas). Las tasas por par que resultan del plan (fijas, o derivadas del neto de la OC por par)
+	 * se escriben en cada factura de origen con el mismo origen de tasa (`manual` / `net_exact`), se registra el evento en la unificada y
+	 * `resyncFromOrigins` la vuelve a copiar conservando identidad, fecha, OC y glosas. Todo en la misma transacción.
+	 */
+	private async applyFxToUnified(
+		runner: QueryRunner,
+		contractId: string,
+		holdingId: string,
+		userId: string,
+		unified: ContractInvoiceRow,
+		plan: FxPlanItem,
+		dto: InvoiceFxDto,
+		today: string
+	): Promise<string[]> {
+		if (!this.consolidation) throw new ConflictException({ message: 'La unificación no está disponible', code: 'consolidation_unavailable' });
+		const invoiceCurrency = upperCode(unified.invoice_currency) || upperCode(unified.contract_currency);
+		const ratesByPair: Record<string, number> = {};
+
+		for (const line of plan.lines) {
+			const currency = upperCode(line.currency ?? unified.contract_currency);
+
+			if (currency && currency !== invoiceCurrency && line.fx !== null && line.fx !== undefined && line.fx !== 1)
+				ratesByPair[pairKey(currency, invoiceCurrency)] = line.fx;
+		}
+		if (dto.policy !== 'spot' && plan.write?.fx && !Object.keys(ratesByPair).length && upperCode(unified.contract_currency) !== invoiceCurrency)
+			ratesByPair[pairKey(upperCode(unified.contract_currency), invoiceCurrency)] = plan.write.fx;
+		const bulkId = randomUUID();
+		const eventIds: string[] = [];
+		const origins = await this.consolidation.loadOrigins(runner, holdingId, unified.id);
+
+		for (const origin of origins) {
+			if (!origin.contract_id) continue;
+			const row = await this.loadInvoiceOfHolding(runner, origin.id, holdingId, true);
+			// El origen se valoriza como una Por Emitir propia (está inactivo porque vive dentro de la unificada).
+			const originRow: ContractInvoiceRow = { ...row, is_active: true, consolidated_into_invoice_id: null, unified_v2: false };
+			const originLines = await this.loadLines(runner, origin.id, holdingId);
+			const originContext = await this.loadContext(runner, origin.contract_id, holdingId, today);
+			const originPair = pairKey(upperCode(originRow.contract_currency), invoiceCurrency);
+			const input: FxInput =
+				dto.policy === 'spot'
+					? { policy: 'spot' }
+					: {
+							policy: 'fixed',
+							rate: ratesByPair[originPair] ?? null,
+							rates_by_pair: ratesByPair,
+							rate_source_override: dto.policy === 'net_exact' ? 'net_exact' : null,
+						};
+			const originPlan = planFx(originRow, originLines, originContext, input);
+
+			if (originPlan.blockers.length) throw this.blocked(originPlan.blockers, this.fxPreview([plan]));
+			eventIds.push(...(await this.applyFx(runner, origin.contract_id, holdingId, userId, [originPlan], dto, today, bulkId)));
+		}
+		eventIds.push(...(await this.applyFx(runner, contractId, holdingId, userId, [plan], dto, today, bulkId)));
+		await this.consolidation.resyncFromOrigins(runner, holdingId, unified.id);
+
+		return eventIds;
+	}
+
+	/** Factura del holding por id (sin exigir contrato): orígenes de una unificada, que son de otros contratos. */
+	async loadInvoiceOfHolding(db: Queryable, invoiceId: string, holdingId: string, lock = false): Promise<ContractInvoiceRow> {
+		const [row] = (await db.query(`${CONTRACT_INVOICE_SELECT} WHERE i.id = $1::uuid AND i.holding_id = $2${lock ? ' FOR UPDATE OF i' : ''}`, [
+			invoiceId,
+			holdingId,
+		])) as Row[];
+
+		if (!row) throw new NotFoundException('Factura no encontrada');
+
+		return this.invoiceRow(row);
 	}
 
 	async previewFxBulk(idOrNumber: string, dto: InvoiceFxBulkDto, holdingId: string, today = new Date()) {
@@ -1019,9 +1124,18 @@ export class ContractInvoicesService {
 	}
 
 	/** Por Emitir activas del contrato ordenadas por emisión (para "esta y las siguientes"). */
-	async loadPendingInvoices(db: Queryable, contractId: string, holdingId: string, lock = false): Promise<ContractInvoiceRow[]> {
+	async loadPendingInvoices(
+		db: Queryable,
+		contractId: string,
+		holdingId: string,
+		lock = false,
+		includeUnifiedOrigins = false
+	): Promise<ContractInvoiceRow[]> {
+		// `includeUnifiedOrigins` (Brightcell 10-11): también las Por Emitir de origen (inactivas) de una unificada Por Emitir sin borrador en
+		// el ERP, que se editan a través de su unificada.
+		const active = includeUnifiedOrigins ? `(i.is_active = true OR ${EDITABLE_UNIFIED_ORIGIN_SQL('i')})` : 'i.is_active = true';
 		const rows = (await db.query(
-			`${CONTRACT_INVOICE_SELECT} WHERE i.contract_id = $1 AND i.holding_id = $2 AND i.status = '${PENDING_STATUS}' AND i.is_active = true
+			`${CONTRACT_INVOICE_SELECT} WHERE i.contract_id = $1 AND i.holding_id = $2 AND i.status = '${PENDING_STATUS}' AND ${active}
 			ORDER BY i.issue_date NULLS LAST, i.created_at, i.id${lock ? ' FOR UPDATE OF i' : ''}`,
 			[contractId, holdingId]
 		)) as Row[];

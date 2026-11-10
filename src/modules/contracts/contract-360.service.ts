@@ -6,6 +6,7 @@ import { NOT_PENDING_RENEWAL } from '@/modules/metrics/rsm-momentum';
 
 import { diffDays } from './billing-engine';
 import { todayFor } from './business-date';
+import { UNIFIED_INVOICE_TYPE } from './consumption';
 import {
 	type BlockerContext,
 	buildLifecycle,
@@ -119,16 +120,21 @@ export class Contract360Service {
 		}));
 	}
 
-	/** Todas las facturas del contrato (también inactivas y canceladas) con su período, líneas y referencias. */
+	/**
+	 * Todas las facturas del contrato (también inactivas y canceladas) con su período, líneas y referencias. Unificadas (Brightcell 10-11):
+	 * también las de otros contratos que tienen líneas de ESTE contrato, y en toda unificada el monto y las líneas que cuentan son solo las de
+	 * este contrato (`own_subtotal`, en su moneda): nunca el encabezado de la unificada (mezcla monedas y contratos). Sus orígenes siguen
+	 * inactivos y no suman (ni dos veces).
+	 */
 	private async loadInvoices(contractId: string, holdingId: string): Promise<ScheduleInvoice[]> {
 		const rows = await this.dataSource.query<Row[]>(
-			`SELECT i.id, i.invoice_number, i.status, i.document_type, i.is_active,
+			`SELECT i.id, i.invoice_number, i.status, i.document_type, i.is_active, i.invoice_type, i.contract_id,
 				i.issue_date::text AS issue_date, i.original_issue_date::text AS original_issue_date, i.due_date::text AS due_date,
 				i.contract_currency, i.invoice_currency, i.amount_contract_currency, i.amount_invoice_currency, i.fx_contract_to_invoice,
 				i.requires_references_for_billing, COALESCE(i.auto_invoice, false) AS auto_invoice, i.related_invoice_id,
 				l.period_start::text AS period_start, l.period_end::text AS period_end,
 				COALESCE(l.lines_count, 0) AS lines_count, COALESCE(l.lines_without_product, 0) AS lines_without_product,
-				COALESCE(l.has_non_recurring, false) AS has_non_recurring, l.fx_rate_source,
+				COALESCE(l.has_non_recurring, false) AS has_non_recurring, l.fx_rate_source, l.own_subtotal,
 				CASE WHEN i.status = '${PENDING_STATUS}' AND i.is_active THEN ${UNMAPPED_PRODUCTS_SQL('i')} ELSE '{}'::text[] END AS unmapped_products,
 				(SELECT COUNT(*) FROM invoice_references r WHERE r.invoice_id = i.id)
 					+ (SELECT COUNT(*) FROM invoice_reference_links rl WHERE rl.invoice_id = i.id) AS references_count
@@ -137,12 +143,14 @@ export class Contract360Service {
 				SELECT MIN(ii.billing_period_start) AS period_start, MAX(ii.billing_period_end) AS period_end, COUNT(*) AS lines_count,
 					COUNT(*) FILTER (WHERE ii.product_id IS NULL) AS lines_without_product,
 					bool_or(ci.is_recurring = false) AS has_non_recurring,
-					mode() WITHIN GROUP (ORDER BY ii.fx_rate_source) FILTER (WHERE ii.fx_rate_source IS NOT NULL) AS fx_rate_source
+					mode() WITHIN GROUP (ORDER BY ii.fx_rate_source) FILTER (WHERE ii.fx_rate_source IS NOT NULL) AS fx_rate_source,
+					SUM(ii.subtotal_contract_currency) AS own_subtotal
 				FROM invoice_items ii
 				LEFT JOIN contract_items ci ON ci.id = ii.contract_item_id
-				WHERE ii.invoice_id = i.id
+				WHERE ii.invoice_id = i.id AND (i.invoice_type IS DISTINCT FROM '${UNIFIED_INVOICE_TYPE}' OR ii.contract_id = $1)
 			) l ON true
-			WHERE i.contract_id = $1 AND i.holding_id = $2`,
+			WHERE i.holding_id = $2 AND (i.contract_id = $1
+				OR (i.invoice_type = '${UNIFIED_INVOICE_TYPE}' AND EXISTS (SELECT 1 FROM invoice_items x WHERE x.invoice_id = i.id AND x.contract_id = $1)))`,
 			[contractId, holdingId]
 		);
 
@@ -157,7 +165,9 @@ export class Contract360Service {
 			due_date: toText(row.due_date),
 			contract_currency: toText(row.contract_currency),
 			invoice_currency: toText(row.invoice_currency),
-			amount_contract_ccy: toNumber(row.amount_contract_currency),
+			// Unificada: solo las líneas de este contrato (en su moneda); el encabezado suma monedas y contratos distintos.
+			amount_contract_ccy:
+				toText(row.invoice_type) === UNIFIED_INVOICE_TYPE ? toNumber(row.own_subtotal) : toNumber(row.amount_contract_currency),
 			amount_invoice_ccy: toNullableNumber(row.amount_invoice_currency),
 			fx_contract_to_invoice: toNullableNumber(row.fx_contract_to_invoice),
 			fx_rate_source: toText(row.fx_rate_source),

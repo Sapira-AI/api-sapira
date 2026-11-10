@@ -1115,15 +1115,24 @@ export class ContractsService {
 		const contract = await this.resolveContract(idOrNumber, holdingId);
 		const { page = 1, limit = 50, status = 'all', sortBy = 'billing_period_start', sortOrder = 'asc' } = filters;
 		const params: unknown[] = [contract.id, holdingId];
-		const base = `WHERE i.contract_id = $1 AND i.holding_id = $2`;
+		// Unificadas (Brightcell 10-11): una fila por unificada vigente en CADA contrato de origen (también las de otros contratos con líneas de
+		// este) y sin filas sueltas para los orígenes que viven dentro de ella; los orígenes de una unificada deshecha vuelven activos y se ven
+		// como siempre, y la unificada deshecha queda en Anuladas ("Unificación deshecha").
+		const base = `WHERE i.holding_id = $2 AND (
+			(i.contract_id = $1 AND NOT (i.consolidated_into_invoice_id IS NOT NULL AND EXISTS (
+				SELECT 1 FROM invoices u WHERE u.id = i.consolidated_into_invoice_id AND u.is_active = true AND u.status IS DISTINCT FROM 'Cancelada')))
+			OR (i.invoice_type = 'Unificada' AND i.contract_id <> $1 AND EXISTS (SELECT 1 FROM invoice_items x WHERE x.invoice_id = i.id AND x.contract_id = $1)))`;
+		// Unificada deshecha (Cancelada al deshacer o rehacer): solo en Anuladas, para que "Todas" no se llene de filas sin efecto (soporte 10-11).
+		const undoneUnifiedSql = `(i.invoice_type IN ('Unificada', 'Consolidada') AND i.status = 'Cancelada')`;
 		const statusSql = {
+			all: `NOT ${undoneUnifiedSql}`,
 			pending: `i.is_active = true AND i.status = 'Por Emitir'`,
 			// Literal (no `$n`): un parámetro que la consulta no usa rompe el tipado de Postgres.
 			issued: `i.is_active = true AND i.status IN (${ISSUED_INVOICE_STATUSES.map((value) => `'${value}'`).join(', ')})`,
 			// Un origen de unificación (inactivo, `consolidated_into_invoice_id`) no es una anulada: se ve en "Todas" como "Unificada en …".
 			cancelled: `(i.status = 'Cancelada' OR (i.is_active = false AND i.consolidated_into_invoice_id IS NULL))`,
 		};
-		const statusFilter = status === 'all' ? '' : `AND ${statusSql[status]}`;
+		const statusFilter = `AND ${statusSql[status]}`;
 		// Lista blanca: el campo de orden nunca viene del usuario tal cual. Por período (defecto) desempata por emisión.
 		const orderColumn =
 			{
@@ -1166,7 +1175,7 @@ export class ContractsService {
 				LEFT JOIN LATERAL (
 					SELECT MIN(ii.billing_period_start) AS billing_period_start, MAX(ii.billing_period_end) AS billing_period_end,
 						COUNT(*) AS lines_count
-					FROM invoice_items ii WHERE ii.invoice_id = i.id
+					FROM invoice_items ii WHERE ii.invoice_id = i.id AND (i.invoice_type IS DISTINCT FROM 'Unificada' OR ii.contract_id = $1)
 				) lines ON true
 				${base} ${statusFilter}
 				ORDER BY ${orderColumn} ${direction} NULLS LAST${tieBreak}, i.id
@@ -1174,7 +1183,7 @@ export class ContractsService {
 				params
 			),
 			this.dataSource.query<Row[]>(
-				`SELECT COUNT(*) AS all_count,
+				`SELECT COUNT(*) FILTER (WHERE ${statusSql.all}) AS all_count,
 					COUNT(*) FILTER (WHERE ${statusSql.pending}) AS pending_count,
 					COUNT(*) FILTER (WHERE ${statusSql.issued}) AS issued_count,
 					COUNT(*) FILTER (WHERE ${statusSql.cancelled}) AS cancelled_count
@@ -1243,6 +1252,8 @@ export class ContractsService {
 				split_from_invoice_id: toText(row.split_from_invoice_id),
 				// Origen de una unificación (histórica del front anterior o v2): inactiva y apuntando al documento que la reemplaza. La lista la
 				// muestra "Unificada en <folio>" con enlace; no cuenta como Por Emitir ni como anulada.
+				/** Unificada deshecha (Cancelada al deshacer o rehacer): en Anuladas como "Unificación deshecha". */
+				unified_undone: isUnifiedType(toText(row.invoice_type)) && toText(row.status) === 'Cancelada',
 				consolidated_into_invoice_id: toText(row.consolidated_into_invoice_id),
 				consolidated_into: row.consolidated_into_invoice_id
 					? {

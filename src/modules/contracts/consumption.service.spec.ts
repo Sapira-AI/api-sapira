@@ -807,6 +807,19 @@ describe('ConsumptionService · factura emitida (§4.4: on_issued) y per_tier (�
 		expect(recomputed.warnings).toContain('La factura del período está Por Emitir: se recalcula (reemitir solo aplica a facturas emitidas)');
 	});
 
+	it('tasa fijada por factura (Brightcell 10-11): la línea que escribe el consumo hereda el origen manual / net_exact de la factura, no "consumption"', async () => {
+		const world = issuedWorld();
+		const { service, runner } = build((sql, params) =>
+			sql.includes('fx_rate_source = ANY($3::text[])') ? [{ fx_rate_source: 'manual' }] : world(sql, params)
+		);
+
+		await service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 1250, on_issued: 'additional' }, HOLDING, 'auth-1');
+		const [insert] = calls(runner.query, 'INSERT INTO invoice_items');
+
+		// $20 = fx_rate_source.
+		expect((insert[1] as unknown[])[19]).toBe('manual');
+	});
+
 	it('additional: crea una factura complementaria Por Emitir del mismo período con UNA línea por la diferencia (13,50), enlaza la entry y deja CONSUMPTION_ADDITIONAL_INVOICE; la emitida no se toca', async () => {
 		const { service, runner } = build(issuedWorld());
 		const result = await service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 1250, on_issued: 'additional' }, HOLDING, 'auth-1');

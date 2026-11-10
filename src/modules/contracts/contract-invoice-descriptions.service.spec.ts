@@ -19,6 +19,9 @@ import { SaveDescriptionTemplateDto, UpdateInvoiceDescriptionsDto, UpdateInvoice
 
 type Row = Record<string, unknown>;
 
+const consolidationMock = {
+	resyncFromOrigins: jest.fn().mockResolvedValue(undefined),
+} as unknown as import('./contract-invoice-consolidation.service').ContractInvoiceConsolidationService;
 const CONTRACT_ID = '11111111-1111-4111-8111-111111111111';
 const INV_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const INV_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -81,6 +84,8 @@ interface Fixture {
 	template?: unknown;
 	maxChars?: number | null;
 	references?: Row[];
+	/** Respuesta propia para una consulta (antes del enrutador por defecto). */
+	handler?: (sql: string, params: unknown[]) => Row[] | undefined;
 }
 
 const build = ({
@@ -89,9 +94,13 @@ const build = ({
 	template = null,
 	maxChars = 80,
 	references = [],
+	handler,
 }: Fixture = {}) => {
 	let events = 0;
 	const route = (sql: string, params: unknown[] = []): Row[] => {
+		const custom = handler?.(sql, params);
+
+		if (custom !== undefined) return custom;
 		if (sql.includes('FROM users WHERE auth_id')) return [{ id: 'user-1' }];
 		if (sql.includes('c.invoice_description_template, c.tax_document_type_id')) {
 			return [
@@ -107,7 +116,8 @@ const build = ({
 			];
 		}
 		if (sql.includes('priced_base')) {
-			if (sql.includes("i.status = 'Por Emitir' AND i.is_active = true"))
+			// Por Emitir del contrato (desde el 10-11 también los orígenes de una unificada Por Emitir sin ERP).
+			if (sql.includes("i.status = 'Por Emitir' AND (i.is_active = true OR") || sql.includes("i.status = 'Por Emitir' AND i.is_active = true"))
 				return Object.values(invoices).filter((row) => row.status === 'Por Emitir');
 			if (sql.includes('ANY($3::uuid[])')) return (params[2] as string[]).map((id) => invoices[id]).filter(Boolean);
 
@@ -145,7 +155,12 @@ const build = ({
 	} as unknown as ContractsService;
 	const invoicesService = new ContractInvoicesService(dataSource, contracts, {} as InvoiceSchedulerService);
 
-	return { service: new ContractInvoiceDescriptionsService(dataSource, contracts, invoicesService), runner, dataSource, contracts };
+	return {
+		service: new ContractInvoiceDescriptionsService(dataSource, contracts, invoicesService, consolidationMock),
+		runner,
+		dataSource,
+		contracts,
+	};
 };
 const calls = (mock: jest.Mock, needle: string) => mock.mock.calls.filter(([sql]) => (sql as string).includes(needle));
 const eventMeta = (mock: jest.Mock, index = 0) => JSON.parse(calls(mock, 'INSERT INTO contract_lifecycle_events')[index][1][6] as string) as Row;
@@ -298,6 +313,27 @@ describe('ContractInvoiceDescriptionsService (spec facturas §3.6–3.7a)', () =
 				invoice_ids: [INV_A],
 				lines: [{ line_id: 'l-1', invoice_id: INV_A, before: STANDARD, after: 'Licencia - octubre 2026' }],
 			});
+		});
+
+		it('apply_to_pending alcanza a los orígenes de una unificada Por Emitir sin ERP y la unificada se vuelve a copiar (Brightcell 10-11)', async () => {
+			consolidationMock.resyncFromOrigins = jest.fn().mockResolvedValue(undefined);
+			const { service, runner } = build({
+				invoices: { [INV_A]: invoiceRow(INV_A, { is_active: false, consolidated_into_invoice_id: 'uni-1' }) },
+				items: [itemRow('l-1', INV_A)],
+				handler: (sql, params) =>
+					sql.includes('AS unified_id') && sql.includes('u.odoo_invoice_id IS NULL') && (params[1] as string[]).includes(INV_A)
+						? [{ id: INV_A, unified_id: 'uni-1' }]
+						: undefined,
+			});
+			const template = { blocks: [{ type: 'product' as const }, { type: 'period' as const, format: 'month_year' }] };
+			const result = await service.saveTemplate(CONTRACT_ID, { template, apply_to_pending: true }, HOLDING, 'auth-1');
+
+			expect(result).toMatchObject({ updated_lines: 1, skipped_locked: 0 });
+			const [update] = calls(runner.query, 'UPDATE invoice_items ii SET description');
+
+			expect(update[1]).toEqual(['l-1', HOLDING, 'Licencia - octubre 2026', false]);
+			expect(update[0]).toContain('i.consolidated_into_invoice_id IS NOT NULL');
+			expect(consolidationMock.resyncFromOrigins).toHaveBeenCalledWith(runner, HOLDING, 'uni-1');
 		});
 
 		it('PUT null vuelve a la estándar (is_default) y guarda NULL', async () => {

@@ -192,12 +192,26 @@ describe('item_remove (M2)', () => {
 		);
 
 		expect(closed.preview.blockers[0]).toMatchObject({ code: 'period_closed', next_step: expect.stringContaining('Reabrir') });
+		// Unificada Por Emitir sin borrador en el ERP (Brightcell 10-11): ya no bloquea, pregunta (aviso) y el cambio sigue en los orígenes.
 		const unified = planChange(
 			context({ invoices: [...context().invoices, invoiceRow('12', { id: 'inv-uni', invoice_type: 'Unificada', status: 'Por Emitir' })] }),
 			request({ type: 'item_remove', items: [{ item_id: LICENCIA }] })
 		);
 
-		expect(unified.preview.blockers.map((blocker) => blocker.code)).toContain('unified_invoice_in_range');
+		expect(unified.preview.blockers.map((blocker) => blocker.code)).not.toContain('unified_invoice_in_range');
+		expect(unified.preview.warnings.map((warning) => warning.code)).toContain('unified_resync');
+		// Con borrador en el ERP bloquea con el paso siguiente.
+		const inErp = planChange(
+			context({
+				invoices: [
+					...context().invoices,
+					invoiceRow('12', { id: 'inv-uni', invoice_type: 'Unificada', status: 'Por Emitir', odoo_invoice_id: 77 }),
+				],
+			}),
+			request({ type: 'item_remove', items: [{ item_id: LICENCIA }] })
+		);
+
+		expect(inErp.preview.blockers.map((blocker) => blocker.code)).toContain('unified_invoice_in_erp');
 		expect(
 			fields(() =>
 				planChange(context(), request({ type: 'item_remove', items: [{ item_id: LICENCIA }] }, { reason_id: undefined, reason: undefined }))
@@ -844,6 +858,55 @@ describe('item_add (M1 alta)', () => {
 			'new_business_quote_on_existing_contract',
 			'quote_already_applied',
 		]);
+	});
+
+	it('una cotización se aplica por línea (Brightcell 10-11): con líneas ya aplicadas bloquea solo si el pedido no trae otras; las que faltan pasan con aviso', () => {
+		const quoteRow = (id: string) =>
+			({
+				id,
+				quote_id: 'q-1',
+				product_id: PRODUCT_NUEVO,
+				product_name: 'Producto nuevo',
+				account: 'Otra cuenta',
+				item_type: null,
+				unit_of_measure: null,
+				quantity: 1,
+				unit_price: 10,
+				annual_unit_price: null,
+				price_entry_mode: null,
+				discount_value: null,
+				billing_frequency: 'Mensual',
+				billing_method: null,
+				start_date: null,
+				is_recurring: true,
+				currency: null,
+				price_spec: null,
+			}) as any;
+		const ctx = context({
+			quote: { id: 'q-1', quote_type: 'Upsell', already_applied: true, applied_quote_item_ids: ['qi-1'] },
+			quote_items: new Map([
+				['qi-1', quoteRow('qi-1')],
+				['qi-2', quoteRow('qi-2')],
+			]),
+		});
+		const plan = (ids: string[]) =>
+			planChange(
+				ctx,
+				request(
+					{ type: 'item_add', items: ids.map((id) => ({ quote_item_id: id, product_id: PRODUCT_NUEVO, quantity: 1, unit_price: 10 })) },
+					{ origin: { type: 'quote', quote_id: 'q-1' } }
+				)
+			).preview;
+		const codes = (list: Array<{ code: string }>) => list.map((entry) => entry.code);
+
+		// La línea que faltaba: pasa, con aviso de que la cotización ya se aplicó en parte.
+		expect(codes(plan(['qi-2']).blockers)).not.toContain('quote_already_applied');
+		expect(codes(plan(['qi-2']).warnings)).toContain('quote_partially_applied');
+		// Solo líneas ya aplicadas: bloqueo como antes.
+		expect(codes(plan(['qi-1']).blockers)).toContain('quote_already_applied');
+		// Mezcla: bloquea nombrando que hay líneas ya aplicadas (hay que quitarlas del pedido).
+		expect(codes(plan(['qi-1', 'qi-2']).blockers)).toContain('quote_item_already_applied');
+		expect(codes(plan(['qi-1', 'qi-2']).blockers)).not.toContain('quote_already_applied');
 	});
 });
 
@@ -2780,5 +2843,59 @@ describe('item_update · corregir la fecha de inicio (caso CTR-2026-191, decisi�
 		const closed = move({ ...ninja(), contract: contractRow({ cutoff_date: '2026-09-30' }) }, '2026-10-01');
 
 		expect(closed.preview.blockers.map((blocker) => blocker.code)).toEqual(['period_closed']);
+	});
+});
+
+describe('unificadas (Brightcell 10-11): los orígenes de una unificada Por Emitir se editan como Por Emitir', () => {
+	const origin = (state: 'editable' | 'in_erp' | 'issued', overrides: Record<string, unknown> = {}) =>
+		invoiceRow('11', { is_active: false, consolidated_into_invoice_id: 'uni-1', unified_number: 'U-0001', unified_state: state, ...overrides });
+
+	it('origen editable: entra en las Por Emitir del cambio (sus líneas se tocan) y avisa unified_resync; en el ERP o emitida, bloquea', () => {
+		const editable = planChange(
+			context({ invoices: [...context().invoices.filter((invoice) => invoice.id !== 'inv-11'), origin('editable')] }),
+			request({ type: 'item_remove', items: [{ item_id: LICENCIA }] })
+		);
+
+		expect(editable.preview.blockers).toEqual([]);
+		expect(editable.preview.warnings.map((warning) => warning.code)).toContain('unified_resync');
+		expect(editable.preview.warnings.find((warning) => warning.code === 'unified_resync')?.message).toContain('U-0001');
+		expect(editable.ops.some((op) => 'invoice_id' in op && op.invoice_id === 'inv-11')).toBe(true);
+		for (const [state, code] of [
+			['in_erp', 'unified_invoice_in_erp'],
+			['issued', 'unified_issued'],
+		] as const) {
+			const plan = planChange(
+				context({ invoices: [...context().invoices.filter((invoice) => invoice.id !== 'inv-11'), origin(state)] }),
+				request({ type: 'item_remove', items: [{ item_id: LICENCIA }] })
+			);
+
+			expect(plan.preview.blockers.map((blocker) => blocker.code)).toContain(code);
+			// Inactiva y no editable: ninguna op la toca.
+			expect(plan.ops.some((op) => 'invoice_id' in op && op.invoice_id === 'inv-11')).toBe(false);
+		}
+	});
+
+	it('condiciones de facturación: el cambio de moneda/tasa alcanza al origen editable (4b) y avisa unified_resync una vez por unificada', () => {
+		const plan = planChange(
+			context({ invoices: [...context().invoices.filter((invoice) => invoice.id !== 'inv-11'), origin('editable')] }),
+			request({ type: 'billing_conditions', invoice_currency: 'USD', fx_invoice_policy: 'spot' }, { effective_date: '2026-11-01' })
+		);
+		const targets = ops(plan, 'update_invoices_fx').flatMap((op) =>
+			(op as { targets: Array<{ invoice_id: string }> }).targets.map((target) => target.invoice_id)
+		);
+
+		expect(targets).toContain('inv-11');
+		// Soporte 10-11: antes la política cambiaba los orígenes sin preguntar; ahora avisa como el upsell.
+		const resync = plan.preview.warnings.filter((warning) => warning.code === 'unified_resync');
+
+		expect(resync).toHaveLength(1);
+		expect(resync[0].message).toContain('U-0001');
+		// Sin orígenes de unificada no hay aviso.
+		const plain = planChange(
+			context(),
+			request({ type: 'billing_conditions', invoice_currency: 'USD', fx_invoice_policy: 'spot' }, { effective_date: '2026-11-01' })
+		);
+
+		expect(plain.preview.warnings.map((warning) => warning.code)).not.toContain('unified_resync');
 	});
 });
