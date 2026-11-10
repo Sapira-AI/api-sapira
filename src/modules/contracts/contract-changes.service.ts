@@ -41,10 +41,12 @@ import {
 	planChange,
 	planHorizonExtension,
 	type PlanOptions,
+	type UnifiedState,
 	validateChangeRequest,
 	type WriteOp,
 } from './contract-changes';
 import { cleanPaymentTerms, QUOTE_CONTRACT_CREATED_STAGE, resolveUserId } from './contract-drafts.service';
+import { ContractInvoiceConsolidationService } from './contract-invoice-consolidation.service';
 import { ContractInvoiceDescriptionsService } from './contract-invoice-descriptions.service';
 import { ContractInvoiceEditService, type PendingTermsPlan } from './contract-invoice-edit.service';
 import { ContractsService } from './contracts.service';
@@ -61,6 +63,14 @@ type Row = Record<string, unknown>;
 type Queryable = Pick<DataSource, 'query'> | QueryRunner;
 
 const toText = (value: unknown) => (value === null || value === undefined ? null : String(value));
+
+/** Estado de la unificada de un origen (`unified_state`, Brightcell 10-11): editable, con borrador en el ERP o emitida; null sin unificada. */
+function unifiedStateOf(row: Row): UnifiedState | null {
+	if (!row.consolidated_into_invoice_id || row.unified_status === null || row.unified_status === undefined) return null;
+	if (String(row.unified_status) !== PENDING_STATUS || row.unified_active === false) return 'issued';
+
+	return row.unified_odoo_invoice_id ? 'in_erp' : 'editable';
+}
 const toNumber = (value: unknown) => Number(value ?? 0) || 0;
 const toNullableNumber = (value: unknown) => (value === null || value === undefined ? null : toNumber(value));
 const round6 = (value: number) => Math.round(value * 1e6) / 1e6 || 0;
@@ -176,8 +186,22 @@ export class ContractChangesService {
 		private readonly contracts: ContractsService,
 		private readonly invoiceEdit: ContractInvoiceEditService,
 		private readonly descriptions: ContractInvoiceDescriptionsService,
+		private readonly consolidation: ContractInvoiceConsolidationService,
 		@Optional() private readonly notifications?: NotificationsService
 	) {}
+
+	/** Unificadas Por Emitir sin borrador en el ERP cuyos orígenes están entre `invoiceIds` (una vez cada una). */
+	private async unifiedToResync(runner: QueryRunner, holdingId: string, invoiceIds: string[]): Promise<string[]> {
+		if (!invoiceIds.length) return [];
+		const rows = (await runner.query(
+			`SELECT DISTINCT u.id FROM invoices i JOIN invoices u ON u.id = i.consolidated_into_invoice_id
+			WHERE i.id = ANY($1::uuid[]) AND i.holding_id = $2 AND u.holding_id = $2
+				AND u.status = '${PENDING_STATUS}' AND u.is_active = true AND u.odoo_invoice_id IS NULL`,
+			[invoiceIds, holdingId]
+		)) as Row[];
+
+		return rows.map((row) => String(row.id));
+	}
 
 	// ---------------------------------------------------------------- vista previa
 
@@ -921,6 +945,9 @@ export class ContractChangesService {
 					// Mismo constructor que el 360 (plantilla del contrato, ajuste al límite); salta protegidas, editadas a mano y bloqueadas.
 					const regenerated = await this.descriptions.regenerateLines(runner, contract.id, holdingId, op.line_ids);
 
+					// Las facturas con glosa nueva cuentan como tocadas: si son orígenes de una unificada, se re-copia (abajo).
+					for (const line of regenerated) if (!line.skipped_reason) touched.add(line.invoice_id);
+
 					plan.event.metadata = {
 						...plan.event.metadata,
 						descriptions_regenerated: regenerated.map((line) => ({
@@ -1217,6 +1244,12 @@ export class ContractChangesService {
 					break;
 				}
 			}
+		}
+		// Unificadas (Brightcell 10-11): toda factura de origen tocada vuelve a copiarse a su unificada Por Emitir sin borrador en el ERP, en la
+		// misma transacción (`resyncFromOrigins` conserva identidad, fecha, OC y glosas de la unificada).
+		for (const unifiedId of await this.unifiedToResync(runner, holdingId, [...touched])) {
+			await this.consolidation.resyncFromOrigins(runner, holdingId, unifiedId);
+			touched.add(unifiedId);
 		}
 		// `contracts.term` = mayor plazo de los ítems (antes `update_contract_term`) y montos en moneda del sistema.
 		if (itemIds.size) await syncContractTerm(runner, contract.id, holdingId);
@@ -1605,9 +1638,12 @@ export class ContractChangesService {
 					i.issue_date::text AS issue_date, i.due_date::text AS due_date, i.client_entity_id, i.contract_currency, i.invoice_currency,
 					i.fx_contract_to_invoice, i.tax_rate, i.amount_contract_currency, i.vat, i.amount_invoice_currency, i.total_invoice_currency,
 					i.odoo_invoice_id, i.sent_to_odoo_at, i.client_tax_id, i.credit_reason, i.credit_type, i.related_invoice_id, ${voidedSql('i')} AS voided,
+					i.consolidated_into_invoice_id, u.invoice_number AS unified_number, u.status AS unified_status, u.is_active AS unified_active,
+					u.odoo_invoice_id AS unified_odoo_invoice_id,
 					(SELECT COUNT(*) FROM invoice_references r WHERE r.invoice_id = i.id)
 						+ (SELECT COUNT(*) FROM invoice_reference_links rl WHERE rl.invoice_id = i.id) AS references_count
 				FROM invoices i
+				LEFT JOIN invoices u ON u.id = i.consolidated_into_invoice_id
 				WHERE i.contract_id = $1 AND i.holding_id = $2 AND COALESCE(i.is_legacy, false) = false
 				ORDER BY i.issue_date, i.id`,
 				[contractId, holdingId]
@@ -1661,7 +1697,14 @@ export class ContractChangesService {
 				? (db.query(
 						`SELECT q.id, q.quote_type, q.currency,
 							(EXISTS (SELECT 1 FROM contracts c WHERE c.quote_id = q.id AND c.deleted_at IS NULL)
-							 OR EXISTS (SELECT 1 FROM contract_lifecycle_events e WHERE e.holding_id = q.holding_id AND e.metadata->'origin'->>'quote_id' = q.id::text)) AS already_applied
+							 OR EXISTS (SELECT 1 FROM contract_lifecycle_events e WHERE e.holding_id = q.holding_id AND e.metadata->'origin'->>'quote_id' = q.id::text)) AS already_applied,
+							(SELECT COALESCE(array_agg(DISTINCT x.id), '{}'::text[]) FROM (
+								SELECT ci.quote_item_id::text AS id FROM contract_items ci JOIN quote_items qi ON qi.id = ci.quote_item_id
+								WHERE qi.quote_id = q.id AND ci.holding_id = q.holding_id
+								UNION
+								SELECT jsonb_array_elements_text(e.metadata->'quote_items') FROM contract_lifecycle_events e
+								WHERE e.holding_id = q.holding_id AND e.metadata->'origin'->>'quote_id' = q.id::text AND jsonb_typeof(e.metadata->'quote_items') = 'array'
+							) x) AS applied_quote_item_ids
 						FROM quotes q WHERE q.id = $1 AND q.holding_id = $2`,
 						[dto.origin.quote_id, holdingId]
 					) as Promise<Row[]>)
@@ -1832,6 +1875,9 @@ export class ContractChangesService {
 			status: toText(row.status),
 			is_active: row.is_active !== false,
 			is_legacy: row.is_legacy === true,
+			consolidated_into_invoice_id: toText(row.consolidated_into_invoice_id),
+			unified_number: toText(row.unified_number),
+			unified_state: unifiedStateOf(row),
 			invoice_type: toText(row.invoice_type),
 			document_type: toText(row.document_type),
 			export_type: toNullableNumber(row.export_type),
@@ -1899,6 +1945,9 @@ export class ContractChangesService {
 						id: String(quote.id),
 						quote_type: toText(quote.quote_type),
 						already_applied: quote.already_applied === true,
+						applied_quote_item_ids: Array.isArray(quote.applied_quote_item_ids)
+							? (quote.applied_quote_item_ids as unknown[]).map(String)
+							: [],
 						currency: toText(quote.currency),
 					}
 				: null,

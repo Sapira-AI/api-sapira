@@ -121,7 +121,7 @@ export class InvoiceFxDto extends InvoiceOperationDto {
 	rate?: number;
 
 	@ApiPropertyOptional({ description: 'Neto exacto en moneda de factura (obligatorio con net_exact; una factura a la vez)' })
-	@ValidateIf((dto: InvoiceFxDto) => dto.policy === 'net_exact' || present(dto.target_net_amount))
+	@ValidateIf((dto: InvoiceFxDto) => (dto.policy === 'net_exact' && !dto.net_by_pair) || present(dto.target_net_amount))
 	@IsNumber({ maxDecimalPlaces: 2 }, { message: 'Escribe el neto exacto en moneda de factura' })
 	@Min(0.01, { message: 'El neto exacto debe ser mayor que 0' })
 	target_net_amount?: number;
@@ -135,6 +135,17 @@ export class InvoiceFxDto extends InvoiceOperationDto {
 	@IsObject({ message: 'rates_by_pair debe ser un objeto { "USD>CLP": tasa }' })
 	@IsOptional()
 	rates_by_pair?: Record<string, number>;
+
+	@ApiPropertyOptional({
+		type: 'object',
+		additionalProperties: { type: 'number' },
+		example: { 'USD>CLP': 8612000, 'CLF>CLP': 1420000 },
+		description:
+			'Neto exacto (sin impuestos) en moneda de factura por par, caso OC con varias monedas (Brightcell 10-11): la tasa de cada par se deriva del neto ÷ subtotal de sus líneas. Con `net_exact` y varios pares es obligatorio; en una unificada se escribe en sus facturas de origen',
+	})
+	@IsObject({ message: 'net_by_pair debe ser un objeto { "USD>CLP": neto }' })
+	@IsOptional()
+	net_by_pair?: Record<string, number>;
 }
 
 /** `POST /contracts/:id/invoices/fx-bulk` (spec §3.2): varias facturas a spot o a una misma tasa fija (`net_exact` es de una sola). */
@@ -170,6 +181,17 @@ export class InvoiceFxBulkDto extends InvoiceOperationDto {
 	@IsObject({ message: 'rates_by_pair debe ser un objeto { "USD>CLP": tasa }' })
 	@IsOptional()
 	rates_by_pair?: Record<string, number>;
+
+	@ApiPropertyOptional({
+		type: 'object',
+		additionalProperties: { type: 'number' },
+		example: { 'USD>CLP': 8612000, 'CLF>CLP': 1420000 },
+		description:
+			'Neto exacto (sin impuestos) en moneda de factura por par, caso OC con varias monedas (Brightcell 10-11): la tasa de cada par se deriva del neto ÷ subtotal de sus líneas. Con `net_exact` y varios pares es obligatorio; en una unificada se escribe en sus facturas de origen',
+	})
+	@IsObject({ message: 'net_by_pair debe ser un objeto { "USD>CLP": neto }' })
+	@IsOptional()
+	net_by_pair?: Record<string, number>;
 }
 
 /** `POST /contracts/:id/invoices/:invoiceId/erp-reset` (§3.1): restablecer el borrador del ERP de una Por Emitir. */

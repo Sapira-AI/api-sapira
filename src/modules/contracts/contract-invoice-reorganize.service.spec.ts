@@ -175,6 +175,8 @@ const generatorRow: Row = {
 interface Fixture {
 	invoices?: Record<string, Row>;
 	lines?: Record<string, Row[]>;
+	/** Respuesta propia para una consulta (antes del enrutador por defecto). */
+	handler?: (sql: string, params: unknown[]) => Row[] | undefined;
 }
 
 const build = (fixture: Fixture = {}) => {
@@ -185,6 +187,9 @@ const build = (fixture: Fixture = {}) => {
 	};
 	let created = 0;
 	const route = (sql: string, params: unknown[] = []): Row[] => {
+		const custom = fixture.handler?.(sql, params);
+
+		if (custom !== undefined) return custom;
 		if (sql.includes('FROM users WHERE auth_id')) return [{ id: 'user-1' }];
 		if (sql.includes('get_cutoff_date')) return [contextRow];
 		if (sql.includes('priced_base')) {
@@ -297,6 +302,19 @@ describe('ContractInvoiceReorganizeService (spec facturas §3.5)', () => {
 		expect(runner.commitTransaction).toHaveBeenCalled();
 	});
 
+	it('tasa fijada por factura (Brightcell 10-11): la línea que llega a una factura con tasa manual / neto exacto hereda ese origen, no "reorganize"', async () => {
+		const { service, runner } = build({
+			handler: (sql, params) =>
+				sql.includes('fx_rate_source = ANY($3::text[])') && params[0] === INV_A ? [{ fx_rate_source: 'net_exact' }] : undefined,
+		});
+
+		await service.apply(CONTRACT_ID, dto({ operations: [{ op: 'merge', invoice_ids: [INV_A, INV_B] }], reason: 'OC' }), HOLDING, 'auth-1', TODAY);
+		const [move] = calls(runner.query, 'UPDATE invoice_items SET invoice_id');
+
+		expect((move[1] as unknown[]).slice(0, 3)).toEqual([LINE_B, HOLDING, INV_A]);
+		expect((move[1] as unknown[]).slice(-1)).toEqual(['net_exact']);
+	});
+
 	it('move_line a una factura nueva: INSERT con reglas del generador (FX del contrato para el período, split_reason reorganize, split_from)', async () => {
 		const { service, runner } = build({
 			invoices: { [INV_A]: invoiceRow(INV_A, '2026-10-01', { amount_contract_currency: '1500' }) },
@@ -352,7 +370,8 @@ describe('ContractInvoiceReorganizeService (spec facturas §3.5)', () => {
 		const [move] = calls(runner.query, 'UPDATE invoice_items SET invoice_id');
 
 		expect((move[1] as unknown[]).slice(0, 3)).toEqual([LINE_B, HOLDING, 'new-invoice-1']);
-		expect((move[1] as unknown[]).slice(-2)).toEqual([950, 'CLP']);
+		// …, tasa, moneda y origen de la tasa de la línea que se mueve (sin tasa fijada por factura en el destino: 'reorganize').
+		expect((move[1] as unknown[]).slice(-3)).toEqual([950, 'CLP', 'reorganize']);
 		expect(result.created_invoice_ids).toEqual(['new-invoice-1']);
 	});
 

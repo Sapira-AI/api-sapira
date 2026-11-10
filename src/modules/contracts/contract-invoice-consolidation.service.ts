@@ -110,12 +110,19 @@ const EVENT_SQL = `SELECT e.id, e.metadata FROM contract_lifecycle_events e
 
 export type ConsolidationPreview = ConsolidationPlan;
 
+/** Opciones de `preview`: `simulate_undo_of` = id de la unificada vigente cuyos orígenes se evalúan como si ya estuviera deshecha. */
+export interface PreviewOptions {
+	simulate_undo_of?: string | null;
+}
+
 /** Opciones de `applyInvoices`: notas (manual) o principal, regla y origen (unificación recurrente). */
 export interface ApplyOptions {
 	notes?: string | null;
 	main_contract_id?: string | null;
 	rule_id?: string | null;
 	source?: string;
+	/** Unificada anterior (ya deshecha, p. ej. al pausar la regla) de la que se heredan OC, fecha reprogramada y glosas (Brightcell 10-11). */
+	carry_from?: string | null;
 }
 
 /** Lo que la unificada anterior traspasa a la nueva al re-unificar (`reunifyInvoices`). */
@@ -186,10 +193,26 @@ export class ContractInvoiceConsolidationService {
 	// ---------------------------------------------------------------- preview y aplicar
 
 	/** Vista previa. La unificación recurrente fija el principal (encabezado y fecha de emisión). */
-	async preview(dto: ConsolidateInvoicesDto, holdingId: string, mainContractId: string | null = null): Promise<ConsolidationPreview> {
+	async preview(
+		dto: ConsolidateInvoicesDto,
+		holdingId: string,
+		mainContractId: string | null = null,
+		options: PreviewOptions = {}
+	): Promise<ConsolidationPreview> {
 		const ctx = await this.loadContext(this.dataSource, holdingId, dto.invoice_ids);
+		// Re-unificar (regla, Brightcell 10-11): los orígenes de la unificada vigente se evalúan como si ya estuviera deshecha (vuelven a
+		// Por Emitir y activos), que es lo que `reunifyInvoices` hace al aplicar; sin esto la vista previa los marcaba `not_pending` /
+		// `already_consolidated` y el mes salía "bloqueado" aunque al guardar se rehiciera bien.
+		const undone = options.simulate_undo_of ?? null;
+		const invoices = undone
+			? ctx.invoices.map((invoice) =>
+					invoice.consolidated_into_invoice_id === undone
+						? { ...invoice, status: PENDING_STATUS, is_active: true, consolidated_into_invoice_id: null }
+						: invoice
+				)
+			: ctx.invoices;
 
-		return planConsolidation({ ...ctx, main_contract_id: mainContractId });
+		return planConsolidation({ ...ctx, invoices, main_contract_id: mainContractId });
 	}
 
 	/** Aplica la consolidación. 409 `blocked` con `blockers[]` y el preview; devuelve el preview más `applied`, el id nuevo y los eventos. */
@@ -206,8 +229,17 @@ export class ContractInvoiceConsolidationService {
 	 */
 	async applyInvoices(invoiceIds: string[], holdingId: string, userId: string | null, options: ApplyOptions = {}, today = new Date()) {
 		const contractIds = await this.contractIdsOf(this.dataSource, holdingId, invoiceIds);
-		const result = await this.transaction(contractIds, holdingId, (runner) =>
-			this.applyIn(runner, invoiceIds, holdingId, userId, options, today, contractIds)
+		const result = await this.transaction(contractIds, holdingId, async (runner) =>
+			this.applyIn(
+				runner,
+				invoiceIds,
+				holdingId,
+				userId,
+				options,
+				today,
+				contractIds,
+				options.carry_from ? await this.carryFrom(runner, holdingId, options.carry_from) : null
+			)
 		);
 
 		return await this.appliedView(result, holdingId);
@@ -808,7 +840,8 @@ export class ContractInvoiceConsolidationService {
 		return unique.map((id) => byId.get(id)!);
 	}
 
-	private async loadOrigins(db: Queryable, holdingId: string, consolidatedId: string): Promise<ConsolidationInvoice[]> {
+	/** Orígenes (inactivos) de una unificada. Lo usa también el tipo de cambio por factura sobre una unificada (Brightcell 10-11). */
+	async loadOrigins(db: Queryable, holdingId: string, consolidatedId: string): Promise<ConsolidationInvoice[]> {
 		const rows = (await db.query(
 			`${INVOICE_SQL} WHERE i.holding_id = $1 AND i.consolidated_into_invoice_id = $2::uuid ORDER BY i.issue_date, i.id`,
 			[holdingId, consolidatedId]

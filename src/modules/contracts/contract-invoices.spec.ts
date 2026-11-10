@@ -23,7 +23,7 @@ import {
 	planSendNow,
 	sameDayOfMonth,
 	spotFxLines,
-	UNIFIED_MIXED_PAIRS_MESSAGE,
+	UNIFY_STEP,
 } from './contract-invoices';
 
 const TODAY = '2026-09-29';
@@ -1060,6 +1060,35 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 	describe('unificada v2 Por Emitir (Domi 07-10, caso Brightcell)', () => {
 		const unified = (overrides: Partial<ContractInvoiceRow> = {}) => invoice({ invoice_type: 'Unificada', unified_v2: true, ...overrides });
 
+		it('unified_invoice (soporte 10-11): el paso siguiente manda a la unificada que contiene al origen, según su estado', () => {
+			const origin = (consolidated_into: ContractInvoiceRow['consolidated_into']) =>
+				commonBlockers(invoice({ is_active: false, consolidated_into_invoice_id: 'u-1', consolidated_into })).find(
+					(b) => b.code === 'unified_invoice'
+				)!;
+			const editable = { invoice_number: 'U-7', status: 'Por Emitir', is_active: true, in_erp: false };
+
+			expect(origin(editable)).toEqual({
+				code: 'unified_invoice',
+				message: 'Está dentro de la factura unificada U-7',
+				next_step: 'Hazlo en la factura unificada U-7: el cambio se guarda en sus facturas de origen y la unificada se actualiza sola',
+			});
+			expect(origin({ ...editable, in_erp: true }).next_step).toBe(
+				'La factura unificada U-7 ya está como borrador en el ERP: elimina el borrador y usa "Restablecer borrador del ERP" en ella; después haz el cambio ahí'
+			);
+			expect(origin({ ...editable, status: 'Emitida' }).next_step).toBe(
+				'La factura unificada U-7 ya se emitió: lo emitido se corrige con nota de crédito desde la unificada'
+			);
+			// Sin cargar la unificada (fila vieja) o deshecha: el paso de siempre.
+			expect(origin(undefined).next_step).toBe(UNIFY_STEP);
+			expect(origin({ ...editable, status: 'Cancelada' }).next_step).toBe(UNIFY_STEP);
+			expect(origin({ ...editable, invoice_number: null }).message).toBe('Está dentro de la factura unificada que la contiene');
+			// La unificada v2 Por Emitir bloqueada (editar líneas, anular, reorganizar) manda a la factura de origen de cada contrato.
+			expect(commonBlockers(unified()).find((b) => b.code === 'unified_invoice')?.next_step).toBe(
+				'Haz el cambio en la factura de origen de cada contrato: la unificada se actualiza sola'
+			);
+			expect(commonBlockers(invoice({ invoice_type: 'Consolidada' })).find((b) => b.code === 'unified_invoice')?.next_step).toBe(UNIFY_STEP);
+		});
+
 		it('solo la unificada v2 Por Emitir activa se libera de unified_invoice; orígenes, históricas, Consolidada y emitidas no', () => {
 			expect(isPendingUnifiedV2(unified())).toBe(true);
 			expect(codes(operationBlockers(unified()))).toEqual([]);
@@ -1106,20 +1135,57 @@ describe('contract-invoices (lógica pura, spec facturas §3.1–3.3)', () => {
 			expect(codes(planErpReset(unified({ odoo_invoice_id: 5, unified_v2: false }), context()).blockers)).toEqual(['unified_invoice']);
 		});
 
-		it('Tipo de cambio: con un solo par se ajusta (con aviso de re-copia); con varios pares, bloqueo con mensaje claro', () => {
+		it('Tipo de cambio: con un solo par se ajusta (con aviso de re-copia); con varios pares, tasa fija por par o neto exacto por par (Brightcell 10-11)', () => {
 			const onePair = planFx(unified(), [line(), line({ id: 'line-2' })], context(), { policy: 'fixed', rate: 950 });
 
 			expect(onePair.blockers).toEqual([]);
 			expect(codes(onePair.warnings)).toContain('unified_recopy_fx');
 			expect(onePair.after.fx_rate).toBe(950);
-			// Líneas en USD y EUR facturadas en CLP: dos pares.
+			// Líneas en USD y EUR facturadas en CLP: dos pares, una tasa por par (antes se bloqueaba con "ajústalos en cada contrato de origen").
 			const mixed = planFx(unified(), [line({ currency: 'USD' }), line({ id: 'line-2', currency: 'EUR' })], context(), {
 				policy: 'fixed',
 				rates_by_pair: { 'USD>CLP': 950, 'EUR>CLP': 1050 },
 			});
 
-			expect(mixed.blockers).toEqual([expect.objectContaining({ code: 'unified_invoice', message: UNIFIED_MIXED_PAIRS_MESSAGE })]);
-			expect(mixed.write).toBeNull();
+			expect(mixed.blockers).toEqual([]);
+			expect(mixed.lines.map((entry) => [entry.id, entry.fx])).toEqual([
+				['line-1', 950],
+				['line-2', 1050],
+			]);
+			expect(mixed.write?.fx_rate_source).toBe('manual');
+			// Neto exacto de la OC por par: la tasa se deriva (neto ÷ Σ subtotal del par) y el redondeo va a la línea mayor del par.
+			const usd = [
+				line({ currency: 'USD', subtotal_contract_currency: 600, quantity: 6 }),
+				line({ id: 'line-1b', currency: 'USD', subtotal_contract_currency: 400, quantity: 4 }),
+			];
+			const nets = planFx(
+				unified(),
+				[...usd, line({ id: 'line-2', currency: 'EUR', subtotal_contract_currency: 500, quantity: 5 })],
+				context(),
+				{
+					policy: 'net_exact',
+					net_by_pair: { 'USD>CLP': 950001, 'EUR>CLP': 525000 },
+				}
+			);
+
+			expect(nets.blockers).toEqual([]);
+			expect(nets.write?.fx_rate_source).toBe('net_exact');
+			expect(nets.lines.map((entry) => [entry.id, entry.fx, entry.after.subtotal_invoice_currency])).toEqual([
+				['line-1', 950.001, 570000.6],
+				['line-1b', 950.001, 380000.4],
+				['line-2', 1050, 525000],
+			]);
+			// Σ líneas de cada par = neto de la OC (950.001 + 525.000).
+			expect(nets.after.amount_invoice_currency).toBe(1475001);
+			// Falta el neto de un par → bloqueo con el par.
+			expect(
+				codes(
+					planFx(unified(), [line({ currency: 'USD' }), line({ id: 'line-2', currency: 'EUR' })], context(), {
+						policy: 'net_exact',
+						net_by_pair: { 'USD>CLP': 1000 },
+					}).blockers
+				)
+			).toEqual(['net_exact_without_net']);
 			// Todo en la moneda de factura: no aplica tipo de cambio (como cualquier factura).
 			expect(
 				codes(planFx(unified({ contract_currency: 'CLP' }), [line({ currency: 'CLP' })], context(), { policy: 'fixed', rate: 1 }).blockers)

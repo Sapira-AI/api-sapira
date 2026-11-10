@@ -138,6 +138,8 @@ export interface ContractInvoiceRow {
 	auto_invoice: boolean;
 	requires_references: boolean;
 	consolidated_into_invoice_id: string | null;
+	/** Unificada que la contiene (folio, estado, activa, con borrador en el ERP); ausente = no se cargó. Da el paso siguiente del bloqueo. */
+	consolidated_into?: { invoice_number: string | null; status: string | null; is_active: boolean; in_erp: boolean } | null;
 	client_entity_id: string | null;
 	company_id: string | null;
 	legal_name: string | null;
@@ -219,12 +221,56 @@ export const CREDIT_NOTE_SEND_PENDING_CODE = 'credit_note_send_pending';
 
 export const UNIFY_STEP = 'Desunifica el documento en Facturación y vuelve a intentarlo';
 
+/**
+ * Bloqueo `unified_invoice` con el paso siguiente del flujo nuevo (Brightcell 10-11, soporte: antes decía siempre "Desunifica…"): el origen
+ * de una unificada Por Emitir sin borrador en el ERP se cambia desde la unificada (la tasa, la glosa y los cambios se guardan en los
+ * orígenes y ella se vuelve a copiar); con borrador en el ERP, primero se restablece; emitida, se corrige con nota de crédito desde la
+ * unificada. La unificada v2 Por Emitir bloqueada (editar líneas, anular, reorganizar) manda a la factura de origen de cada contrato.
+ * Las históricas sin evento y las `Consolidada` conservan el paso de desunificar.
+ */
+export function unifiedInvoiceBlocker(
+	invoice: Pick<ContractInvoiceRow, 'consolidated_into_invoice_id' | 'consolidated_into' | 'invoice_type' | 'status' | 'is_active' | 'unified_v2'>
+): InvoiceBlocker {
+	const code = 'unified_invoice';
+
+	if (invoice.consolidated_into_invoice_id) {
+		const unified = invoice.consolidated_into;
+		const label = unified?.invoice_number ? `la factura unificada ${unified.invoice_number}` : 'la factura unificada que la contiene';
+		const message = `Está dentro de ${label}`;
+
+		if (!unified || !unified.is_active) return { code, message, next_step: UNIFY_STEP };
+		if (unified.status === PENDING_STATUS && !unified.in_erp)
+			return { code, message, next_step: `Hazlo en ${label}: el cambio se guarda en sus facturas de origen y la unificada se actualiza sola` };
+		if (unified.status === PENDING_STATUS)
+			return {
+				code,
+				message,
+				next_step: `${label[0].toUpperCase()}${label.slice(1)} ya está como borrador en el ERP: elimina el borrador y usa "Restablecer borrador del ERP" en ella; después haz el cambio ahí`,
+			};
+		if (unified.status === 'Cancelada') return { code, message, next_step: UNIFY_STEP };
+
+		return {
+			code,
+			message,
+			next_step: `${label[0].toUpperCase()}${label.slice(1)} ya se emitió: lo emitido se corrige con nota de crédito desde la unificada`,
+		};
+	}
+	if (isPendingUnifiedV2(invoice))
+		return {
+			code,
+			message: 'Es una factura unificada: sus líneas vienen de las facturas de origen',
+			next_step: 'Haz el cambio en la factura de origen de cada contrato: la unificada se actualiza sola',
+		};
+
+	return { code, message: 'Es un documento unificado o consolidado entre facturas', next_step: UNIFY_STEP };
+}
+
 /** Tipo de cambio de una unificada v2 con líneas de varios pares: no se ajusta en la unificada (Domi 07-10). */
 export const UNIFIED_MIXED_PAIRS_MESSAGE = 'Tiene líneas con distintos tipos de cambio: ajústalos en cada contrato de origen y se re-copian';
 export const UNIFIED_MIXED_PAIRS_STEP = 'Cambia el tipo de cambio en la factura de cada contrato de origen';
 /** Aviso del tipo de cambio de una unificada v2: una re-copia desde los orígenes (consumo, re-unificar) vuelve a la tasa de cada origen. */
 export const UNIFIED_RECOPY_FX_WARNING =
-	'Es una factura unificada: si se vuelve a copiar desde sus contratos de origen (por ejemplo, al cambiar un consumo), vuelve a la tasa de cada origen';
+	'Es una factura unificada: la tasa se guarda en sus facturas de origen y la unificada se vuelve a copiar con ella (así no se pierde al rehacerla)';
 
 // ---------------------------------------------------------------- producto sin mapeo al ERP
 
@@ -268,7 +314,7 @@ export function commonBlockers(invoice: ContractInvoiceRow): InvoiceBlocker[] {
 		});
 	}
 	if (invoice.consolidated_into_invoice_id || invoice.invoice_type === 'Unificada' || invoice.invoice_type === 'Consolidada') {
-		blockers.push({ code: 'unified_invoice', message: 'Es un documento unificado o consolidado entre facturas', next_step: UNIFY_STEP });
+		blockers.push(unifiedInvoiceBlocker(invoice));
 	}
 	if (invoice.is_legacy) {
 		blockers.push({ code: 'legacy_invoice', message: 'Es una factura importada (legacy): no se opera desde el contrato', next_step: null });
@@ -316,13 +362,17 @@ export function operationBlockers(invoice: ContractInvoiceRow): InvoiceBlocker[]
 /**
  * Bloqueos para cambiar la descripción de las líneas de una factura (`PATCH …/invoices/descriptions`): los comunes y el borrador en el ERP.
  * Excepción (Domi 07-10): una unificada **v2** (con evento `INVOICE_CONSOLIDATED`) Por Emitir admite el texto manual (`mode: 'set'`) en
- * sus líneas: solo la glosa, sin montos. Las plantillas no (renderizarían con el contrato principal las líneas de otros contratos); los
- * orígenes inactivos de una unificada y las unificadas históricas siguen bloqueados (`unified_invoice`).
+ * sus líneas: solo la glosa, sin montos. Desde el 10-11 (Brightcell) también "Volver a la plantilla" (`mode: 'unlock'`): la línea deja de
+ * estar protegida y la unificada se vuelve a copiar desde sus orígenes, que tienen la glosa de su plantilla. Las plantillas directas no
+ * (renderizarían con el contrato principal las líneas de otros contratos); las unificadas históricas siguen bloqueadas (`unified_invoice`).
  */
 export function descriptionBlockers(invoice: ContractInvoiceRow, options: { unified_v2?: boolean; mode?: string | null } = {}): InvoiceBlocker[] {
 	const blockers = [...commonBlockers(invoice), erpDraftBlocker(invoice)].filter((blocker): blocker is InvoiceBlocker => !!blocker);
 	const manualOnUnified =
-		options.unified_v2 === true && options.mode === 'set' && invoice.invoice_type === 'Unificada' && !invoice.consolidated_into_invoice_id;
+		options.unified_v2 === true &&
+		(options.mode === 'set' || options.mode === 'unlock') &&
+		invoice.invoice_type === 'Unificada' &&
+		!invoice.consolidated_into_invoice_id;
 
 	return manualOnUnified ? blockers.filter((blocker) => blocker.code !== 'unified_invoice') : blockers;
 }
@@ -817,6 +867,10 @@ export interface FxInput {
 	target_net_amount?: number | null;
 	/** Multimoneda (spec-multimoneda §4): tasa fija por par (`USD>CLP`: 1 USD = rate CLP). Con un solo par basta `rate`. */
 	rates_by_pair?: Record<string, number> | null;
+	/** Neto exacto en moneda de factura por par (OC con varias monedas, Brightcell 10-11): la tasa de cada par se deriva. */
+	net_by_pair?: Record<string, number> | null;
+	/** Interno: una tasa fija que viene de un neto exacto conserva ese origen al escribirse en los orígenes de una unificada. */
+	rate_source_override?: 'net_exact' | null;
 }
 
 export interface FxLineAmounts {
@@ -1069,12 +1123,63 @@ function planFxByPair(
 			null,
 			'spot'
 		);
+	if (input.policy === 'net_exact' && input.net_by_pair) {
+		// Neto exacto por par (OC con varias monedas, Brightcell 10-11): tasa = neto ÷ Σ subtotal de las líneas del par; el redondeo va a la
+		// línea mayor de cada par, así Σ líneas del par = neto de la OC.
+		const nets = input.net_by_pair;
+		const rateOf = new Map<string, number>();
+
+		for (const currency of pairs) {
+			const key = pairKey(currency, invoiceCurrency);
+			const net = Number(nets[key]);
+			const base = round2(pairLines.filter((line) => line.currency === currency).reduce((sum, line) => sum + line.subtotal, 0));
+
+			if (!(net > 0))
+				blockers.push({
+					code: 'net_exact_without_net',
+					message: `Falta el neto exacto ${currency} → ${invoiceCurrency} (net_by_pair['${key}'])`,
+					next_step: `Escribe el neto de la OC en ${invoiceCurrency} para las líneas en ${currency}`,
+				});
+			else if (base <= 0)
+				blockers.push({
+					code: 'net_exact_base_zero',
+					message: `Las líneas en ${currency} suman 0: no se puede derivar la tasa`,
+					next_step: null,
+				});
+			else rateOf.set(currency, round6(net / base));
+		}
+		for (const key of Object.keys(nets).filter((key) => !pairs.some((code) => pairKey(code, invoiceCurrency) === key))) {
+			warnings.push({ code: 'pair_not_in_invoice', message: `La factura no tiene líneas del par ${key}: ese neto no se usa` });
+		}
+		if (blockers.length) return empty();
+		const valuation = valuateLinesByPair(pairLines, invoiceCurrency, (line) => rateOf.get(line.currency) ?? null, taxRate);
+
+		for (const currency of pairs) {
+			const own = valuation.lines.filter((line) => line.currency === currency && line.subtotal !== null);
+			const diff = round2(Number(nets[pairKey(currency, invoiceCurrency)]) - own.reduce((sum, line) => sum + (line.subtotal ?? 0), 0));
+
+			if (diff === 0 || !own.length) continue;
+			const largest = own.reduce((best, line) => ((line.subtotal ?? 0) > (best.subtotal ?? 0) ? line : best), own[0]);
+
+			largest.subtotal = round2((largest.subtotal ?? 0) + diff);
+			largest.tax = round2((largest.subtotal * taxRate) / 100);
+			largest.total = round2(largest.subtotal + largest.tax);
+		}
+		if (valuation.invoice) {
+			const subtotal = round2(valuation.lines.reduce((sum, line) => sum + (line.subtotal ?? 0), 0));
+			const tax = round2(valuation.lines.reduce((sum, line) => sum + (line.tax ?? 0), 0));
+
+			valuation.invoice = { subtotal, tax, total: round2(subtotal + tax) };
+		}
+
+		return finish(valuation, 'net_exact', 'fixed');
+	}
 	if (input.policy === 'net_exact') {
 		if (pairs.length > 1)
 			throw codedValidationException([
 				{
 					field: 'policy',
-					message: `El neto exacto se aplica a documentos con un solo par que convierte; esta factura tiene ${pairs.map((code) => pairKey(code, invoiceCurrency)).join(', ')}: usa tasa fija por par`,
+					message: `El neto exacto con varios pares (${pairs.map((code) => pairKey(code, invoiceCurrency)).join(', ')}) pide el neto de la OC por par (net_by_pair)`,
 					code: MULTICURRENCY_CODES.net_exact_multi_pair,
 				},
 			]);
@@ -1132,7 +1237,7 @@ function planFxByPair(
 
 	return finish(
 		valuateLinesByPair(pairLines, invoiceCurrency, (line) => rateFor(line.currency), taxRate),
-		'manual',
+		input.rate_source_override ?? 'manual',
 		'fixed'
 	);
 }
@@ -1158,19 +1263,15 @@ export function planFx(invoice: ContractInvoiceRow, lines: ContractInvoiceLineRo
 	const partial = partialBillingBlocker(invoice);
 
 	if (partial) blockers.push(partial);
-	// Unificada v2: un solo par que convierte (o ninguno) se ajusta aquí; con varios pares, en cada contrato de origen (se re-copian).
+	// Unificada v2 (Brightcell 10-11): la tasa (fija por par o derivada del neto de la OC por par) se escribe en sus facturas de origen y la
+	// unificada se vuelve a copiar con ella; antes, con varios pares, se bloqueaba ("ajústalos en cada contrato de origen").
 	if (isPendingUnifiedV2(invoice)) {
 		const invoiceCurrency = upperCode(invoice.invoice_currency) || upperCode(invoice.contract_currency);
 		const pairs = new Set(
 			lines.map((line) => upperCode(line.currency) || upperCode(invoice.contract_currency)).filter((currency) => currency !== invoiceCurrency)
 		);
 
-		if (pairs.size > 1) {
-			blockers.push({ code: 'unified_invoice', message: UNIFIED_MIXED_PAIRS_MESSAGE, next_step: UNIFIED_MIXED_PAIRS_STEP });
-
-			return empty();
-		}
-		if (pairs.size === 1) warnings.push({ code: 'unified_recopy_fx', message: UNIFIED_RECOPY_FX_WARNING });
+		if (pairs.size >= 1) warnings.push({ code: 'unified_recopy_fx', message: UNIFIED_RECOPY_FX_WARNING });
 	}
 	// Multimoneda: el documento se valoriza por par (líneas en monedas de ítem distintas).
 	if (hasPairLines(invoice, lines)) {
@@ -1281,9 +1382,9 @@ export function planFx(invoice: ContractInvoiceRow, lines: ContractInvoiceLineRo
 		blockers,
 		warnings,
 		before,
-		after: { fx_policy: 'fixed', fx_rate: fx, fx_rate_source: 'manual', fx_contract_to_invoice: fx, ...header },
+		after: { fx_policy: 'fixed', fx_rate: fx, fx_rate_source: input.rate_source_override ?? 'manual', fx_contract_to_invoice: fx, ...header },
 		lines: fixed,
-		write: { fx, fx_rate_source: 'manual', header },
+		write: { fx, fx_rate_source: input.rate_source_override ?? 'manual', header },
 	};
 }
 
@@ -1452,7 +1553,7 @@ export function planReferences(
 
 			if (draft) blockers.push(draft);
 		} else if (invoice.consolidated_into_invoice_id || invoice.invoice_type === 'Unificada' || invoice.invoice_type === 'Consolidada') {
-			blockers.push({ code: 'unified_invoice', message: 'Es un documento unificado o consolidado entre facturas', next_step: UNIFY_STEP });
+			blockers.push(unifiedInvoiceBlocker(invoice));
 		}
 		if (invoice.is_legacy) {
 			blockers.push({ code: 'legacy_invoice', message: 'Es una factura importada (legacy): no se opera desde el contrato', next_step: null });

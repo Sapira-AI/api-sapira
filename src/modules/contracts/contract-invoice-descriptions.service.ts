@@ -8,6 +8,7 @@ import { type FieldError, validationException } from '@/core/utils/validation-er
 import { setApiWriter } from './api-writer';
 import { PENDING_STATUS, unifiedV2Sql } from './contract-360';
 import { resolveUserId } from './contract-drafts.service';
+import { ContractInvoiceConsolidationService } from './contract-invoice-consolidation.service';
 import {
 	type ContractInvoiceRow,
 	descriptionBlockers,
@@ -130,7 +131,8 @@ export class ContractInvoiceDescriptionsService {
 	constructor(
 		private readonly dataSource: DataSource,
 		private readonly contracts: ContractsService,
-		private readonly invoices: ContractInvoicesService
+		private readonly invoices: ContractInvoicesService,
+		private readonly consolidation: ContractInvoiceConsolidationService
 	) {}
 
 	// ---------------------------------------------------------------- plantilla del contrato
@@ -218,6 +220,7 @@ export class ContractInvoiceDescriptionsService {
 				next === null ? null : JSON.stringify(next),
 			]);
 			await this.writeLines(runner, holdingId, applied);
+			await this.resyncAfterWrite(runner, context.id, holdingId, applied);
 			if (changed || applied.length) {
 				const invoiceIds = [...new Set(applied.map((plan) => plan.invoice_id))];
 
@@ -306,6 +309,18 @@ export class ContractInvoiceDescriptionsService {
 			const eventIds: string[] = [];
 
 			await this.writeLines(runner, holdingId, applied);
+			await this.resyncAfterWrite(runner, context.id, holdingId, applied);
+			// "Volver a la plantilla" en una unificada v2 (Brightcell 10-11): la línea ya no está protegida; la re-copia desde los orígenes trae
+			// la glosa de la plantilla de cada uno.
+			if (dto.mode === 'unlock') {
+				const unifiedIds = await this.unifiedV2Ids(
+					runner,
+					holdingId,
+					[...new Set(applied.map((plan) => plan.invoice_id))].map((id) => ({ id }) as ContractInvoiceRow)
+				);
+
+				for (const unifiedId of unifiedIds) await this.consolidation.resyncFromOrigins(runner, holdingId, unifiedId);
+			}
 			for (const [invoiceId, invoicePlans] of this.byInvoice(applied)) {
 				eventIds.push(
 					await this.insertEvent(runner, context.id, holdingId, userId, {
@@ -396,7 +411,8 @@ export class ContractInvoiceDescriptionsService {
 			[...new Set(lines.map((line) => line.invoice_id))],
 			true
 		);
-		const plans = planDescriptions(this.withBlockers(lines, invoices), {
+		const editable = await this.editableOriginUnified(runner, holdingId, invoices);
+		const plans = planDescriptions(this.withBlockers(lines, this.activateOrigins(invoices, editable)), {
 			mode: 'apply_template',
 			contract_template: context.template,
 			max_chars: context.max_chars,
@@ -404,6 +420,7 @@ export class ContractInvoiceDescriptionsService {
 		const applied = plans.filter((plan) => !plan.skipped_reason);
 
 		await this.writeLines(runner, holdingId, applied);
+		// La re-copia de la unificada la hace el servicio de cambios (facturas tocadas), no aquí.
 
 		return applied;
 	}
@@ -618,11 +635,13 @@ export class ContractInvoiceDescriptionsService {
 			: [];
 
 		const unifiedV2 = await this.unifiedV2Ids(db, holdingId, invoices);
+		const editable = await this.editableOriginUnified(db, holdingId, invoices);
 
-		return this.withBlockers([...ofInvoices, ...byLine.filter((line) => !ofInvoices.some((own) => own.line_id === line.line_id))], invoices, {
-			mode: dto.mode,
-			unified_v2: unifiedV2,
-		});
+		return this.withBlockers(
+			[...ofInvoices, ...byLine.filter((line) => !ofInvoices.some((own) => own.line_id === line.line_id))],
+			this.activateOrigins(invoices, editable),
+			{ mode: dto.mode, unified_v2: unifiedV2 }
+		);
 	}
 
 	/** Unificadas v2 (con evento `INVOICE_CONSOLIDATED`) entre las facturas dadas. */
@@ -640,12 +659,54 @@ export class ContractInvoiceDescriptionsService {
 
 	/** Líneas de las Por Emitir activas del contrato (para `apply_to_pending`), con el bloqueo de su factura. */
 	private async pendingLines(db: Queryable, contractId: string, holdingId: string, lock = false): Promise<DescriptionLineInput[]> {
-		const invoices = await this.invoices.loadPendingInvoices(db, contractId, holdingId, lock);
+		// También los orígenes de una unificada Por Emitir sin borrador en el ERP (Brightcell 10-11): se escriben y la unificada se re-copia.
+		const invoices = await this.invoices.loadPendingInvoices(db, contractId, holdingId, lock, true);
 
 		if (!invoices.length) return [];
 		const lines = await this.linesOf(db, contractId, holdingId, `AND i.id = ANY($3::uuid[])`, [invoices.map((invoice) => invoice.id)]);
 
-		return this.withBlockers(lines, invoices);
+		return this.withBlockers(lines, this.activateOrigins(invoices, await this.editableOriginUnified(db, holdingId, invoices)));
+	}
+
+	/**
+	 * Orígenes (inactivos) cuya unificada sigue Por Emitir sin borrador en el ERP: id del origen → id de su unificada. Para las glosas cuentan
+	 * como Por Emitir (`activateOrigins`) y, al escribirlas, la unificada se vuelve a copiar (`resyncUnified`).
+	 */
+	private async editableOriginUnified(db: Queryable, holdingId: string, invoices: ContractInvoiceRow[]): Promise<Map<string, string>> {
+		const origins = invoices.filter((invoice) => invoice.consolidated_into_invoice_id && !invoice.is_active).map((invoice) => invoice.id);
+
+		if (!origins.length) return new Map();
+		const rows = (await db.query(
+			`SELECT i.id, u.id AS unified_id FROM invoices i JOIN invoices u ON u.id = i.consolidated_into_invoice_id
+			WHERE i.holding_id = $1 AND i.id = ANY($2::uuid[]) AND u.status = '${PENDING_STATUS}' AND u.is_active = true AND u.odoo_invoice_id IS NULL`,
+			[holdingId, origins]
+		)) as Row[];
+
+		return new Map(rows.map((row) => [String(row.id), String(row.unified_id)]));
+	}
+
+	private activateOrigins(invoices: ContractInvoiceRow[], editable: Map<string, string>): ContractInvoiceRow[] {
+		// Como Por Emitir propia: activa y sin la marca de unificada (`commonBlockers` bloquearía `unified_invoice`); la relación queda en `editable`.
+		return invoices.map((invoice) => (editable.has(invoice.id) ? { ...invoice, is_active: true, consolidated_into_invoice_id: null } : invoice));
+	}
+
+	/** Tras escribir glosas: los orígenes de una unificada Por Emitir sin ERP la vuelven a copiar (Brightcell 10-11). */
+	private async resyncAfterWrite(runner: QueryRunner, contractId: string, holdingId: string, applied: DescriptionLinePlan[]): Promise<string[]> {
+		const invoiceIds = [...new Set(applied.map((plan) => plan.invoice_id))];
+
+		if (!invoiceIds.length) return [];
+		const invoices = await this.invoices.loadInvoicesByIds(runner, contractId, holdingId, invoiceIds);
+
+		return this.resyncUnified(runner, holdingId, invoiceIds, await this.editableOriginUnified(runner, holdingId, invoices));
+	}
+
+	/** Re-copia a su unificada cada origen cuyas líneas cambiaron (una vez por unificada). */
+	private async resyncUnified(runner: QueryRunner, holdingId: string, invoiceIds: string[], editable: Map<string, string>): Promise<string[]> {
+		const unified = [...new Set(invoiceIds.map((id) => editable.get(id)).filter((id): id is string => !!id))];
+
+		for (const id of unified) await this.consolidation.resyncFromOrigins(runner, holdingId, id);
+
+		return unified;
 	}
 
 	private withBlockers(
@@ -746,7 +807,8 @@ export class ContractInvoiceDescriptionsService {
 			await runner.query(
 				`UPDATE invoice_items ii SET description = $3, description_locked = $4, updated_at = now()
 				FROM invoices i
-				WHERE ii.id = $1 AND ii.holding_id = $2 AND i.id = ii.invoice_id AND i.status = '${PENDING_STATUS}' AND i.is_active = true`,
+				WHERE ii.id = $1 AND ii.holding_id = $2 AND i.id = ii.invoice_id AND i.status = '${PENDING_STATUS}'
+					AND (i.is_active = true OR i.consolidated_into_invoice_id IS NOT NULL)`,
 				[plan.line_id, holdingId, plan.after, plan.locked]
 			);
 		}

@@ -52,3 +52,27 @@ export function keepsRateAtIssue(source: string | null | undefined, rate: number
 
 	return fixedPolicy || KEPT_IN_SPOT.has(value);
 }
+
+/**
+ * Origen de la tasa para una línea que se reescribe o se agrega a una factura (Brightcell 10-11): si la factura ya tiene tasa **fijada por
+ * factura** (`manual` / `net_exact`, la de la OC), la línea nueva hereda ESE origen y no el del camino que la escribe (consumo, reorganizar,
+ * editar). Antes el consumo la reescribía como `consumption`: con contrato spot `explicitlyFixed` quedaba en false y el envío revalorizaba
+ * al día (se perdía la tasa de la OC); en unificadas y multimoneda esa línea iba al día y las demás quedaban fijas.
+ */
+export function inheritedFxSource(existing: Array<string | null | undefined>, fallback: string): string {
+	return existing.find((source) => isPerInvoiceFxSource(source)) ?? fallback;
+}
+
+/** Origen fijado por factura de las líneas de `invoiceId` (NULL si ninguna lo tiene), para `inheritedFxSource` desde un servicio. */
+export async function perInvoiceFxSourceOf(
+	db: { query: (sql: string, params?: unknown[]) => Promise<unknown> },
+	invoiceId: string,
+	holdingId: string
+): Promise<string | null> {
+	const rows = (await db.query(
+		`SELECT fx_rate_source FROM invoice_items WHERE invoice_id = $1 AND holding_id = $2 AND fx_rate_source = ANY($3::text[]) LIMIT 1`,
+		[invoiceId, holdingId, [...PER_INVOICE_FX_SOURCES]]
+	)) as Array<{ fx_rate_source?: string | null }> | undefined;
+
+	return rows?.[0]?.fx_rate_source ?? null;
+}

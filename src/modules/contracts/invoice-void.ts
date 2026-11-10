@@ -9,7 +9,7 @@ import {
 	type InvoiceBlocker,
 	invoiceDueDate,
 	type InvoiceWarning,
-	UNIFY_STEP,
+	unifiedInvoiceBlocker,
 } from './contract-invoices';
 import { type EditContext, type EditItem, type EditLineRow, type EditPlan, type InvoiceEditInput, planInvoiceEdit } from './invoice-edit';
 import { oneOffRevenueEffect, type OneOffRevenueTreatment, type RevenueEffect } from './one-off-discount';
@@ -79,7 +79,7 @@ export function issuedBlockers(invoice: IssuedInvoiceRow): InvoiceBlocker[] {
 		});
 	}
 	if (invoice.consolidated_into_invoice_id || invoice.invoice_type === 'Unificada' || invoice.invoice_type === 'Consolidada') {
-		blockers.push({ code: 'unified_invoice', message: 'Es un documento unificado o consolidado entre facturas', next_step: UNIFY_STEP });
+		blockers.push(unifiedInvoiceBlocker(invoice));
 	}
 	if (invoice.is_legacy) {
 		blockers.push({ code: 'legacy_invoice', message: 'Es una factura importada (legacy): no se opera desde el contrato', next_step: null });
