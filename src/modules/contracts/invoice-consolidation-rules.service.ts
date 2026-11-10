@@ -7,7 +7,7 @@ import { withApiWriter } from './api-writer';
 import { todayFor } from './business-date';
 import { PENDING_STATUS } from './contract-360';
 import { resolveUserId } from './contract-drafts.service';
-import { ContractInvoiceConsolidationService } from './contract-invoice-consolidation.service';
+import { type ApplyOptions, ContractInvoiceConsolidationService } from './contract-invoice-consolidation.service';
 import { type InvoiceBlocker } from './contract-invoices';
 import { type JobHoldingResult } from './contract-renewals.service';
 import { CONSOLIDATION_EVENT_TYPES, UNIFIED_INVOICE_TYPES } from './invoice-consolidation-read';
@@ -157,7 +157,8 @@ export class InvoiceConsolidationRulesService {
 			main_contract: { id: main.id, contract_number: main.contract_number, emission_day: main.emission_day },
 			months,
 			summary: {
-				will_unify: months.filter((month) => month.state === 'will_unify').length,
+				// `will_reunify` (se vuelve a unificar) cuenta como "se unifica" para el resumen.
+				will_unify: months.filter((month) => month.state === 'will_unify' || month.state === 'will_reunify').length,
 				already_unified: months.filter((month) => month.state === 'already_unified').length,
 				blocked: months.filter((month) => month.state === 'blocked').length,
 				single: months.filter((month) => month.state === 'single').length,
@@ -291,6 +292,28 @@ export class InvoiceConsolidationRulesService {
 	}
 
 	/**
+	 * Unificada deshecha más reciente que tenía entre sus orígenes alguna de las facturas por unir (p. ej. la que la pausa de la regla
+	 * deshizo, Brightcell 10-11): al volver a unificar, la nueva hereda de ella la OC, la emisión reprogramada y las glosas escritas a mano.
+	 */
+	private async withCarry(options: ApplyOptions, holdingId: string, invoiceIds: string[]): Promise<ApplyOptions> {
+		const previous = await this.lastUndoneUnified(holdingId, invoiceIds);
+
+		return previous ? { ...options, carry_from: previous } : options;
+	}
+
+	private async lastUndoneUnified(holdingId: string, invoiceIds: string[]): Promise<string | null> {
+		if (!invoiceIds.length) return null;
+		const rows = (await this.dataSource.query(
+			`SELECT e.metadata->>'consolidated_invoice_id' AS id FROM contract_lifecycle_events e
+			WHERE e.holding_id = $1 AND e.event_type = '${CONSOLIDATION_EVENT_TYPES.undone}' AND e.metadata->'source_invoice_ids' ?| $2::text[]
+			ORDER BY e.created_at DESC LIMIT 1`,
+			[holdingId, invoiceIds]
+		)) as Row[];
+
+		return rows[0]?.id ? String(rows[0].id) : null;
+	}
+
+	/**
 	 * Aplica una regla: por cada grupo (mes y documento) une las sueltas, o deshace y vuelve a armar la unificada si apareció una factura
 	 * nueva del mes (`reunifyInvoices`: en una sola transacción, y la nueva hereda las referencias OC/HES y las glosas escritas a mano de la
 	 * anterior). Cada grupo en su propia transacción (la de la consolidación): uno bloqueado no frena al resto.
@@ -318,7 +341,14 @@ export class InvoiceConsolidationRulesService {
 						options,
 						at
 					);
-				else await this.consolidation.applyInvoices(group.to_consolidate, rule.holding_id, userId, options, at);
+				else
+					await this.consolidation.applyInvoices(
+						group.to_consolidate,
+						rule.holding_id,
+						userId,
+						await this.withCarry(options, rule.holding_id, group.to_consolidate),
+						at
+					);
 				unified += 1;
 			} catch (error) {
 				if (!(error instanceof ConflictException)) throw error;
@@ -374,7 +404,7 @@ export class InvoiceConsolidationRulesService {
 	}
 
 	/**
-	 * Un mes para la tarjeta (`state`: unified · pending · blocked · single) o para la vista previa (`will_unify` · `already_unified` ·
+	 * Un mes para la tarjeta (`state`: unified · pending · blocked · single) o para la vista previa (`will_unify` · `will_reunify` · `already_unified` ·
 	 * `blocked` · `single`). Los grupos por unir pasan por `planConsolidation` (con el principal de la regla) para mostrar
 	 * sus bloqueos, avisos (`{ code, label, message }`), la fecha de emisión y el vencimiento que tendría la unificada y sus líneas
 	 * (`is_visible: false` = cantidad 0, no va al ERP).
@@ -399,7 +429,13 @@ export class InvoiceConsolidationRulesService {
 		}> = [];
 
 		if (group.action === 'unify' || group.action === 'reunify') {
-			const plan = await this.consolidation.preview({ invoice_ids: group.to_consolidate }, holdingId, mainContractId);
+			// Re-unificar: la vista previa simula el deshacer de la unificada vigente (sus orígenes vuelven a Por Emitir), como hará `runRule`.
+			const plan =
+				group.action === 'reunify' && group.unified
+					? await this.consolidation.preview({ invoice_ids: group.to_consolidate }, holdingId, mainContractId, {
+							simulate_undo_of: group.unified.id,
+						})
+					: await this.consolidation.preview({ invoice_ids: group.to_consolidate }, holdingId, mainContractId);
 
 			blockers = plan.blockers;
 			warnings = plan.warnings.map((warning) => ({ code: warning.code, label: warning.label, message: warning.message }));
@@ -443,7 +479,9 @@ export class InvoiceConsolidationRulesService {
 						? 'single'
 						: blocked
 							? 'blocked'
-							: 'will_unify';
+							: group.action === 'reunify'
+								? 'will_reunify'
+								: 'will_unify';
 
 		return {
 			month: group.month,

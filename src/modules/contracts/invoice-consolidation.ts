@@ -56,6 +56,8 @@ export const CONSOLIDATION_WARNINGS = {
 	auto_send_to_erp_differs: 'auto_send_to_erp_differs',
 	pair_rates_differ: 'pair_rates_differ',
 	spot_document: 'spot_document',
+	/** Un mismo par mezcla líneas con tasa fija y líneas al día (Brightcell 10-11): al emitir cada una va por su camino. */
+	fx_mixed_in_pair: 'fx_mixed_in_pair',
 	references_inherited: 'references_inherited',
 	description_fitted: DESCRIPTION_FITTED_CODE,
 } as const;
@@ -507,9 +509,12 @@ export function dedupeReferences(references: ConsolidationReference[]): Consolid
 }
 
 /**
- * Valorización por par antes de juntar (§7): cada línea conserva su moneda, su tasa y sus montos en moneda de factura; la línea en la moneda
- * de factura queda con FX 1. Si **alguna** línea que convierte es spot (sin tasa o sin montos), el documento queda spot entero: toda línea que
- * convierte pierde tasa y montos en moneda de factura (nunca un documento mixto). Devuelve las líneas y si el documento quedó spot.
+ * Valorización por par antes de juntar (§7): cada línea conserva su moneda, su tasa, su origen de tasa y sus montos en moneda de factura; la
+ * línea en la moneda de factura queda con FX 1. `spot` = alguna línea que convierte no tiene tasa o montos: el encabezado queda sin montos
+ * en moneda de factura y esas líneas se valorizan al emitir con la tasa del día de su par (`calculatePairAmountsAtIssue`), mientras las que
+ * tienen tasa la conservan. Hasta el 10-11 (Brightcell, Domi) una línea spot volvía spot al documento entero y las demás perdían su tasa
+ * fija (manual u OC) y su origen: con política fija la unificada quedaba sin tasa y no se podía enviar. `spot_propagated` queda en false
+ * (campo conservado para la vista previa).
  */
 export function valueLinesForConsolidation(
 	lines: Array<ConsolidationLine & { origin_currency: string | null }>,
@@ -556,20 +561,6 @@ export function valueLinesForConsolidation(
 					spot_propagated: false,
 				};
 			}
-			if (spot) {
-				return {
-					...base,
-					fx: null,
-					fx_rate_source: null,
-					fx_rate_date: null,
-					unit_price_invoice_currency: null,
-					subtotal_invoice_currency: null,
-					tax_invoice_currency: null,
-					total_invoice_currency: null,
-					spot_propagated: !isSpot(line),
-				};
-			}
-
 			return {
 				...base,
 				fx: line.fx,
@@ -782,21 +773,28 @@ export function planConsolidation(ctx: ConsolidationContext): ConsolidationPlan 
 
 		pairRates.set(key, (pairRates.get(key) ?? new Set()).add(line.fx));
 	}
-	const differing = [...pairRates.entries()].filter(([, set]) => set.size > 1).map(([key]) => key);
+	// Tasas por par (Brightcell 10-11): cada línea conserva la suya. Varias tasas fijas en un par → aviso; fija y al día en el mismo par →
+	// aviso propio (al emitir, las fijas se respetan y las otras van al día: revisar antes de enviar).
+	const differing = [...pairRates.entries()].filter(([, set]) => [...set].filter((rate) => rate !== null).length > 1).map(([key]) => key);
+	const mixed = [...pairRates.entries()].filter(([, set]) => set.has(null) && [...set].some((rate) => rate !== null)).map(([key]) => key);
 
-	if (!valued.spot && differing.length)
+	if (differing.length)
 		warnings.push({
 			code: CONSOLIDATION_WARNINGS.pair_rates_differ,
 			label: 'Tipos de cambio distintos',
 			message: `Las líneas en ${differing.join(', ')} mantienen el tipo de cambio de su factura: no hay uno solo.`,
 		});
+	if (mixed.length)
+		warnings.push({
+			code: CONSOLIDATION_WARNINGS.fx_mixed_in_pair,
+			label: 'Fija y del día',
+			message: `Las líneas en ${mixed.join(', ')} mezclan tipo de cambio fijo y del día: las fijas lo conservan y las otras toman el del día de emisión.`,
+		});
 	if (valued.spot && converting.length)
 		warnings.push({
 			code: CONSOLIDATION_WARNINGS.spot_document,
 			label: 'Cambio al emitir',
-			message: consolidatedLines.some((line) => line.spot_propagated)
-				? 'Hay líneas sin tipo de cambio: toda la factura usa el del día de emisión, también las que tenían uno fijo.'
-				: 'Hay líneas sin tipo de cambio: toda la factura usa el del día de emisión.',
+			message: 'Hay líneas sin tipo de cambio: se valorizan al emitir con el del día; las que ya tienen tasa la conservan.',
 		});
 	if (requiresReferences)
 		warnings.push({

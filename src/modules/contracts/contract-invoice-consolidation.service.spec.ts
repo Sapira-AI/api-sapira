@@ -210,6 +210,33 @@ describe('ContractInvoiceConsolidationService (spec multimoneda §7)', () => {
 		});
 	});
 
+	it('applyInvoices con carry_from (Brightcell 10-11): lee referencias y glosas protegidas de la unificada deshecha antes de armar la nueva', async () => {
+		const { service, runner } = build({
+			consolidated: invoiceRow({ id: 'prev-1', invoice_type: 'Unificada', status: 'Cancelada', is_active: false }),
+		});
+
+		await service.applyInvoices([INV_A, INV_B], HOLDING, 'user-1', { carry_from: 'prev-1' });
+		const locked = runner.query.mock.calls.find(
+			([sql, params]) => (sql as string).includes('ii.description_locked = true') && (params as unknown[])[0] === 'prev-1'
+		);
+
+		expect(locked).toBeDefined();
+		expect(runner.commitTransaction).toHaveBeenCalledTimes(1);
+	});
+
+	it('preview con simulate_undo_of (re-unificar, Brightcell 10-11): los orígenes de esa unificada se evalúan como Por Emitir y activos', async () => {
+		const inside = { is_active: false, consolidated_into_invoice_id: 'uuuuuuuu-uuuu-4uuu-8uuu-uuuuuuuuuuuu' };
+		const { service } = build({ invoices: [invoiceRow(inside), invoiceB(inside)] });
+		const codes = (preview: { blockers: Array<{ code: string }> }) => preview.blockers.map((blocker) => blocker.code);
+
+		expect(codes(await service.preview(dto(), HOLDING))).toEqual(expect.arrayContaining(['not_pending', 'already_consolidated']));
+		expect(codes(await service.preview(dto(), HOLDING, null, { simulate_undo_of: inside.consolidated_into_invoice_id }))).toEqual([]);
+		// Otra unificada: no se simula nada.
+		expect(codes(await service.preview(dto(), HOLDING, null, { simulate_undo_of: 'otra' }))).toEqual(
+			expect.arrayContaining(['not_pending', 'already_consolidated'])
+		);
+	});
+
 	it('preview: 404 si alguna factura no existe en el holding', async () => {
 		const { service } = build();
 

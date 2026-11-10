@@ -53,6 +53,7 @@ import { ContractInvoiceConsolidationService } from './contract-invoice-consolid
 import { INVOICE_EVENT_TYPES } from './contract-invoices';
 import { SYSTEM_ACTOR_ID } from './contract-renewals';
 import { ContractsService } from './contracts.service';
+import { inheritedFxSource, perInvoiceFxSourceOf } from './fx-rate-sources';
 import {
 	DEFAULT_TEMPLATE,
 	DESCRIPTION_FITTED_CODE,
@@ -2264,6 +2265,8 @@ export class ConsumptionService {
 		holdingId: string
 	): Promise<string[]> {
 		const contractId = await this.contractIdOf(runner, invoiceId, holdingId);
+		// Tasa fijada por factura (OC): las líneas recalculadas conservan ese origen, no `consumption` (Brightcell 10-11).
+		const fxSource = inheritedFxSource([await perInvoiceFxSourceOf(runner, invoiceId, holdingId)], CONSUMPTION_FX_RATE_SOURCE);
 		const ids: string[] = [];
 
 		for (const line of lines) {
@@ -2302,7 +2305,7 @@ export class ConsumptionService {
 					currencies.contract_currency,
 					currencies.invoice_currency,
 					fx,
-					CONSUMPTION_FX_RATE_SOURCE,
+					fxSource,
 					issueDate,
 					line.billing_period_start,
 					line.billing_period_end,

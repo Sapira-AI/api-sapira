@@ -344,6 +344,98 @@ describe('unificación recurrente (spec-unificacion-recurrente.md)', () => {
 			expect(consolidation.applyInvoices).not.toHaveBeenCalled();
 		});
 
+		it('unir tras una pausa (Brightcell 10-11): la unificada nueva hereda OC, fecha reprogramada y glosas de la última deshecha del mes (carry_from)', async () => {
+			const { service, consolidation, query } = build();
+
+			query.mockImplementation(async (sql: string, ...params: unknown[]) => {
+				if (sql.includes("e.metadata->'source_invoice_ids' ?| $2::text[]")) return [{ id: 'u-old' }];
+				void params;
+				if (sql.includes('FROM users WHERE auth_id')) return [{ id: 'user-1' }];
+				if (sql.includes('FROM client_entities WHERE id')) return [{ '?column?': 1 }];
+				if (sql.includes('holding_settings')) return [{ timezone: 'America/Santiago' }];
+				if (sql.includes('FROM invoice_consolidation_rules r')) return [RULE];
+				if (sql.includes('FROM contracts c') && sql.includes('pending_dates'))
+					return [
+						{
+							id: 'c-a',
+							contract_number: 'CTR-A',
+							client_id: 'cl-1',
+							client_name: 'Ironside',
+							company_id: 'co-1',
+							pending_dates: ['2026-10-20'],
+						},
+						{
+							id: 'c-b',
+							contract_number: 'CTR-B',
+							client_id: 'cl-2',
+							client_name: 'Ninja Hubs',
+							company_id: 'co-1',
+							pending_dates: ['2026-10-05'],
+						},
+					];
+				if (sql.includes('FROM invoices i JOIN contracts c'))
+					return [
+						{
+							id: 'i-a',
+							contract_id: 'c-a',
+							company_id: 'co-1',
+							invoice_currency: 'CLP',
+							document_type: 'FACTURA',
+							export_type: 0,
+							month: '2026-10',
+						},
+						{
+							id: 'i-b',
+							contract_id: 'c-b',
+							company_id: 'co-1',
+							invoice_currency: 'CLP',
+							document_type: 'FACTURA',
+							export_type: 0,
+							month: '2026-10',
+						},
+					];
+
+				return [];
+			});
+			const result = await service.resume('e-1', 'h-1', 'auth', AT);
+
+			expect(result.result).toEqual({ unified: 1, blocked: 0 });
+			expect(consolidation.applyInvoices).toHaveBeenCalledWith(
+				['i-a', 'i-b'],
+				'h-1',
+				'user-1',
+				expect.objectContaining({ rule_id: 'rule-1', carry_from: 'u-old' }),
+				AT
+			);
+			expect(query).toHaveBeenCalledWith(expect.stringContaining("e.metadata->'source_invoice_ids' ?| $2::text[]"), ['h-1', ['i-a', 'i-b']]);
+		});
+
+		it('vista previa de un mes por re-unificar (Brightcell 10-11): simula el deshacer de la unificada vigente y lo muestra como "se vuelve a unificar", no bloqueado', async () => {
+			const origin = (id: string, contract: string) => ({
+				id,
+				contract_id: contract,
+				company_id: 'co-1',
+				invoice_currency: 'CLP',
+				document_type: 'FACTURA',
+				export_type: 0,
+				month: '2026-10',
+				consolidated_into_invoice_id: 'u-1',
+			});
+			const { service, consolidation } = build({
+				invoices: [origin('o-a', 'c-a'), origin('o-b', 'c-b'), { ...origin('n-b', 'c-b'), consolidated_into_invoice_id: null }],
+				unified: [{ id: 'u-1', status: 'Por Emitir', sent_to_erp: false }],
+			});
+			const preview = await service.preview('e-1', { contract_ids: ['c-a', 'c-b'], main_contract_id: 'c-a' }, 'h-1', AT);
+
+			expect(consolidation.preview).toHaveBeenCalledWith({ invoice_ids: ['o-a', 'o-b', 'n-b'] }, 'h-1', 'c-a', { simulate_undo_of: 'u-1' });
+			expect(preview.months[0]).toMatchObject({
+				month: '2026-10',
+				state: 'will_reunify',
+				unified_invoice: expect.objectContaining({ id: 'u-1' }),
+			});
+			expect(preview.summary).toEqual({ will_unify: 1, already_unified: 0, blocked: 0, single: 0 });
+		});
+
 		it('vista: estado por mes desde las facturas (pendiente con la fecha del principal) y pausar con deshacer', async () => {
 			const { service, consolidation, query } = build();
 			const view = await service.view('e-1', 'h-1', AT);

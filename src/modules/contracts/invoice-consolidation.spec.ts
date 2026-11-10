@@ -290,7 +290,7 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 	});
 
 	describe('valorización por par', () => {
-		it('una línea spot que convierte deja spot TODO el documento; la línea en moneda de factura conserva FX 1', () => {
+		it('una línea spot que convierte deja el documento spot (sin montos de encabezado) pero cada línea conserva su tasa y sus montos (Brightcell 10-11); la línea en moneda de factura conserva FX 1', () => {
 			const lines = [
 				{ ...line(), origin_currency: 'USD' },
 				{
@@ -316,11 +316,12 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 			expect(result.spot).toBe(true);
 			expect(result.pairs).toEqual(['USD>CLP']);
 			expect(result.lines.map((entry) => [entry.source_line_id, entry.fx, entry.subtotal_invoice_currency, entry.spot_propagated])).toEqual([
-				['line-a', null, null, true],
+				['line-a', line().fx, line().subtotal_invoice, false],
 				['line-spot', null, null, false],
 				['line-clp', 1, 5000, false],
 			]);
-			expect(result.lines[0].fx_rate_source).toBeNull();
+			// Antes del 10-11 la línea fija perdía tasa y origen ("nunca un documento mixto"); ahora los conserva.
+			expect(result.lines[0].fx_rate_source).toBe(line().fx_rate_source);
 		});
 
 		it('todas fijas → cada línea conserva su tasa y montos', () => {
@@ -488,8 +489,10 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 				amount_contract_currency: 3000,
 				vat: 570,
 			});
-			expect(plan.lines.every((entry) => entry.subtotal_invoice_currency === null)).toBe(true);
+			// La línea con tasa conserva sus montos; solo la spot queda en NULL.
+			expect(plan.lines.map((entry) => entry.subtotal_invoice_currency === null)).toEqual([false, true]);
 			expect(codes(plan.warnings)).toContain('spot_document');
+			expect(codes(plan.warnings)).toContain('fx_mixed_in_pair');
 			expect(plan.can_apply).toBe(true);
 		});
 
@@ -562,6 +565,7 @@ describe('invoice-consolidation (spec multimoneda §7)', () => {
 			expect(codes(plan.warnings)).toEqual([
 				'auto_invoice_differs',
 				'auto_send_to_erp_differs',
+				'fx_mixed_in_pair',
 				'spot_document',
 				'references_inherited',
 				'description_fitted',

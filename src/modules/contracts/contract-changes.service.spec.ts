@@ -19,6 +19,7 @@ import { ContractBulkService } from './contract-bulk.service';
 import { ContractChangesService, insertMirrorCreditNote, requestHash } from './contract-changes.service';
 import { CONTRACT_ID, HOLDING, invoiceRow, LICENCIA, PRODUCT_LICENCIA, PRODUCT_SOPORTE, SOPORTE } from './contract-changes.test-fixtures';
 import { ContractDraftsService } from './contract-drafts.service';
+import { ContractInvoiceConsolidationService } from './contract-invoice-consolidation.service';
 import { ContractInvoiceDescriptionsService } from './contract-invoice-descriptions.service';
 import { ContractInvoiceEditService } from './contract-invoice-edit.service';
 import { ContractInvoicesService } from './contract-invoices.service';
@@ -187,6 +188,9 @@ const lineDbRows = (mm: string): Row[] => {
 		billing_period_end: `2026-${mm}-${String(last).padStart(2, '0')}`,
 	}));
 };
+const consolidationMock = {
+	resyncFromOrigins: jest.fn().mockResolvedValue(undefined),
+} as unknown as import('./contract-invoice-consolidation.service').ContractInvoiceConsolidationService;
 const MONTHS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 
 const build = (handler: Handler = () => undefined) => {
@@ -235,9 +239,18 @@ const build = (handler: Handler = () => undefined) => {
 
 	const invoicesService = new ContractInvoicesService(dataSource, contracts, {} as never);
 	const invoiceEdit = new ContractInvoiceEditService(dataSource, contracts, invoicesService);
-	const descriptions = new ContractInvoiceDescriptionsService(dataSource, contracts, invoicesService);
+	const descriptions = new ContractInvoiceDescriptionsService(dataSource, contracts, invoicesService, consolidationMock);
 
-	return { service: new ContractChangesService(dataSource, contracts, invoiceEdit, descriptions), runner, dataSource, contracts, descriptions };
+	const consolidation = { resyncFromOrigins: jest.fn().mockResolvedValue(undefined) } as unknown as ContractInvoiceConsolidationService;
+
+	return {
+		service: new ContractChangesService(dataSource, contracts, invoiceEdit, descriptions, consolidation),
+		runner,
+		dataSource,
+		contracts,
+		descriptions,
+		consolidation,
+	};
 };
 const sqlOf = (mock: jest.Mock) => mock.mock.calls.map(([sql]) => sql as string);
 const calls = (mock: jest.Mock, needle: string) => mock.mock.calls.filter(([sql]) => (sql as string).includes(needle));
@@ -334,6 +347,25 @@ describe('ContractChangesService.apply (POST /contracts/:id/changes)', () => {
 		});
 		expect(result.detail).toEqual({ id: CONTRACT_ID, contract_number: 'CTR-2026-001' });
 		expect(contracts.detail).toHaveBeenCalledWith(CONTRACT_ID, HOLDING);
+	});
+
+	it('unificadas (Brightcell 10-11): las Por Emitir de origen tocadas vuelven a copiarse a su unificada en la misma transacción, antes de los montos en moneda del sistema', async () => {
+		const { service, runner, consolidation } = build((sql) =>
+			sql.includes('JOIN invoices u ON u.id = i.consolidated_into_invoice_id') && sql.includes('u.odoo_invoice_id IS NULL')
+				? [{ id: 'uni-1' }]
+				: undefined
+		);
+
+		await service.apply(CONTRACT_ID, request({ type: 'item_remove', items: [{ item_id: LICENCIA }] }), HOLDING, 'auth-1', 'key-1', today);
+
+		expect(consolidation.resyncFromOrigins).toHaveBeenCalledWith(runner, HOLDING, 'uni-1');
+		expect(consolidation.resyncFromOrigins).toHaveBeenCalledTimes(1);
+		// Dentro de la transacción: antes del commit.
+		const resyncOrder = (consolidation.resyncFromOrigins as jest.Mock).mock.invocationCallOrder[0];
+		const commitOrder = runner.commitTransaction.mock.invocationCallOrder[0];
+
+		expect(resyncOrder).toBeLessThan(commitOrder);
+		expect(runner.commitTransaction).toHaveBeenCalledTimes(1);
 	});
 
 	it('emitida en el rango → NC espejo con el estado de la emitida (nunca Por Emitir), referencia a la original, montos negativos y la línea con su ítem; la emitida no se modifica', async () => {

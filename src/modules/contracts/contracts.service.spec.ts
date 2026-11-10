@@ -708,8 +708,18 @@ describe('ContractsService', () => {
 			const [countSql] = query.mock.calls.find(([text]) => (text as string).includes('all_count'))!;
 
 			expect(sql).toContain('LEFT JOIN invoices ui ON ui.id = i.consolidated_into_invoice_id');
+			// Brightcell 10-11: sin filas para los orígenes de una unificada vigente, y la unificada de otro contrato con líneas de este sí aparece.
+			expect(sql).toContain('NOT (i.consolidated_into_invoice_id IS NOT NULL AND EXISTS (');
+			expect(sql).toContain(
+				"i.invoice_type = 'Unificada' AND i.contract_id <> $1 AND EXISTS (SELECT 1 FROM invoice_items x WHERE x.invoice_id = i.id AND x.contract_id = $1)"
+			);
 			expect(countSql).toContain(`COUNT(*) FILTER (WHERE i.is_active = true AND i.status = 'Por Emitir') AS pending_count`);
 			expect(countSql).toContain('(i.is_active = false AND i.consolidated_into_invoice_id IS NULL)');
+			// Soporte 10-11: la unificada deshecha (Cancelada) no entra en "Todas" ni en su conteo; sigue en Anuladas como "Unificación deshecha".
+			expect(sql).toContain(`AND NOT (i.invoice_type IN ('Unificada', 'Consolidada') AND i.status = 'Cancelada')`);
+			expect(countSql).toContain(
+				`COUNT(*) FILTER (WHERE NOT (i.invoice_type IN ('Unificada', 'Consolidada') AND i.status = 'Cancelada')) AS all_count`
+			);
 			expect(result.data[0]).toMatchObject({
 				is_active: false,
 				consolidated_into_invoice_id: 'uni-1',

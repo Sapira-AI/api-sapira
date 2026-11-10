@@ -587,6 +587,44 @@ describe('ContractInvoicesService (spec facturas §3.1–3.3)', () => {
 			]);
 		});
 
+		it('unificada Por Emitir (Brightcell 10-11): la tasa se escribe en los orígenes (mismo origen de tasa), evento en la unificada y re-copia en la misma transacción', async () => {
+			const ORIGIN = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+			const built = build({
+				[INV_A]: invoiceRow(INV_A, { invoice_type: 'Unificada', unified_v2: true }),
+				[ORIGIN]: invoiceRow(ORIGIN, { contract_id: 'c-2', is_active: false, consolidated_into_invoice_id: INV_A }),
+			});
+			const consolidation = {
+				loadOrigins: jest.fn().mockResolvedValue([{ id: ORIGIN, contract_id: 'c-2' }]),
+				resyncFromOrigins: jest.fn().mockResolvedValue(undefined),
+			};
+			const service = new ContractInvoicesService(built.dataSource, built.contracts, built.scheduler, consolidation as never);
+
+			await service.fx(CONTRACT_ID, INV_A, { policy: 'net_exact', target_net_amount: 1000000 }, HOLDING, 'auth-1', TODAY);
+			const headers = calls(built.runner.query, 'UPDATE invoices SET fx_contract_to_invoice').map(([, params]) => (params as unknown[])[0]);
+
+			// Primero el origen (otro contrato), después la unificada; las líneas conservan el origen net_exact.
+			expect(headers).toEqual([ORIGIN, INV_A]);
+			expect(calls(built.runner.query, 'UPDATE invoice_items')[0][1]).toEqual([
+				'line-1',
+				HOLDING,
+				100000,
+				1000000,
+				190000,
+				1190000,
+				1000,
+				'net_exact',
+				'2026-09-29',
+			]);
+			expect(consolidation.loadOrigins).toHaveBeenCalledWith(built.runner, HOLDING, INV_A);
+			expect(consolidation.resyncFromOrigins).toHaveBeenCalledWith(built.runner, HOLDING, INV_A);
+			expect(consolidation.resyncFromOrigins.mock.invocationCallOrder[0]).toBeLessThan(
+				built.runner.commitTransaction.mock.invocationCallOrder[0]
+			);
+			const events = calls(built.runner.query, 'INSERT INTO contract_lifecycle_events').map(([, params]) => (params as unknown[])[0]);
+
+			expect(events).toEqual(['c-2', CONTRACT_ID]);
+		});
+
 		it('bloqueada (misma moneda) → 409 sin escribir; net_exact masivo con más de una factura → 400', async () => {
 			const { service, runner } = build({ [INV_A]: invoiceRow(INV_A, { invoice_currency: 'USD' }), [INV_B]: invoiceRow(INV_B) });
 

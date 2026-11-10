@@ -1,4 +1,12 @@
-import { CONTRACT_FX_SOURCES, isPerInvoiceFxSource, keepsRateAtIssue, PER_INVOICE_FX_SOURCES, SPOT_FX_SOURCE } from './fx-rate-sources';
+import {
+	CONTRACT_FX_SOURCES,
+	inheritedFxSource,
+	isPerInvoiceFxSource,
+	keepsRateAtIssue,
+	PER_INVOICE_FX_SOURCES,
+	perInvoiceFxSourceOf,
+	SPOT_FX_SOURCE,
+} from './fx-rate-sources';
 
 describe('fx-rate-sources (Domi 23-10, caso Carelis CTR-2026-110)', () => {
 	it('listas: por factura = manual y net_exact; del contrato = contract y contract-change; marca spot aparte', () => {
@@ -36,5 +44,23 @@ describe('fx-rate-sources (Domi 23-10, caso Carelis CTR-2026-110)', () => {
 		for (const source of ['scheduled-generation', 'reorganize', 'reissue', 'invoice-edit', 'spot', 'amendment', null]) {
 			expect(keepsRateAtIssue(source, 900, false)).toBe(false);
 		}
+	});
+
+	it('inheritedFxSource (Brightcell 10-11): una línea que se reescribe o nace hereda la tasa fijada por factura si la hay; si no, el origen del camino', () => {
+		expect(inheritedFxSource(['consumption', 'manual'], 'consumption')).toBe('manual');
+		expect(inheritedFxSource(['net_exact'], 'reorganize')).toBe('net_exact');
+		expect(inheritedFxSource(['contract', 'spot', null, undefined], 'consumption')).toBe('consumption');
+		expect(inheritedFxSource([], 'invoice-edit')).toBe('invoice-edit');
+	});
+
+	it('perInvoiceFxSourceOf: pregunta por las líneas con origen manual o net_exact de la factura y devuelve el primero (o null)', async () => {
+		const query = jest
+			.fn()
+			.mockResolvedValueOnce([{ fx_rate_source: 'net_exact' }])
+			.mockResolvedValueOnce([]);
+
+		expect(await perInvoiceFxSourceOf({ query }, 'inv-1', 'h-1')).toBe('net_exact');
+		expect(query).toHaveBeenCalledWith(expect.stringContaining('fx_rate_source = ANY($3::text[])'), ['inv-1', 'h-1', ['manual', 'net_exact']]);
+		expect(await perInvoiceFxSourceOf({ query }, 'inv-1', 'h-1')).toBeNull();
 	});
 });

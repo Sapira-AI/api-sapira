@@ -14,6 +14,7 @@ import { ContractInvoiceEditService } from './contract-invoice-edit.service';
 import { type ContractInvoiceRow, INVOICE_EVENT_TYPES, type InvoiceBlocker } from './contract-invoices';
 import { ContractInvoicesService } from './contract-invoices.service';
 import { ContractsService } from './contracts.service';
+import { inheritedFxSource, perInvoiceFxSourceOf } from './fx-rate-sources';
 import { parseStoredTemplate } from './invoice-description';
 import { type LineState, taxRateForDocument } from './invoice-edit';
 import {
@@ -445,18 +446,35 @@ export class ContractInvoiceReorganizeService {
 		// Multimoneda (spec-multimoneda §4): una línea nunca toma la tasa del encabezado de destino sino la de SU par en el documento donde queda
 		// (el plan ya la resolvió: la suya si no se mueve; si se mueve o nace, la fijada por factura, la fija pactada del período o spot);
 		// `revalueMulticurrencyInvoices` (abajo) deja moneda de la línea y encabezado = Σ líneas.
+		// Tasa fijada por factura (OC) en el documento de destino: la línea que llega o nace conserva ese origen (Brightcell 10-11).
+		const fxSources = new Map<string, string>();
+		const fxSourceOf = async (invoiceId: string) => {
+			if (!fxSources.has(invoiceId))
+				fxSources.set(invoiceId, inheritedFxSource([await perInvoiceFxSourceOf(runner, invoiceId, holdingId)], REORGANIZE_FX_RATE_SOURCE));
+
+			return fxSources.get(invoiceId)!;
+		};
+
 		for (const update of plan.write.line_updates) {
 			const invoiceId = resolve(update.invoice_key);
 			const fx = fxOf.get(invoiceId) ?? { fx: null, currency: null };
 			const lineFx = multicurrency ? (update.state.fx ?? null) : fx.fx;
 
-			await this.updateLine(runner, update.id, invoiceId, update.state, lineFx, fx.currency, holdingId);
+			await this.updateLine(runner, update.id, invoiceId, update.state, lineFx, fx.currency, holdingId, await fxSourceOf(invoiceId));
 		}
 		for (const create of plan.write.line_creates) {
 			const invoiceId = resolve(create.invoice_key);
 			const fx = fxOf.get(invoiceId) ?? { fx: null, currency: null };
 
-			await this.insertLine(runner, invoiceId, create.state, multicurrency ? (create.state.fx ?? null) : fx.fx, fx.currency, holdingId);
+			await this.insertLine(
+				runner,
+				invoiceId,
+				create.state,
+				multicurrency ? (create.state.fx ?? null) : fx.fx,
+				fx.currency,
+				holdingId,
+				await fxSourceOf(invoiceId)
+			);
 		}
 
 		// 3. Encabezados = Σ líneas; las que quedan sin líneas → Cancelada (se conservan, con evento).
@@ -508,14 +526,15 @@ export class ContractInvoiceReorganizeService {
 		state: LineState,
 		fx: number | null,
 		currency: string | null,
-		holdingId: string
+		holdingId: string,
+		fxSource: string = REORGANIZE_FX_RATE_SOURCE
 	) {
 		await runner.query(
 			`UPDATE invoice_items SET invoice_id = $3, description = $4, quantity = $5, discount_pct = $6,
 				unit_price_contract_currency = $7, subtotal_contract_currency = $8, tax_amount_contract_currency = $9, total_contract_currency = $10,
 				unit_price_invoice_currency = $11, subtotal_invoice_currency = $12, tax_amount_invoice_currency = $13, total_invoice_currency = $14,
 				billing_period_start = $15::date, billing_period_end = $16::date, pricing_breakdown = $17::jsonb,
-				fx_rate_source = CASE WHEN $18::numeric IS NULL THEN NULL WHEN fx_contract_to_invoice IS NOT DISTINCT FROM $18::numeric THEN fx_rate_source ELSE '${REORGANIZE_FX_RATE_SOURCE}' END,
+				fx_rate_source = CASE WHEN $18::numeric IS NULL THEN NULL WHEN fx_contract_to_invoice IS NOT DISTINCT FROM $18::numeric THEN fx_rate_source ELSE $20 END,
 				fx_rate_date = CASE WHEN $18::numeric IS NULL THEN NULL WHEN fx_contract_to_invoice IS NOT DISTINCT FROM $18::numeric THEN fx_rate_date ELSE CURRENT_DATE END,
 				fx_contract_to_invoice = $18, invoice_currency = $19,
 				status = (SELECT h.status FROM invoices h WHERE h.id = $3), issue_date = (SELECT h.issue_date FROM invoices h WHERE h.id = $3),
@@ -541,6 +560,7 @@ export class ContractInvoiceReorganizeService {
 				state.pricing_breakdown ? JSON.stringify(state.pricing_breakdown) : null,
 				fx,
 				currency,
+				fxSource,
 			]
 		);
 	}
@@ -551,7 +571,8 @@ export class ContractInvoiceReorganizeService {
 		state: LineState,
 		fx: number | null,
 		currency: string | null,
-		holdingId: string
+		holdingId: string,
+		fxSource: string = REORGANIZE_FX_RATE_SOURCE
 	) {
 		await runner.query(
 			`INSERT INTO invoice_items (
@@ -566,7 +587,7 @@ export class ContractInvoiceReorganizeService {
 				$10, $11, $12, $13,
 				$14, $15, $16, $17,
 				(SELECT h.contract_currency FROM invoices h WHERE h.id = $1), $18, $19::numeric,
-				CASE WHEN $19::numeric IS NULL THEN NULL ELSE '${REORGANIZE_FX_RATE_SOURCE}' END, CASE WHEN $19::numeric IS NULL THEN NULL ELSE CURRENT_DATE END,
+				CASE WHEN $19::numeric IS NULL THEN NULL ELSE $21 END, CASE WHEN $19::numeric IS NULL THEN NULL ELSE CURRENT_DATE END,
 				(SELECT h.status FROM invoices h WHERE h.id = $1), (SELECT h.issue_date FROM invoices h WHERE h.id = $1),
 				$20::date, $21::date, $22, $23::jsonb
 			)`,
@@ -594,6 +615,7 @@ export class ContractInvoiceReorganizeService {
 				state.billing_period_end,
 				state.quantity_source ?? 'fixed',
 				state.pricing_breakdown ? JSON.stringify(state.pricing_breakdown) : null,
+				fxSource,
 			]
 		);
 	}

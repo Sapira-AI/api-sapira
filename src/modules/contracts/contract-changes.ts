@@ -330,6 +330,16 @@ export interface ChangeInvoiceRow {
 	sent_to_odoo_at?: string | null;
 	/** Emitida anulada con NC de anulación activa (`voidedSql`): no recibe otra NC. */
 	voided?: boolean;
+	/** Factura de origen dentro de una unificada (`invoices.consolidated_into_invoice_id`). */
+	consolidated_into_invoice_id?: string | null;
+	/**
+	 * Estado de su unificada (Brightcell 10-11): `editable` = Por Emitir sin borrador en el ERP → el origen se edita como una Por Emitir más y la
+	 * unificada se vuelve a copiar sola; `in_erp` = la unificada ya tiene borrador en el ERP (bloquea); `issued` = emitida (bloquea: NC desde
+	 * la unificada).
+	 */
+	unified_state?: UnifiedState | null;
+	/** Folio (o id) de su unificada, para los avisos. */
+	unified_number?: string | null;
 	/** RUT/tax id del receptor guardado en la factura (para el antes del cambio de razón social). */
 	client_tax_id?: string | null;
 	/** NC: motivo (`churn`, `downsell`…) y factura que acredita. `reactivate` cancela las NC del churn pendientes de emisión electrónica (`creditNotePendingEmission`). */
@@ -356,7 +366,14 @@ export interface ChangeContext {
 	/** Documento elegido en `billing_conditions` (del país de la compañía o genérico). `tax_rate` = su tasa (ronda 3 de Configuración). */
 	tax_document_type: { id: string; code: string; name: string; kind: string; tax_rate?: number | null } | null;
 	/** Origen cotización: la cotización si existe en el holding (multimoneda: su moneda, que hereda el ítem nuevo). */
-	quote: { id: string; quote_type: string | null; already_applied: boolean; currency?: string | null } | null;
+	quote: {
+		id: string;
+		quote_type: string | null;
+		already_applied: boolean;
+		/** Líneas de la cotización ya aplicadas a un contrato (ítems con `quote_item_id` y eventos con `quote_items`), Brightcell 10-11. */
+		applied_quote_item_ids?: string[];
+		currency?: string | null;
+	} | null;
 	/** `item_add` con precios medidos: métricas facturables del holding referenciadas (id → estado). */
 	billable_metrics?: Map<string, string>;
 	/** `item_add` con `price_id` (etapa 3): precios de catálogo del holding referenciados (solo los que existen). */
@@ -989,9 +1006,15 @@ export const conversionOf = (contract: ChangeContractRow, extra: FxPeriodRate[] 
 });
 
 /** Por Emitir activa recalculable: no legacy, no unificada, no NC/ND. */
+export type UnifiedState = 'editable' | 'in_erp' | 'issued';
+
+/** Origen dentro de una unificada Por Emitir sin borrador en el ERP: se edita como Por Emitir y la unificada se re-copia (Brightcell 10-11). */
+export const isOriginOfEditableUnified = (invoice: ChangeInvoiceRow) =>
+	!invoice.is_active && !!invoice.consolidated_into_invoice_id && invoice.unified_state === 'editable';
+
 export const isEditablePending = (invoice: ChangeInvoiceRow) =>
 	invoice.status === PENDING_STATUS &&
-	invoice.is_active &&
+	(invoice.is_active || isOriginOfEditableUnified(invoice)) &&
 	!invoice.is_legacy &&
 	invoice.invoice_type !== UNIFIED_INVOICE_TYPE &&
 	!/^(NC|ND)$/i.test(invoice.document_type ?? '');
@@ -1812,18 +1835,53 @@ class Planner {
 		};
 	}
 
-	/** Bloquea si una factura unificada vigente tiene líneas de los ítems en el rango (A.5 pendiente). */
+	/**
+	 * Unificadas con líneas de los ítems en el rango (Brightcell 10-11, Domi: todo cambio se refleja solo en la unificada). Por Emitir sin
+	 * borrador en el ERP → aviso `unified_resync` (pregunta en la vista previa): el cambio se aplica a las facturas de origen (que cuentan
+	 * como Por Emitir, `isOriginOfEditableUnified`) y el servicio re-copia la unificada en la misma transacción. Con borrador en el ERP →
+	 * bloqueo `unified_invoice_in_erp`. Emitida → en el contrato principal es una emitida más (NC espejo); en un contrato secundario su
+	 * origen está inactivo y bloquea `unified_issued` (la NC se hace desde la unificada).
+	 */
 	assertNoUnified(itemIds: Set<string>, from: string) {
-		for (const invoice of this.ctx.invoices.filter(isUnified)) {
-			if (
-				invoice.lines.some((line) => line.contract_item_id && itemIds.has(line.contract_item_id) && (line.billing_period_end ?? '') >= from)
-			) {
-				this.block(
-					'unified_invoice_in_range',
-					`La factura unificada ${invoice.invoice_number ?? invoice.id} incluye líneas de los ítems afectados desde el ${from}`,
-					'Desunificar la factura en Facturación antes de aplicar el cambio'
+		const affects = (invoice: ChangeInvoiceRow) =>
+			invoice.lines.some((line) => line.contract_item_id && itemIds.has(line.contract_item_id) && (line.billing_period_end ?? '') >= from);
+		const noticed = new Set<string>();
+		const notice = (unifiedId: string, label: string, state: UnifiedState) => {
+			if (noticed.has(unifiedId)) return;
+			noticed.add(unifiedId);
+			if (state === 'editable')
+				this.warn(
+					'unified_resync',
+					`¿Agregar este cambio a la factura unificada ${label}? Al confirmar, el cambio se aplica a las facturas de origen y la unificada se actualiza sola, conservando OC, fecha y glosas`
 				);
-			}
+			else if (state === 'in_erp')
+				this.block(
+					'unified_invoice_in_erp',
+					`La factura unificada ${label} ya está como borrador en el ERP e incluye líneas de los ítems afectados desde el ${from}`,
+					'Elimina el borrador en el ERP y usa "Restablecer borrador del ERP" en la unificada; después aplica el cambio'
+				);
+			else
+				this.block(
+					'unified_issued',
+					`La factura unificada ${label} ya se emitió e incluye líneas de los ítems afectados desde el ${from}`,
+					'Lo emitido se corrige con nota de crédito desde la unificada, en el contrato principal'
+				);
+		};
+
+		for (const invoice of this.ctx.invoices.filter(isUnified)) {
+			if (!affects(invoice)) continue;
+			const label = invoice.invoice_number ?? invoice.id;
+
+			if (invoice.status !== PENDING_STATUS || !invoice.is_active) continue; // emitida: camino de siempre en el contrato principal
+			notice(invoice.id, label, invoice.odoo_invoice_id ? 'in_erp' : 'editable');
+		}
+		// Orígenes: por sus líneas en el rango o porque el planner ya las tocó (quitar una línea la saca de `lines` antes de llegar aquí).
+		const touched = (invoice: ChangeInvoiceRow) =>
+			this.headersTouched.has(invoice.id) || this.updatedInvoices.some((entry) => entry.id === invoice.id);
+
+		for (const invoice of this.ctx.invoices) {
+			if (!invoice.consolidated_into_invoice_id || !invoice.unified_state || !(affects(invoice) || touched(invoice))) continue;
+			notice(invoice.consolidated_into_invoice_id, invoice.unified_number ?? invoice.consolidated_into_invoice_id, invoice.unified_state);
 		}
 	}
 
@@ -3444,8 +3502,25 @@ function assertQuoteOrigin(p: Planner) {
 
 		return;
 	}
-	if (quote.already_applied)
-		p.block('quote_already_applied', 'Esta cotización ya se aplicó a un contrato', 'Revisa el historial del contrato o usa origen manual');
+	if (quote.already_applied) {
+		// Por línea (Brightcell 10-11): una cotización puede aplicarse en dos pedidos (p. ej. una línea como ajuste del ítem que ya existe y
+		// otra como ítem nuevo con otra cuenta). Bloquea solo si el pedido no trae líneas de la cotización o todas ya se aplicaron.
+		const requested = ((p.req.change.items ?? []) as Array<{ quote_item_id?: string | null }>)
+			.map((ref) => ref.quote_item_id)
+			.filter((id): id is string => typeof id === 'string' && id.length > 0);
+		const applied = new Set(quote.applied_quote_item_ids ?? []);
+		const alreadyApplied = requested.filter((id) => applied.has(id));
+
+		if (!requested.length || alreadyApplied.length === requested.length)
+			p.block('quote_already_applied', 'Esta cotización ya se aplicó a un contrato', 'Revisa el historial del contrato o usa origen manual');
+		else if (alreadyApplied.length)
+			p.block(
+				'quote_item_already_applied',
+				`${alreadyApplied.length === 1 ? 'Una línea' : `${alreadyApplied.length} líneas`} de la cotización ya se aplicaron a un contrato`,
+				'Quita esas líneas del pedido: las que faltan sí se pueden aplicar'
+			);
+		else p.warn('quote_partially_applied', 'La cotización ya se aplicó en parte: estas líneas son lo que faltaba');
+	}
 	if (/nuevo\s*cliente|new\s*business|new\s*client/i.test(quote.quote_type ?? '')) {
 		p.block(
 			'new_business_quote_on_existing_contract',
@@ -5498,6 +5573,20 @@ export function planBillingConditions(ctx: ChangeContext, req: ContractChangeReq
 			});
 		}
 		if (targets.length) p.ops.push({ kind: 'update_invoices_fx', targets, invoice_currency: currencyAfter });
+		// Soporte 10-11: la política nueva también alcanza a los orígenes de una unificada Por Emitir (sin borrador en el ERP), que el servicio
+		// vuelve a copiar; se pregunta igual que en los demás cambios (`assertNoUnified`), que aquí no aplica porque no hay ítems ni rango.
+		const resynced = new Set<string>();
+
+		for (const invoice of pending) {
+			if (!invoice.consolidated_into_invoice_id || !isOriginOfEditableUnified(invoice) || resynced.has(invoice.consolidated_into_invoice_id))
+				continue;
+			if (!targets.some((target) => target.invoice_id === invoice.id)) continue;
+			resynced.add(invoice.consolidated_into_invoice_id);
+			p.warn(
+				'unified_resync',
+				`¿Aplicar la nueva política de tipo de cambio a la factura unificada ${invoice.unified_number ?? invoice.consolidated_into_invoice_id}? Al confirmar, la tasa se aplica a sus facturas de origen y la unificada se actualiza sola, conservando OC, fecha y glosas`
+			);
+		}
 		if (keptFx.length)
 			p.warn(
 				'invoice_fx_kept',

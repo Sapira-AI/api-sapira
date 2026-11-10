@@ -201,8 +201,8 @@ clientes finales). Ya no se usa para juntar monedas (eso es §2).
 `POST /contracts/invoices/consolidations` `{ invoice_ids[] (2–50), notes? }` · `POST /contracts/invoices/consolidations/:invoiceId/undo { reason }`.
 
 **Se conserva de la legacy**: validaciones de elegibilidad (Por Emitir, activas, no NC/ND, no ya consolidadas, mismo holding/compañía/receptor/
-moneda/mes/documento); **valorización por par** de cada línea antes de juntar (la fija ya escrita o, si alguna es spot, el documento queda spot entero
-y se valoriza al emitir: nunca mixto); **número de contrato** en la glosa con guion ASCII `'-'` (desde el 07-10 al final: `<glosa> - CTR-2026-12`; antes era prefijo); aporte por contrato visible
+moneda/mes/documento); **valorización por par** de cada línea antes de juntar (cada línea conserva su tasa, su origen y sus montos; las sin tasa se valorizan al
+emitir con la del día de su par; desde el 10-11, Brightcell: antes una línea spot volvía spot al documento entero y las fijas perdían su tasa); **número de contrato** en la glosa con guion ASCII `'-'` (desde el 07-10 al final: `<glosa> - CTR-2026-12`; antes era prefijo); aporte por contrato visible
 (preview y vista rápida: subtotal por contrato); el RSM sigue sumando por `contract_item_id` (no cambia); **un evento por contrato**
 (`INVOICE_CONSOLIDATED`, `metadata { consolidated_invoice_id, source_invoice_ids, contracts[] }`); reversible mientras esté Por Emitir.
 
