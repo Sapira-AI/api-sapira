@@ -2768,6 +2768,40 @@ describe('item_update · corregir la fecha de inicio (caso CTR-2026-191, decisi�
 		});
 	});
 
+	it('Brightcell 10-11: mover el inicio del upsell de octubre a noviembre con la factura de octubre unificada: el origen se ajusta y la unificada se re-copia (aviso); con borrador en el ERP bloquea con el paso de restablecer', () => {
+		const withUnified = (state: 'editable' | 'in_erp') => {
+			const base = ninja();
+			const october = anaInvoice('10');
+			const origin = { ...october, is_active: false, consolidated_into_invoice_id: 'uni-10', unified_number: 'U-0010', unified_state: state };
+			const unified = {
+				...october,
+				id: 'uni-10',
+				invoice_number: 'U-0010',
+				invoice_type: 'Unificada',
+				status: 'Por Emitir',
+				odoo_invoice_id: state === 'in_erp' ? 77 : null,
+				lines: [{ ...october.lines[0], id: 'line-10-ana-copy', invoice_id: 'uni-10' }],
+			};
+
+			return { ...base, invoices: [...base.invoices.filter((invoice) => invoice.id !== 'ana-10'), origin, unified] };
+		};
+		const plan = move(withUnified('editable'), '2026-11-01');
+
+		// Antes: `pending_invoice_before_start` sobre la unificada ("Desunifícala o cancélala desde Facturación").
+		expect(plan.preview.blockers).toEqual([]);
+		expect(plan.preview.can_apply).toBe(true);
+		expect(plan.preview.warnings.find((warning) => warning.code === 'unified_resync')?.message).toContain('U-0010');
+		// La línea de octubre se quita del ORIGEN (la unificada se re-copia desde él al aplicar); la copia de la unificada no se toca aquí.
+		expect(ops(plan, 'delete_line')).toEqual([{ kind: 'delete_line', invoice_id: 'ana-10', line_id: 'line-10-ana' }]);
+		expect(ops(plan, 'update_item')).toEqual([
+			expect.objectContaining({ item_id: ANALITICA, set: expect.objectContaining({ start_date: '2026-11-01' }) }),
+		]);
+		const inErp = move(withUnified('in_erp'), '2026-11-01');
+
+		expect(inErp.preview.blockers.map((blocker) => blocker.code)).toEqual(['unified_invoice_in_erp']);
+		expect(inErp.preview.blockers[0].next_step).toContain('Restablecer borrador del ERP');
+	});
+
 	it('bloquea si queda una emitida vigente del ítem antes del nuevo inicio: hay que anularla con NC primero', () => {
 		const plan = move(ninja({}), '2026-10-01');
 

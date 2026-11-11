@@ -186,3 +186,21 @@ detalles. Todos son de Contratos, sin migración ni datos.
 
 Pendiente (módulos cerrados, ya anotado): Facturación y los 360 de cliente y razón social siguen mostrando los orígenes en "Todas"; con el
 punto 2, al menos el bloqueo que ven ahí apunta a la unificada correcta.
+
+## Corregir un dato mal cargado con la factura del período unificada (Brightcell, 11-11)
+
+Caso real: el upsell "MODULO · Mantenimiento de desarrollo GPS" entró con inicio 01-10 y debía partir el 01-11; la factura de octubre de
+CTR-2026-110 está unificada con CTR-2026-109. "Corregir un dato mal cargado" bloqueaba con `pending_invoice_before_start` sobre la
+**unificada** ("La factura del 2026-11-10 cobra MODULO antes del 2026-11-01 y el cambio no puede ajustarla · Desunifícala o cancélala
+desde Facturación"): el origen ya era editable (punto 5), pero la unificada misma sigue activa en el contrato principal con la copia de la
+línea y `moveItemStartInvoices` / `moveItemEndInvoices` la trataban como una Por Emitir que no se puede ajustar.
+
+Ahora (`unifiedHandledByOrigins`): una unificada Por Emitir cuyo origen de este contrato está en el contexto (editable o con borrador en el
+ERP) no entra en ese bloqueo: la corrección quita la línea del **origen** y el servicio re-copia la unificada al aplicar (`unifiedToResync`),
+conservando OC, fecha y glosas. Las dos funciones llaman además a `assertNoUnified`, así que la vista previa avisa `unified_resync` (o bloquea
+`unified_invoice_in_erp` con el paso de restablecer, y `unified_issued` si ya se emitió). Test: `contract-changes.spec` → "Brightcell 10-11:
+mover el inicio del upsell…". Ayuda: `modificar-un-contrato.md` → Corregir la fecha de inicio.
+
+Pendiente (otra tarea, con plan presentado): Editar factura y Reorganizar sobre orígenes de una unificada, y la marca "no unificar" para
+dejar una línea suelta Por Emitir del mismo mes sin que la regla la vuelva a juntar.
+
