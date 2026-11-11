@@ -18,6 +18,7 @@ import {
 	relatedDocumentsSql,
 	voidedSql,
 } from './contract-360';
+import { derivedFxPolicy } from './contract-invoices';
 import { buildItemGroups, deriveItemStatus, type ItemGroup, type PendingInvoiceLine, type PricedContractItem } from './contract-items';
 import { loadItemPauses, loadOpenRenewalProposals, loadRenewalReminder } from './contract-renewals';
 import { CONTRACT_DERIVED_STATUSES, type ContractDerivedStatus, derivedStatusLateral } from './contract-status';
@@ -1153,6 +1154,8 @@ export class ContractsService {
 					i.contract_currency, i.invoice_currency, i.amount_contract_currency, i.amount_invoice_currency, i.vat,
 					i.total_invoice_currency, i.total_system_currency, i.fx_contract_to_invoice, i.is_active,
 					i.odoo_invoice_id, i.sent_to_odoo_at, ${DTE_COLUMNS_SQL}, COALESCE(lines.lines_count, 0) AS lines_count,
+					lines.fx_rate_source, i.auto_invoice,
+					(SELECT c.fx_invoice_policy FROM contracts c WHERE c.id = i.contract_id) AS contract_fx_invoice_policy,
 					ce.legal_name, i.related_invoice_id, i.original_issue_date::text AS original_issue_date,
 					EXISTS (SELECT 1 FROM contract_lifecycle_events e WHERE e.contract_id = i.contract_id AND e.holding_id = i.holding_id
 						AND e.event_type = 'INVOICE_ISSUED_EXTERNALLY' AND e.metadata->>'invoice_id' = i.id::text) AS issued_externally,
@@ -1174,7 +1177,8 @@ export class ContractsService {
 				) adj ON true
 				LEFT JOIN LATERAL (
 					SELECT MIN(ii.billing_period_start) AS billing_period_start, MAX(ii.billing_period_end) AS billing_period_end,
-						COUNT(*) AS lines_count
+						COUNT(*) AS lines_count,
+						mode() WITHIN GROUP (ORDER BY ii.fx_rate_source) FILTER (WHERE ii.fx_rate_source IS NOT NULL) AS fx_rate_source
 					FROM invoice_items ii WHERE ii.invoice_id = i.id AND (i.invoice_type IS DISTINCT FROM 'Unificada' OR ii.contract_id = $1)
 				) lines ON true
 				${base} ${statusFilter}
@@ -1230,9 +1234,19 @@ export class ContractsService {
 				lines_count: toNumber(row.lines_count),
 				legal_name: toText(row.legal_name),
 				related_invoice_id: toText(row.related_invoice_id),
-				// Derivados (nada nuevo en la tabla): política por moneda + `fx_contract_to_invoice`; emisión externa por evento.
-				fx_policy: fxPolicyOf(row),
+				// Derivados (nada nuevo en la tabla): la misma política derivada que el detalle (`derivedFxPolicy`: una spot ya valorizada al
+				// enviar sigue siendo spot, Domi 22-10); el origen de la tasa (moda de sus líneas), la emisión automática y la política del
+				// contrato alimentan los chips de la pestaña Facturas (Domi 10-11: "TC fija · sin tasa" = contrato fijo sin tasa pegada).
+				fx_policy: derivedFxPolicy({
+					contract_currency: toText(row.contract_currency),
+					invoice_currency: toText(row.invoice_currency),
+					fx_contract_to_invoice: toNullableNumber(row.fx_contract_to_invoice),
+					fx_rate_source: toText(row.fx_rate_source),
+				}),
 				fx_rate: toNullableNumber(row.fx_contract_to_invoice),
+				fx_rate_source: toText(row.fx_rate_source),
+				auto_invoice: row.auto_invoice === true,
+				contract_fx_policy: toText(row.contract_fx_invoice_policy),
 				issued_externally: row.issued_externally === true,
 				original_issue_date: toText(row.original_issue_date),
 				// Etapa 4 (spec facturas §3.4): motivo del desvío (último `invoice_adjustments`), líneas editadas a mano, sin cobro y ERP.

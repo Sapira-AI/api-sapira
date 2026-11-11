@@ -658,6 +658,9 @@ describe('ContractsService', () => {
 							contract_currency: 'USD',
 							invoice_currency: 'CLP',
 							fx_contract_to_invoice: '950.5',
+							fx_rate_source: 'manual',
+							auto_invoice: true,
+							contract_fx_invoice_policy: 'fixed',
 							issued_externally: true,
 							original_issue_date: '2026-02-01',
 							issue_date: '2026-03-01',
@@ -678,10 +681,16 @@ describe('ContractsService', () => {
 			expect(result.data[0]).toMatchObject({
 				fx_policy: 'fixed',
 				fx_rate: 950.5,
+				fx_rate_source: 'manual',
+				auto_invoice: true,
+				contract_fx_policy: 'fixed',
 				issued_externally: true,
 				original_issue_date: '2026-02-01',
 				issue_date: '2026-03-01',
 			});
+			// Chips de la pestaña Facturas (Domi 10-11): origen de la tasa (moda de las líneas), emisión automática y política del contrato.
+			expect(sql).toContain('lines.fx_rate_source, i.auto_invoice');
+			expect(sql).toContain('AS contract_fx_invoice_policy');
 		});
 
 		it('facturas: un origen de unificación (inactivo) trae la unificada que lo reemplaza y no cuenta como anulada ni Por Emitir', async () => {
