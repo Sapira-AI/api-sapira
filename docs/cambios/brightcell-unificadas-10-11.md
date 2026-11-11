@@ -86,6 +86,9 @@ callejón sin salida (desunificar, fijar en cada origen, re-unificar y perder OC
   factura de origen (como Por Emitir propia, con `rate` del par de su contrato y `rate_source_override` para conservar `net_exact`), evento
   `INVOICE_FX_CHANGED` en cada contrato de origen y en la unificada, y `resyncFromOrigins` la vuelve a copiar en la misma transacción. Así la
   tasa de la OC sobrevive a cualquier re-copia (consumo, cambios de contrato, rehacer): queda en los orígenes.
+- Front (10-11, revisión de Domi en local): la entrada no aparecía para la unificada de CTR-2026-110 (encabezado en CLP y contrato sin
+  marca multimoneda): la barra de selección y la vista rápida de la unificada v2 ahora ofrecen "Tipo de cambio" cuando sus aportes están
+  en otra moneda (`unifiedOtherCurrencies`); con borrador en el ERP no (primero Restablecer ERP).
 - Front: en una factura con varios pares, "Neto exacto" se habilita y pide el neto por par (`net_by_pair`); el BFF lo valida
   (`invoiceFxSchema`). Pendiente (idea de Domi): neto por línea, no solo por moneda.
 Tests: `contract-invoices.spec` (tasa por par y neto por par en unificada, residuo, par sin neto), `contract-invoices.service.spec`

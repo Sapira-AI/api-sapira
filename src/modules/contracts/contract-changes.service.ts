@@ -840,7 +840,8 @@ export class ContractChangesService {
 					// El fin explícito (co-terminación, S4-16) va en el INSERT: `set_contract_item_end_date` ya no lo recalcula.
 					// Pricing v2: el precio inline (o la copia del catálogo, etapa 3: `list_price_id`) nace como fila de `prices`
 					// (owner = contract, v1 activa) y el ítem la apunta (spec §2.2).
-					if (item.price_spec) {
+					// Solo cambió el modo de cobro (`reuse_price`): el ítem nuevo ya apunta al precio del anterior; no nace otra versión.
+					if (item.price_spec && !item.reuse_price) {
 						const spec = item.price_spec;
 						const [price] = (await runner.query(
 							`INSERT INTO prices (

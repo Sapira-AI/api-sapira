@@ -587,6 +587,38 @@ describe('ContractChangesService.apply (POST /contracts/:id/changes)', () => {
 		expect(firstIndex(sql, 'DELETE FROM invoice_items')).toBeLessThan(firstIndex(sql, 'INSERT INTO invoice_items'));
 	});
 
+	it('price_model_change solo de modo de cobro (Stanhome 10-11): el RENEWAL nace apuntando al precio del ítem y no nace otra versión de prices', async () => {
+		const withPrice = itemDbRows.map((row) =>
+			row.id === LICENCIA
+				? { ...row, price_id: 'price-1', price_model: 'standard', price_quantity_type: 'fixed', price_unit_amount: '100', price_version: 1 }
+				: row
+		);
+		const { service, runner } = build((sql) =>
+			sql.includes('FROM contract_items ci') && sql.includes('LEFT JOIN prices') ? withPrice : undefined
+		);
+
+		await service.apply(
+			CONTRACT_ID,
+			request({ type: 'price_model_change', items: [{ item_id: LICENCIA, billing_method: 'Vencido' }] } as never, {
+				effective_date: '2026-11-01',
+				reason: 'ok',
+			}),
+			HOLDING,
+			'auth-1',
+			undefined,
+			today
+		);
+		const sql = sqlOf(runner.query);
+		const [itemInsert] = calls(runner.query, 'INSERT INTO contract_items');
+
+		expect(sql.some((text) => text.includes('INSERT INTO prices'))).toBe(false);
+		expect(itemInsert[1]).toEqual(expect.arrayContaining(['price-1', 'Vencido', 'RENEWAL']));
+		expect(calls(runner.query, 'SET renewal_base_unit_price')).toEqual([]);
+		const [event] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');
+
+		expect(event[1]).toEqual(expect.arrayContaining(['RENEWAL', 'billing_method', 'Cambio de modo de cobro']));
+	});
+
 	it('item_add con `price_id`: lee el catálogo del holding y la fila de prices es una copia (nombre del catálogo, list_price_id)', async () => {
 		const CATALOG = 'ca000000-0000-4000-8000-000000000001';
 		const { service, runner } = build((sql) => {
