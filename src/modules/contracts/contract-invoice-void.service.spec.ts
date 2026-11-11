@@ -344,11 +344,11 @@ describe('ContractInvoiceVoidService (spec facturas §3.8 y §8)', () => {
 		);
 	});
 
-	it('la reemisión nace con la emisión automática vigente del contrato, no con la de la anulada (Domi 02-11, CTR-2026-419)', async () => {
-		// Anulada encendida, contrato apagado → reemisión apagada; anulada apagada, contrato encendido → reemisión encendida.
+	it('la reemisión nace con la emisión automática apagada aunque la anulada o el contrato la tengan encendida (Domi 10-11, Stanhome); un true explícito manda', async () => {
 		for (const [invoiceFlag, contractFlag] of [
 			[true, false],
 			[false, true],
+			[true, true],
 		] as const) {
 			const { service, runner } = build({ invoice: invoiceRow({ auto_invoice: invoiceFlag }), context: { auto_invoice: contractFlag } });
 
@@ -356,8 +356,21 @@ describe('ContractInvoiceVoidService (spec facturas §3.8 y §8)', () => {
 			const [reissue] = calls(runner.query, 'INSERT INTO invoices').filter(([sql]) => !(sql as string).includes(`'NC', $17`));
 
 			// Orden de parámetros de `writeReissue`: …, $11 export_type, $12 client_tax_id, $13 auto_invoice.
-			expect((reissue[1] as unknown[])[12]).toBe(contractFlag);
+			expect((reissue[1] as unknown[])[12]).toBe(false);
 		}
+		const { service, runner } = build({ invoice: invoiceRow({ auto_invoice: false }), context: { auto_invoice: false } });
+
+		await service.voidInvoice(
+			CONTRACT_ID,
+			INV,
+			{ reason: 'issue_error', reissue: true, reissue_changes: { auto_invoice: true, issue_date: '2026-10-15' } } as VoidInvoiceDto,
+			HOLDING,
+			'auth-1',
+			TODAY
+		);
+		const [reissue] = calls(runner.query, 'INSERT INTO invoices').filter(([sql]) => !(sql as string).includes(`'NC', $17`));
+
+		expect((reissue[1] as unknown[])[12]).toBe(true);
 	});
 
 	it('anular sin reemitir: los consumos del período quedan libres (invoice_id NULL) y un solo evento INVOICE_VOIDED', async () => {

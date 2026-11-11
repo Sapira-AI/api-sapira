@@ -482,6 +482,11 @@ crea (no es un desvío: sin fila en `invoice_adjustments`, solo el evento).
   siguen en la lista plana).
 ### 3.8 Anular con NC espejo y reemitir
 
+- **Reemisión (Stanhome 10-11, A10198 → A10216)**: nace con **`auto_invoice = false`** salvo `reissue_changes.auto_invoice: true` explícito
+  (antes, desde el 02-11, tomaba el interruptor vigente del contrato y en México se timbró el mismo día). Aviso `reissue_auto_invoice_off` si
+  el contrato o la anulada la tenían encendida; `reissue_sends_today` si se pide encendida con `issue_date` de hoy o anterior. El front
+  (`AnularFacturaDialog`) deja elegir la fecha de emisión (`reissue_changes.issue_date`, vacía = hoy). Aviso `credit_note_to_erp` por país
+  emisor (`creditNoteToErpWarning`): México cancela el CFDI ante el SAT sin NC; el resto emite la NC en el ERP.
 - Ya existe la pieza: `insertMirrorCreditNote` (NC exacta en moneda, FX, IVA, receptor; nace siempre `Emitida` —nunca Por Emitir, Pagada ni Vencida, decisión 01-10—; `credit_type = cancellation`).
 - **Ajustes 01-10 (decisiones de Domi)**: (1) con **NC de descuento vigentes** la NC de anulación acredita lo que queda de cada línea (original −
   NC de descuento, cruzadas por ítem y período como `PREVIOUS_DISCOUNTS_SQL`; esas líneas van cantidad 1 × −monto) y avisa

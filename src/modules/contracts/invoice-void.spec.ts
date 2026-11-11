@@ -4,10 +4,13 @@ import { mirrorCreditNoteAmounts } from './contract-changes';
 import { withInternalLines } from './contracts.service';
 import { type DeviationPlan, type EditContext, type EditInvoiceRow, type EditItem, type EditLineRow } from './invoice-edit';
 import {
+	creditNoteToErpWarning,
 	type IssuedInvoiceRow,
 	planDiscountCreditNote,
 	planReissue,
 	planVoid,
+	REISSUE_AUTO_INVOICE_OFF_MESSAGE,
+	REISSUE_SENDS_TODAY_MESSAGE,
 	reissueEditContext,
 	remainingRatios,
 	voidCreditReason,
@@ -231,6 +234,23 @@ describe('invoice-void (spec facturas §3.8 y §8, lógica pura)', () => {
 			});
 			expect(plan.rsm_from_month).toBe('2026-09-01');
 			expect(codes(plan.warnings)).toEqual(['credit_note_to_erp']);
+			expect(plan.warnings[0].message).toBe(
+				'La factura está en el ERP: emite la nota de crédito en el ERP. Aquí queda registrada y la factura pasa a anulada'
+			);
+		});
+
+		it('con la factura en el ERP, en México el aviso habla de cancelar el CFDI ante el SAT, sin nota de crédito (Stanhome 10-11)', () => {
+			const plan = planVoid(issued(), lines(), context({ company_country: 'México' }), { reason: 'issue_error', reissue: false });
+
+			expect(plan.warnings.find((warning) => warning.code === 'credit_note_to_erp')?.message).toBe(
+				'La factura está en el ERP: cancela el CFDI ante el SAT (en México no lleva nota de crédito). Aquí la nota de crédito queda registrada y la factura pasa a anulada'
+			);
+			expect(creditNoteToErpWarning('MX', 'discount').message).toBe(
+				'La factura está en el ERP: en México el descuento sobre un CFDI se documenta ante el SAT. Aquí la nota de crédito queda registrada'
+			);
+			expect(creditNoteToErpWarning('Chile', 'discount').message).toBe(
+				'La factura está en el ERP: emite la nota de crédito en el ERP. Aquí queda registrada'
+			);
 		});
 
 		it('sin `exact` la NC recalcularía el IVA (subtotal × tasa): por eso la anulación usa el IVA guardado', () => {
@@ -404,24 +424,43 @@ describe('invoice-void (spec facturas §3.8 y §8, lógica pura)', () => {
 			});
 		});
 
-		it('emisión automática: la reemisión nace con el interruptor vigente del contrato, no con el de la anulada (Domi 02-11); un valor explícito manda', () => {
-			// Anulada con emisión encendida, contrato apagado después (CTR-2026-419): la reemisión queda apagada.
+		it('emisión automática: la reemisión nace APAGADA (Domi 10-11, Stanhome A10198 → A10216), avisa si el contrato o la anulada la tenían encendida, y un true explícito manda', () => {
+			// Contrato y anulada encendidos: la reemisión queda apagada y avisa.
 			const apagado = planReissue(
-				editCtx({ invoice: { ...editCtx().invoice, auto_invoice: true }, context: context({ auto_invoice: false }) }),
+				editCtx({ invoice: { ...editCtx().invoice, auto_invoice: true }, context: context({ auto_invoice: true }) }),
 				null
 			);
 
 			expect(apagado.header.after.auto_invoice).toBe(false);
-			// Contrato encendido, anulada apagada: la reemisión se enciende.
-			const encendido = planReissue(
-				editCtx({ invoice: { ...editCtx().invoice, auto_invoice: false }, context: context({ auto_invoice: true }) }),
-				null
-			);
+			expect(apagado.warnings.map((warning) => warning.code)).toEqual(['reissue_auto_invoice_off']);
+			expect(apagado.warnings[0].message).toBe(REISSUE_AUTO_INVOICE_OFF_MESSAGE);
+			// Contrato apagado y anulada apagada: nace apagada sin aviso (es lo normal).
+			const normal = planReissue(editCtx({ context: context({ auto_invoice: false }) }), null);
 
-			expect(encendido.header.after.auto_invoice).toBe(true);
-			// Cambios explícitos de la reemisión mandan; sin dato del contrato (contexto viejo) se conserva el de la factura.
-			expect(planReissue(editCtx({ context: context({ auto_invoice: true }) }), { auto_invoice: false }).header.after.auto_invoice).toBe(false);
-			expect(planReissue(editCtx({ invoice: { ...editCtx().invoice, auto_invoice: true } }), null).header.after.auto_invoice).toBe(true);
+			expect(normal.header.after.auto_invoice ?? normal.header.before.auto_invoice).toBe(false);
+			expect(normal.warnings.map((warning) => warning.code)).not.toContain('reissue_auto_invoice_off');
+			// Solo el contrato encendido (anulada apagada): igual apagada, con aviso.
+			expect(planReissue(editCtx({ context: context({ auto_invoice: true }) }), null).warnings.map((warning) => warning.code)).toEqual([
+				'reissue_auto_invoice_off',
+			]);
+			// `auto_invoice: true` explícito manda; con fecha de hoy (o sin fecha) avisa que se emite hoy sin revisión; con fecha futura, no.
+			const hoy = planReissue(editCtx({ context: context({ auto_invoice: true }) }), { auto_invoice: true });
+
+			expect(hoy.header.after.auto_invoice).toBe(true);
+			expect(hoy.warnings.map((warning) => warning.code)).toEqual(['reissue_sends_today']);
+			expect(hoy.warnings[0].message).toBe(REISSUE_SENDS_TODAY_MESSAGE);
+			const futura = planReissue(editCtx(), { auto_invoice: true, issue_date: '2026-10-15' });
+
+			expect(futura.header.after.auto_invoice).toBe(true);
+			expect(futura.warnings.map((warning) => warning.code)).not.toContain('reissue_sends_today');
+			expect(planReissue(editCtx(), { auto_invoice: true, issue_date: '2026-09-01' }).warnings.map((warning) => warning.code)).toEqual([
+				'reissue_sends_today',
+			]);
+		});
+
+		it('la fecha de emisión elegida (`issue_date`) es la de la reemisión', () => {
+			expect(reissueEditContext(editCtx(), '2026-10-15').invoice.issue_date).toBe('2026-10-15');
+			expect(planReissue(editCtx(), { issue_date: '2026-10-15' }).errors).toEqual([]);
 		});
 
 		it('el contexto de reemisión saca a la emitida de los períodos emitidos (no choca overlaps_issued)', () => {

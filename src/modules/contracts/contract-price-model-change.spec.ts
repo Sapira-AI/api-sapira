@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 
 import { planChange, PRICE_MODEL_CHANGE_CODES, type WriteOp } from './contract-changes';
-import { context, invoiceRow, itemRow, LICENCIA, request } from './contract-changes.test-fixtures';
+import { context, invoiceRow, itemRow, LICENCIA, request, soporteRow } from './contract-changes.test-fixtures';
 import { METERED_ADVANCE_MESSAGE } from './contract-drafts.service';
 
 import type { PriceSpec } from './pricing-engine';
@@ -162,6 +162,210 @@ describe('price_model_change (cambiar el modelo de precio de un ítem)', () => {
 		);
 
 		expect(same).toEqual(expect.arrayContaining([expect.objectContaining({ field: 'change.items.0.price' })]));
+	});
+
+	describe('solo el modo de cobro (Stanhome 10-11): `{ item_id, billing_method }` sin precio nuevo', () => {
+		const method = (billing_method: string, extra: Record<string, unknown> = {}) => ({
+			type: 'price_model_change' as const,
+			items: [{ item_id: LICENCIA, billing_method, ...extra }],
+		});
+		const issueDates = (plan: ReturnType<typeof planChange>) =>
+			ofKind(plan.ops, 'create_invoices')[0].invoices.map((invoice) => [invoice.issue_date, invoice.lines[0]?.billing_period_start]);
+
+		it('Anticipado → Vencido con el período en curso sin emitir: RENEWAL con el mismo precio y la misma fila de prices, sin delta de MRR, y cada período sale al cerrarlo', () => {
+			const plan = planChange(
+				context({ items: [itemRow({ price_id: 'price-1' }), soporteRow()] }),
+				request(method('Vencido'), { effective_date: '2026-11-01' })
+			);
+			const [renewal] = ofKind(plan.ops, 'insert_item');
+
+			expect(plan.preview.blockers).toEqual([]);
+			expect(renewal.item).toMatchObject({
+				categoria: 'RENEWAL',
+				renews_item_id: LICENCIA,
+				start_date: '2026-11-01',
+				end_date: '2026-12-31',
+				billing_method: 'Vencido',
+				quantity: 10,
+				unit_price: 100,
+				annual_unit_price: 1200,
+				discount_type: null,
+				discount_value: 0,
+				final_price: 2000,
+				price_id: 'price-1',
+				reuse_price: true,
+				price_version: null,
+				supersedes_price_id: null,
+				renewal_base_unit_price: null,
+			});
+			expect(ofKind(plan.ops, 'update_item')).toEqual([
+				expect.objectContaining({
+					item_id: LICENCIA,
+					set: expect.objectContaining({ end_date: '2026-10-31', renewed_by_key: renewal.item.key }),
+				}),
+			]);
+			// Octubre (anticipado, Por Emitir) no se toca; noviembre y diciembre se rehacen vencidos: salen el 01-12 y el 01-01.
+			expect(ofKind(plan.ops, 'delete_line').map((op) => op.line_id)).toEqual(['line-11-lic', 'line-12-lic']);
+			expect(issueDates(plan)).toEqual([
+				['2026-12-01', '2026-11-01'],
+				['2027-01-01', '2026-12-01'],
+			]);
+			expect(plan.preview.rsm.mrr_delta).toBe(0);
+			expect(plan.event).toMatchObject({
+				type: 'RENEWAL',
+				subtype: 'billing_method',
+				title: 'Cambio de modo de cobro',
+				description: '"Licencia" pasa a cobro vencido desde el 2026-11-01',
+				amount_delta: 0,
+				items_affected: [LICENCIA],
+			});
+			expect(plan.event.metadata).toMatchObject({
+				price_model: {
+					billing_method_only: true,
+					billing_method_before: 'Anticipado',
+					billing_method_after: 'Vencido',
+					monthly_before: 1000,
+					monthly_after: 1000,
+				},
+			});
+			const arrears = plan.preview.warnings.find((warning) => warning.code === 'billing_method_to_arrears');
+
+			expect(arrears?.message).toBe(
+				'"Licencia" pasa a cobro vencido: el período que comienza el 2026-11-01 se factura al cerrarlo (2026-12-01)'
+			);
+			expect(plan.preview.warnings.map((warning) => warning.code)).not.toContain('price_model_from_next_period');
+			expect(plan.preview.warnings.map((warning) => warning.code)).not.toContain('fixed_discount_dropped');
+		});
+
+		it('Anticipado → Vencido con el período en curso ya emitido: ese período no se repite y el siguiente sale al cerrarlo', () => {
+			// Corte el 01-10: septiembre está emitida (F-09) por adelantado; octubre en adelante salen vencidas (octubre el 01-11).
+			const plan = planChange(context(), request(method('Vencido'), { effective_date: '2026-10-01' }));
+
+			expect(plan.preview.blockers).toEqual([]);
+			expect(ofKind(plan.ops, 'delete_line').map((op) => op.line_id)).toEqual(['line-10-lic', 'line-11-lic', 'line-12-lic']);
+			expect(issueDates(plan)).toEqual([
+				['2026-11-01', '2026-10-01'],
+				['2026-12-01', '2026-11-01'],
+				['2027-01-01', '2026-12-01'],
+			]);
+			expect(plan.preview.warnings.find((warning) => warning.code === 'billing_method_to_arrears')?.message).toBe(
+				'"Licencia" pasa a cobro vencido: el período que comienza el 2026-10-01 se factura al cerrarlo (2026-11-01); el período ya facturado por adelantado no se repite'
+			);
+			// Un período emitido después del corte sigue bloqueando (lo emitido se corrige con nota de crédito).
+			expect(
+				planChange(context(), request(method('Vencido'), { effective_date: '2026-09-01' })).preview.blockers.map((blocker) => blocker.code)
+			).toContain('issued_after_effective_date');
+		});
+
+		it('fecha a mitad de período: el cobro nuevo rige desde el próximo inicio de período, con aviso en palabras de cobro', () => {
+			const plan = planChange(context(), request(method('Vencido'), { effective_date: '2026-11-15' }));
+
+			expect(ofKind(plan.ops, 'insert_item')[0].item.start_date).toBe('2026-12-01');
+			expect(plan.preview.warnings.find((warning) => warning.code === 'price_model_from_next_period')?.message).toBe(
+				'El cobro vencido de "Licencia" rige desde el próximo inicio de período (2026-12-01): el período en curso sigue anticipado'
+			);
+		});
+
+		it('Vencido → Anticipado: el día del corte salen dos facturas (la del período vencido y la del que comienza), avisado', () => {
+			const arrearsItems = [itemRow({ billing_method: 'Vencido' }), soporteRow()];
+			const plan = planChange(context({ items: arrearsItems }), request(method('Anticipado'), { effective_date: '2026-11-01' }));
+			const [renewal] = ofKind(plan.ops, 'insert_item');
+
+			expect(plan.preview.blockers).toEqual([]);
+			expect(renewal.item).toMatchObject({
+				billing_method: 'Anticipado',
+				start_date: '2026-11-01',
+				final_price: 2000,
+				renewal_base_unit_price: null,
+			});
+			expect(issueDates(plan)).toEqual([
+				['2026-11-01', '2026-11-01'],
+				['2026-12-01', '2026-12-01'],
+			]);
+			expect(plan.preview.warnings.find((warning) => warning.code === 'two_invoices_in_transition')?.message).toBe(
+				'"Licencia" pasa a cobro anticipado desde el 2026-11-01: ese día salen dos facturas, la del período vencido (2026-10-01 a 2026-10-31) y la del período que comienza'
+			);
+			expect(plan.event).toMatchObject({
+				type: 'RENEWAL',
+				subtype: 'billing_method',
+				description: '"Licencia" pasa a cobro anticipado desde el 2026-11-01',
+			});
+			// Con el período anterior ya emitido no hay dos facturas el mismo día: sin aviso.
+			const issuedBefore = planChange(context({ items: arrearsItems }), request(method('Anticipado'), { effective_date: '2026-10-01' }));
+
+			expect(issuedBefore.preview.warnings.map((warning) => warning.code)).not.toContain('two_invoices_in_transition');
+		});
+
+		it('conserva el descuento en monto fijo y el precio anual del ítem (no es un modelo nuevo)', () => {
+			const plan = planChange(
+				context({
+					items: [
+						itemRow({ discount_type: 'Monto fijo', discount_value: 50, price_entry_mode: 'annual', annual_unit_price: 1200 }),
+						soporteRow(),
+					],
+				}),
+				request(method('Vencido'), { effective_date: '2026-11-01' })
+			);
+
+			expect(ofKind(plan.ops, 'insert_item')[0].item).toMatchObject({
+				discount_type: 'Monto fijo',
+				discount_value: 50,
+				price_entry_mode: 'annual',
+				annual_unit_price: 1200,
+				unit_price: null,
+			});
+			expect(plan.preview.warnings.map((warning) => warning.code)).not.toContain('fixed_discount_dropped');
+		});
+
+		it('rechaza el mismo modo de cobro, y Anticipado en un ítem por consumo (salvo asiento) sin pedir la métrica de nuevo', () => {
+			expect(fieldErrors(() => planChange(context(), request(method('Anticipado'), { effective_date: '2026-11-01' })))).toEqual(
+				expect.arrayContaining([
+					{ field: 'change.items.0.billing_method', message: '"Licencia" ya se cobra anticipado: elige el otro modo de cobro' },
+				])
+			);
+			const metered = itemRow({
+				billing_method: 'Vencido',
+				price_id: 'price-1',
+				raw: {
+					price_id: 'price-1',
+					price_model: 'standard',
+					price_quantity_type: 'metered',
+					price_billable_metric_id: 'm-1',
+					price_unit_amount: 100,
+				},
+			});
+			const errors = fieldErrors(() =>
+				planChange(context({ items: [metered, soporteRow()] }), request(method('Anticipado'), { effective_date: '2026-11-01' }))
+			);
+
+			expect(errors).toEqual([{ field: 'change.items.0.billing_method', message: METERED_ADVANCE_MESSAGE }]);
+			// El mismo modelo que ya tiene, pero con otro modo de cobro, es un cambio de modo de cobro (no `price_model_unchanged`).
+			const fixed = itemRow({
+				price_id: 'price-1',
+				raw: { price_id: 'price-1', price_model: 'standard', price_quantity_type: 'fixed', price_unit_amount: 100 },
+			});
+			const sameSpec = planChange(
+				context({ items: [fixed, soporteRow()] }),
+				request(
+					{
+						type: 'price_model_change',
+						items: [
+							{ item_id: LICENCIA, price: { model: 'standard', quantity_type: 'fixed', unit_amount: 100 }, billing_method: 'Vencido' },
+						],
+					},
+					{ effective_date: '2026-11-01' }
+				)
+			);
+
+			expect(sameSpec.preview.blockers).toEqual([]);
+			expect(ofKind(sameSpec.ops, 'insert_item')[0].item).toMatchObject({
+				billing_method: 'Vencido',
+				price_id: 'price-1',
+				reuse_price: true,
+				price_version: null,
+			});
+			expect(sameSpec.event.subtype).toBe('billing_method');
+		});
 	});
 
 	it('con precio propio anterior: el nuevo es la versión siguiente y lo reemplaza (supersedes_price_id)', () => {
