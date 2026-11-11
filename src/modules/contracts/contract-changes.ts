@@ -7301,6 +7301,20 @@ function startCorrectionSet(
  * - El generador rehace solo los días sin factura vigente entre el nuevo inicio y el fin del primer período (o el día antes del inicio
  *   anterior al adelantar, o el fin de lo quitado): mismo prorrateo que al crear el ítem; se funde con la Por Emitir del mes o va aparte.
  */
+/**
+ * Unificada Por Emitir cuyo origen de este contrato está en el contexto como editable o con borrador en el ERP (Brightcell 10-11): la
+ * corrección se aplica al origen y la unificada se re-copia sola (`unifiedToResync`), o la bloquea `assertNoUnified` con el paso
+ * correcto (restablecer el borrador). No se bloquea como "Por Emitir que no se puede ajustar" (caso Brightcell: mover el inicio del upsell
+ * de octubre a noviembre con la factura de octubre unificada).
+ */
+const unifiedHandledByOrigins = (ctx: ChangeContext, invoice: ChangeInvoiceRow) =>
+	isUnified(invoice) &&
+	invoice.status === PENDING_STATUS &&
+	invoice.is_active &&
+	ctx.invoices.some(
+		(origin) => origin.consolidated_into_invoice_id === invoice.id && (origin.unified_state === 'editable' || origin.unified_state === 'in_erp')
+	);
+
 function moveItemStartInvoices(p: Planner, item: ChangeItemRow, row: ChangeItemRow, contractAnchor: number) {
 	const from = item.start_date!;
 	const to = row.start_date!;
@@ -7312,6 +7326,7 @@ function moveItemStartInvoices(p: Planner, item: ChangeItemRow, row: ChangeItemR
 		if (invoice.status === 'Cancelada' || !invoice.is_active || /^(NC|ND)$/i.test(invoice.document_type ?? '') || isEditablePending(invoice))
 			continue;
 		if (!itemLines(invoice).some((line) => lineStart(line) && lineStart(line) < to)) continue;
+		if (unifiedHandledByOrigins(p.ctx, invoice)) continue;
 		if (isIssued(invoice))
 			p.block(
 				'issued_invoice_before_start',
@@ -7325,6 +7340,8 @@ function moveItemStartInvoices(p: Planner, item: ChangeItemRow, row: ChangeItemR
 				'Desunifícala o cancélala desde Facturación y vuelve a corregir la fecha'
 			);
 	}
+	// Unificadas con líneas del ítem desde el inicio más temprano: aviso `unified_resync` (editable) o bloqueo (borrador en el ERP / emitida).
+	p.assertNoUnified(new Set([item.id]), from < to ? from : to);
 	const anchor = anchorOfItem(item, contractAnchor);
 	// Al adelantar, el tramo inicial prorrateado del inicio anterior se rehace junto con los días nuevos (un solo período, como al crear).
 	const oldStub = to < from && Number(from.slice(8, 10)) !== anchor;
@@ -7432,11 +7449,14 @@ function moveItemEndInvoices(p: Planner, item: ChangeItemRow, row: ChangeItemRow
 	const itemLines = (invoice: ChangeInvoiceRow) => invoice.lines.filter((line) => line.contract_item_id === item.id);
 	let restoreFrom: string | null = null;
 
+	// Unificadas con líneas del ítem desde el fin más temprano: aviso `unified_resync` (editable) o bloqueo (borrador en el ERP / emitida).
+	p.assertNoUnified(new Set([item.id]), to < from ? to : from);
 	if (to < from) {
 		for (const invoice of p.ctx.invoices) {
 			if (invoice.status === 'Cancelada' || !invoice.is_active || /^(NC|ND)$/i.test(invoice.document_type ?? '') || isEditablePending(invoice))
 				continue;
 			if (!itemLines(invoice).some((line) => lineEnd(line) && lineEnd(line) > to)) continue;
+			if (unifiedHandledByOrigins(p.ctx, invoice)) continue;
 			if (isIssued(invoice))
 				p.block(
 					'issued_invoice_after_end',
