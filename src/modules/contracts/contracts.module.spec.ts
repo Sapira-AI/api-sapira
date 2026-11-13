@@ -25,6 +25,7 @@ describe('ContractsModule (cableado)', () => {
 		expect(controllers.map((controller) => controller.name).sort()).toEqual([
 			'BillableMetricsController',
 			'ConsumptionController',
+			'ContractBulkChangesController',
 			'ContractInvoiceDteController',
 			'ContractsController',
 			'InvoiceConsolidationRulesController',

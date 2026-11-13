@@ -201,7 +201,7 @@ describe('ContractScheduledChangesService (pactos R1, §9.3.6)', () => {
 		await cancel.service.cancel(CONTRACT_ID, PACT_ID, { reason: 'Ya no aplica' }, HOLDING, 'auth-1');
 		expect(calls(cancel.runner.query, 'UPDATE contract_scheduled_changes SET status')[0][1][3]).toBe('cancelled');
 		expect(calls(cancel.runner.query, 'INSERT INTO contract_lifecycle_events')[0][1][2]).toBe('SCHEDULED_CHANGE_CANCELLED');
-		// Notificaciones v2: omitir o cancelar cierra la alerta "Ajuste pactado por aplicar" del contrato.
+		// Notificaciones v2: omitir o cancelar cierra la alerta "Cambio programado por aplicar" del contrato.
 		expect(once.changes.closeResolvedAlerts).toHaveBeenCalledWith(CONTRACT_ID, HOLDING);
 		expect(cancel.changes.closeResolvedAlerts).toHaveBeenCalledWith(CONTRACT_ID, HOLDING);
 	});
@@ -222,6 +222,63 @@ describe('ContractScheduledChangesService (pactos R1, §9.3.6)', () => {
 		expect(changes.apply.mock.calls[0][6]).toMatchObject({ scheduled_change: { value: 6 } });
 	});
 
+	it('preview antes de guardar: simula el pacto en memoria con el motor (ítems, fecha por ítem, pacto aplicado); no escribe ni delega', async () => {
+		const { service, changes, runner } = build();
+		const preview = await service.createPreview(
+			CONTRACT_ID,
+			{ trigger: 'on_date', effective_date: '2026-12-01', kind: 'percent_uplift', value: 5 },
+			HOLDING,
+			today
+		);
+
+		expect(preview.can_apply).toBe(true);
+		expect(preview.effective_date).toBe('2026-12-01');
+		// Alcance contrato: Licencia 10 × 100 → +5 (10 × 5) y Soporte 1 × 200 → +10, desde el 01-12.
+		expect(preview.items.added.map((item) => [item.product_name, item.start_date, item.monthly_price])).toEqual([
+			['Licencia', '2026-12-01', 50],
+			['Soporte', '2026-12-01', 10],
+		]);
+		expect(preview.rsm.mrr_delta).toBe(60);
+		expect([preview.contract.before.mrr, preview.contract.after.mrr]).toEqual([1200, 1260]);
+		expect(preview.invoices.updated.map((invoice) => invoice.id)).toEqual(['inv-12']);
+		expect(changes.preview).not.toHaveBeenCalled();
+		expect(changes.apply).not.toHaveBeenCalled();
+		expect(runner.startTransaction).not.toHaveBeenCalled();
+		// En la renovación: la vista previa es la renovación con el pacto.
+		const renewal = await service.createPreview(
+			CONTRACT_ID,
+			{ trigger: 'on_renewal', kind: 'percent_uplift', value: 5, contract_item_id: LICENCIA },
+			HOLDING,
+			today
+		);
+
+		expect(renewal.type).toBe('renewal');
+		expect(renewal.contract.after.end_date).toBe('2027-12-31');
+		// Se lee "cómo quedará": una fila por ítem renovado con el unitario ya reajustado, el MRR con el cambio y sin "ajustes" que no cambian.
+		expect(renewal.items.added.map((item) => [item.categoria, item.quantity, item.unit_price, item.monthly_price])).toEqual([
+			['RENEWAL', 10, 105, 1050],
+		]);
+		expect(renewal.items.adjusted).toEqual([]);
+		expect([renewal.contract.before.mrr, renewal.contract.after.mrr]).toEqual([1200, 1250]);
+	});
+
+	it('preview antes de guardar: mismas reglas que crear (400 por campo) e índice sin publicar → blocker index_value_missing', async () => {
+		const { service } = build();
+
+		await expect(
+			service.createPreview(CONTRACT_ID, { trigger: 'on_date', kind: 'percent_uplift', value: 5 }, HOLDING, today)
+		).rejects.toBeInstanceOf(BadRequestException);
+		const indexed = await service.createPreview(
+			CONTRACT_ID,
+			{ trigger: 'on_date', effective_date: '2026-12-01', kind: 'index', value: 0, index_code: 'IPC', index_base_value: 100 },
+			HOLDING,
+			today
+		);
+
+		expect(indexed.can_apply).toBe(false);
+		expect(indexed.blockers.map((blocker) => blocker.code)).toEqual(['index_value_missing']);
+	});
+
 	it('apply de un índice sin dato publicado → 409 blocked con el preview (index_value_missing); el preview lo muestra sin aplicar', async () => {
 		const indexed = pactRow({ kind: 'index', index_code: 'IPC', index_base_value: '100', value: '0' });
 		const { service, changes } = build(undefined, indexed);
@@ -231,6 +288,46 @@ describe('ContractScheduledChangesService (pactos R1, §9.3.6)', () => {
 		expect(changes.preview).not.toHaveBeenCalled();
 		await expect(service.apply(CONTRACT_ID, PACT_ID, {}, HOLDING, 'auth-1', undefined, today)).rejects.toBeInstanceOf(ConflictException);
 		expect(changes.apply).not.toHaveBeenCalled();
+	});
+});
+
+describe('revertir un cambio programado aplicado (usuarias 13-11)', () => {
+	const applied = (sql: string) =>
+		sql.includes("metadata->'created_items'")
+			? [{ id: PACT_ID, applied_event_id: 'event-1', created_items: { 'new:1': 'item-adj-1', 'new:2': 'item-adj-2' } }]
+			: undefined;
+
+	it('vista previa y revertir: delegan en el motor con el cambio, el evento que lo aplicó y los ítems que creó', async () => {
+		const { service, changes } = build(applied);
+
+		await service.revertPreview(CONTRACT_ID, PACT_ID, { reason: ' Se cargó por error ' }, HOLDING, today);
+		const [contractId, request, , , options] = changes.preview.mock.calls[0];
+
+		expect(contractId).toBe(CONTRACT_ID);
+		expect(request).toEqual({
+			effective_date: '2026-09-28',
+			origin: { type: 'manual' },
+			reason: 'Se cargó por error',
+			change: { type: 'scheduled_change_revert' },
+		});
+		expect(options).toEqual({ revert: { scheduled_change_id: PACT_ID, event_id: 'event-1', item_ids: ['item-adj-1', 'item-adj-2'] } });
+		await service.revert(CONTRACT_ID, PACT_ID, { reason: 'Se cargó por error' }, HOLDING, 'auth-1', 'key-9', today);
+		expect(changes.apply.mock.calls[0].slice(3, 5)).toEqual(['auth-1', 'key-9']);
+		expect(changes.apply.mock.calls[0][6]).toEqual(options);
+	});
+
+	it('404 si el cambio no es de ese contrato; sin evento de aplicación viaja sin ítems (el motor lo bloquea)', async () => {
+		const missing = build((sql) => (sql.includes("metadata->'created_items'") ? [] : undefined));
+
+		await expect(missing.service.revert(CONTRACT_ID, PACT_ID, { reason: 'x' }, HOLDING, 'auth-1')).rejects.toThrow(
+			'Cambio programado no encontrado'
+		);
+		const bare = build((sql) =>
+			sql.includes("metadata->'created_items'") ? [{ id: PACT_ID, applied_event_id: null, created_items: null }] : undefined
+		);
+
+		await bare.service.revertPreview(CONTRACT_ID, PACT_ID, { reason: 'x' }, HOLDING, today);
+		expect(bare.changes.preview.mock.calls[0][4]).toEqual({ revert: { scheduled_change_id: PACT_ID, event_id: null, item_ids: [] } });
 	});
 });
 
@@ -245,6 +342,10 @@ describe('ContractsController · rutas de pactos', () => {
 		expect(Reflect.getMetadata(PATH_METADATA, proto.cancelScheduledChange)).toBe(':id/scheduled-changes/:changeId/cancel');
 		expect(Reflect.getMetadata(PATH_METADATA, proto.previewScheduledChange)).toBe(':id/scheduled-changes/:changeId/apply/preview');
 		expect(Reflect.getMetadata(PATH_METADATA, proto.applyScheduledChange)).toBe(':id/scheduled-changes/:changeId/apply');
+		expect(Reflect.getMetadata(PATH_METADATA, proto.previewRevertScheduledChange)).toBe(':id/scheduled-changes/:changeId/revert/preview');
+		expect(Reflect.getMetadata(PATH_METADATA, proto.revertScheduledChange)).toBe(':id/scheduled-changes/:changeId/revert');
+		for (const handler of [proto.previewRevertScheduledChange, proto.revertScheduledChange])
+			expect(Reflect.getMetadata(HTTP_CODE_METADATA, handler)).toBe(200);
 		for (const handler of [proto.skipScheduledChange, proto.cancelScheduledChange, proto.previewScheduledChange, proto.applyScheduledChange])
 			expect(Reflect.getMetadata(HTTP_CODE_METADATA, handler)).toBe(200);
 	});

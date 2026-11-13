@@ -15,6 +15,7 @@ import { NotificationsService } from '@/modules/notifications/notifications.serv
 import { API_WRITER_SQL } from './api-writer';
 import { ContractChangesService } from './contract-changes.service';
 import {
+	autoRenewalSummary,
 	dueReminders,
 	loadRenewalReminder,
 	reminderLabel,
@@ -26,6 +27,7 @@ import {
 	SYSTEM_ACTOR_ID,
 } from './contract-renewals';
 import { ContractRenewalsService } from './contract-renewals.service';
+import { ContractScheduledChangesService } from './contract-scheduled-changes.service';
 import { ContractsScheduler } from './contracts.scheduler';
 import { ContractsService } from './contracts.service';
 import { InvoiceConsolidationRulesService } from './invoice-consolidation-rules.service';
@@ -51,6 +53,9 @@ const candidateRow: Row = {
 	term_months: 12,
 	billing_frequency: 'Mensual',
 };
+
+const blockedError = (message: string) =>
+	new ConflictException({ message: `No se puede aplicar el cambio: ${message}`, code: 'blocked', preview: { blockers: [{ code: 'x', message }] } });
 
 const build = (handler: Handler = () => undefined) => {
 	const route = async (sql: string, params: unknown[] = []) => {
@@ -92,14 +97,76 @@ const build = (handler: Handler = () => undefined) => {
 		resolveByDeduplicationKey: jest.fn().mockResolvedValue(undefined),
 	} as unknown as NotificationsService;
 
-	return { service: new ContractRenewalsService(dataSource, contracts, changes, notifications), runner, dataSource, changes, notifications };
+	// Por defecto el motor bloquea el pacto (los casos de aviso); los de aplicación automática lo resuelven.
+	const scheduledChanges = {
+		apply: jest.fn().mockRejectedValue(blockedError('Falta el valor del índice')),
+	} as unknown as ContractScheduledChangesService;
+
+	return {
+		service: new ContractRenewalsService(dataSource, contracts, changes, notifications, scheduledChanges),
+		runner,
+		dataSource,
+		changes,
+		notifications,
+		scheduledChanges,
+	};
 };
+const query = (dataSource: DataSource) => calls(dataSource.query as jest.Mock, 'ci.auto_renew = true')[0][0] as string;
 const calls = (mock: jest.Mock, needle: string) => mock.mock.calls.filter(([sql]) => (sql as string).includes(needle));
 
 describe('job contracts-auto-renewal (§9.3.5)', () => {
-	it('propone (no renueva): evento RENEWAL_PROPOSED del actor sistema con ítems, preview, pactos y clave; costura primero; notifica', async () => {
-		const { service, runner, changes, notifications } = build();
+	it('renueva sola 30 días antes del fin: el mismo cambio renewal con el actor sistema y clave de idempotencia; no propone y avisa con un solo resumen', async () => {
+		const { service, runner, dataSource, changes, notifications } = build();
 
+		expect(await service.proposeRenewalsForHolding(HOLDING, today)).toBe(1);
+		expect(changes.apply).toHaveBeenCalledTimes(1);
+		const [contractId, request, holdingId, actor, key] = (changes.apply as jest.Mock).mock.calls[0];
+
+		expect([contractId, holdingId, actor]).toEqual([CONTRACT, HOLDING, SYSTEM_ACTOR_ID]);
+		expect(request).toMatchObject({
+			effective_date: '2026-09-28',
+			origin: { type: 'manual' },
+			reason: 'Renovación automática',
+			change: { type: 'renewal', items: [{ item_id: ITEM, term_months: 12 }] },
+		});
+		expect(query(dataSource)).toContain('COALESCE(ci.auto_renew_term_months, 12) AS term_months');
+		expect(key).toBe(`auto-renewal:2026-10-20:${ITEM}`);
+		expect(calls(runner.query, `'${RENEWAL_PROPOSED}', 'Pending'`)).toEqual([]);
+		// Sin aviso por contrato: un solo resumen del día por holding (Domi 13-11).
+		expect(notifications.createOrUpdate).toHaveBeenCalledTimes(1);
+		expect((notifications.createOrUpdate as jest.Mock).mock.calls[0][1]).toMatchObject({
+			type: 'contract_renewal_proposed',
+			severity: 'info',
+			title: 'Renovaciones automáticas del 28-09: 1 contrato',
+			deduplication_key: 'contracts:auto-renewals:2026-09-28',
+		});
+		expect((notifications.createOrUpdate as jest.Mock).mock.calls[0][1]).not.toHaveProperty('resource_id');
+	});
+
+	it('con una propuesta abierta la confirma (origin renewal_proposal) y cierra su notificación; una omitida no se renueva', async () => {
+		const open = build((sql) =>
+			sql.includes("metadata->'proposal_keys'") ? [{ id: 'proposal-1', status: 'open', key: `${ITEM}:2026-10-20` }] : undefined
+		);
+
+		expect(await open.service.proposeRenewalsForHolding(HOLDING, today)).toBe(1);
+		expect((open.changes.apply as jest.Mock).mock.calls[0][1].origin).toEqual({ type: 'renewal_proposal', event_id: 'proposal-1' });
+		expect(open.notifications.resolveByDeduplicationKey).toHaveBeenCalledWith(HOLDING, 'contracts:renewal-proposal:proposal-1');
+		const dismissed = build((sql) =>
+			sql.includes("metadata->'proposal_keys'") ? [{ id: 'proposal-1', status: 'dismissed', key: `${ITEM}:2026-10-20` }] : undefined
+		);
+
+		expect(await dismissed.service.proposeRenewalsForHolding(HOLDING, today)).toBe(0);
+		expect(dismissed.changes.apply).not.toHaveBeenCalled();
+	});
+
+	it('si el motor la bloquea no renueva: queda la propuesta con el motivo (evento del actor sistema, costura primero) y notifica', async () => {
+		const { service, runner, changes, notifications } = build((sql) =>
+			sql.includes('renewed_by_item_id IS NULL AND churn_date IS NULL') && sql.includes('FROM contract_items WHERE')
+				? [{ id: ITEM }]
+				: undefined
+		);
+
+		(changes.apply as jest.Mock).mockRejectedValue(blockedError('El período 2026-10 está cerrado'));
 		expect(await service.proposeRenewalsForHolding(HOLDING, today)).toBe(1);
 		expect(runner.query.mock.calls[0][0]).toBe(API_WRITER_SQL);
 		expect(runner.query.mock.calls[1][0]).toContain('FOR UPDATE');
@@ -107,6 +174,7 @@ describe('job contracts-auto-renewal (§9.3.5)', () => {
 		const params = insert[1] as unknown[];
 
 		expect(insert[0]).toContain(`'${RENEWAL_PROPOSED}', 'Pending'`);
+		expect(params[3]).toContain('No se renovó solo: El período 2026-10 está cerrado');
 		expect(params[4]).toBe(SYSTEM_ACTOR_ID);
 		expect(params[5]).toBe('2026-10-20');
 		expect(JSON.parse(params[7] as string)).toMatchObject({
@@ -118,35 +186,42 @@ describe('job contracts-auto-renewal (§9.3.5)', () => {
 			items: [expect.objectContaining({ item_id: ITEM, renewal_start: '2026-10-21', monthly_price: 1000 })],
 			preview: expect.objectContaining({ available: true, end_date_after: '2027-10-20', can_apply: true }),
 			pacts: [],
+			auto_renewal_blocked: 'El período 2026-10 está cerrado',
 		});
-		// El preview es de solo lectura; nunca se aplica la renovación.
-		expect((changes.preview as jest.Mock).mock.calls[0][1]).toMatchObject({ change: { type: 'renewal', items: [{ item_id: ITEM }] } });
-		expect(changes.apply).not.toHaveBeenCalled();
 		expect((notifications.createOrUpdate as jest.Mock).mock.calls[0][1]).toMatchObject({
 			type: 'contract_renewal_proposed',
 			resource_id: CONTRACT,
 			deduplication_key: 'contracts:renewal-proposal:event-1',
+			message: expect.stringContaining('No se pudo renovar solo: El período 2026-10 está cerrado'),
 		});
 		// Destinatarios = suscripciones del tipo (semilla N3: Administrador y Finanzas), ya no solo super admins.
 		expect((notifications.createOrUpdate as jest.Mock).mock.calls[0][1].recipients).toBeUndefined();
 	});
 
-	it('idempotente: con la clave ítem:fin ya propuesta (lectura o con el lock) no inserta ni notifica', async () => {
-		const proposed: Handler = (sql) => (sql.includes("metadata->'proposal_keys'") ? [{ key: `${ITEM}:2026-10-20` }] : undefined);
-		const first = build(proposed);
+	it('ya vencido no se renueva solo (facturaría hacia atrás): queda como propuesta; bloqueada y ya propuesta no se repite', async () => {
+		const overdue = build((sql) => {
+			if (sql.includes('FROM contract_items ci') && sql.includes('ci.auto_renew = true')) return [{ ...candidateRow, end_date: '2026-09-20' }];
+			if (sql.includes('FROM contract_items WHERE')) return [{ id: ITEM }];
 
-		expect(await first.service.proposeRenewalsForHolding(HOLDING, today)).toBe(0);
-		expect(first.dataSource.createQueryRunner).not.toHaveBeenCalled();
-		// Otra réplica la propuso entre la lectura y el lock: se revisa de nuevo dentro de la transacción.
-		let reads = 0;
-		const race = build((sql) => (sql.includes("metadata->'proposal_keys'") ? (++reads > 1 ? [{ key: `${ITEM}:2026-10-20` }] : []) : undefined));
+			return undefined;
+		});
 
-		expect(await race.service.proposeRenewalsForHolding(HOLDING, today)).toBe(0);
-		expect(calls(race.runner.query, 'INSERT INTO contract_lifecycle_events')).toEqual([]);
-		expect(race.notifications.createOrUpdate).not.toHaveBeenCalled();
+		expect(await overdue.service.proposeRenewalsForHolding(HOLDING, today)).toBe(1);
+		expect(overdue.changes.apply).not.toHaveBeenCalled();
+		expect(calls(overdue.runner.query, `'${RENEWAL_PROPOSED}', 'Pending'`)).toHaveLength(1);
+		// Bloqueada ayer (propuesta abierta) y sigue bloqueada hoy: reintenta, pero no inserta otra propuesta ni vuelve a notificar.
+		const again = build((sql) =>
+			sql.includes("metadata->'proposal_keys'") ? [{ id: 'proposal-1', status: 'open', key: `${ITEM}:2026-10-20` }] : undefined
+		);
+
+		(again.changes.apply as jest.Mock).mockRejectedValue(blockedError('El período 2026-10 está cerrado'));
+		expect(await again.service.proposeRenewalsForHolding(HOLDING, today)).toBe(0);
+		expect(again.changes.apply).toHaveBeenCalledTimes(1);
+		expect(calls(again.runner.query, 'INSERT INTO contract_lifecycle_events')).toEqual([]);
+		expect(again.notifications.createOrUpdate).not.toHaveBeenCalled();
 	});
 
-	it('ventana de aviso: el SQL filtra auto_renew, sin renovar ni churn, contrato active | pending_renewal y fin ≤ hoy + días del holding', async () => {
+	it('ventana: el SQL filtra auto_renew, sin renovar ni churn, contrato active | pending_renewal | expired y fin ≤ hoy + días del holding', async () => {
 		const { service, dataSource } = build((sql) =>
 			sql.includes('FROM holding_settings') ? [{ settings: { auto_renewal_notice_days: 45 } }] : undefined
 		);
@@ -154,7 +229,7 @@ describe('job contracts-auto-renewal (§9.3.5)', () => {
 		await service.proposeRenewalsForHolding(HOLDING, today);
 		const [query] = calls(dataSource.query as jest.Mock, 'ci.auto_renew = true');
 
-		expect(query[0]).toContain(`ds.derived_status IN ('active', 'pending_renewal')`);
+		expect(query[0]).toContain(`ds.derived_status IN ('active', 'pending_renewal', 'expired')`);
 		expect(query[0]).toContain('ci.renewed_by_item_id IS NULL AND ci.churn_date IS NULL');
 		expect(query[1]).toEqual([HOLDING, '2026-09-28', '2026-11-12']);
 	});
@@ -189,6 +264,27 @@ describe('job contracts-scheduled-changes (§9.3.6)', () => {
 		index_lag_months: 1,
 		due_date: '2026-10-15',
 		...overrides,
+	});
+
+	it('el cambio futuro se aplica solo con el actor sistema: sin evento de aviso ni notificación; cierra el aviso anterior', async () => {
+		const { service, runner, notifications, scheduledChanges } = build((sql) =>
+			sql.includes('FROM contract_scheduled_changes sc') ? [pactRow({ kind: 'percent_uplift', value: '5', index_code: null })] : undefined
+		);
+
+		(scheduledChanges.apply as jest.Mock).mockResolvedValue({ applied: true });
+		expect(await service.flagDueForHolding(HOLDING, today)).toBe(1);
+		expect((scheduledChanges.apply as jest.Mock).mock.calls[0]).toEqual([
+			CONTRACT,
+			'pact-1',
+			{},
+			HOLDING,
+			SYSTEM_ACTOR_ID,
+			'auto-scheduled-change:pact-1:2026-10-15',
+			today,
+		]);
+		expect(calls(runner.query, 'INSERT INTO contract_lifecycle_events')).toEqual([]);
+		expect(notifications.createOrUpdate).not.toHaveBeenCalled();
+		expect(notifications.resolveByDeduplicationKey).toHaveBeenCalledWith(HOLDING, 'contracts:scheduled-change-due:pact-1:2026-10-15');
 	});
 
 	it('pacto índice sin dato → evento SCHEDULED_CHANGE_DUE con blocker index_value_missing; con serie lleva la variación', async () => {
@@ -545,5 +641,17 @@ describe('ContractsScheduler', () => {
 		expect(await on.scheduler.consolidationRulesDaily()).toEqual([{ holding_id: HOLDING, success: true, events: 4 }]);
 		expect(await off.scheduler.consolidationRulesDaily()).toBeNull();
 		expect(off.consolidationRules.runAll).not.toHaveBeenCalled();
+	});
+});
+
+describe('resumen diario de renovaciones automáticas (Domi 13-11)', () => {
+	it('un resumen con el total y, si hay varias compañías, el conteo por compañía (nunca un aviso por contrato)', () => {
+		expect(autoRenewalSummary(['SimpliRoute SpA'])).toContain('Hoy se renovó solo 1 contrato de SimpliRoute SpA.');
+		expect(autoRenewalSummary(['SimpliRoute SpA', 'SimpliRoute SpA', 'SimpliRoute SpA'])).toContain(
+			'Hoy se renovaron solos 3 contratos de SimpliRoute SpA.'
+		);
+		expect(autoRenewalSummary(['SR México', 'SR Chile', 'SR Chile', null])).toContain(
+			'Hoy se renovaron solos 4 contratos: SR Chile 2 · SR México 1 · Sin compañía 1.'
+		);
 	});
 });

@@ -295,6 +295,43 @@ describe('buildLifecycle', () => {
 	const states = (input: Partial<LifecycleInput>) => buildLifecycle({ ...base, ...input }).stages.map((stage) => stage.state);
 	const expiry = (input: Partial<LifecycleInput>) => buildLifecycle({ ...base, ...input }).stages[2];
 
+	it('hitos: lo ocurrido por fecha y luego lo programado; los seguidos del mismo tipo se compactan con su rango y detalle', () => {
+		const { milestones } = buildLifecycle({
+			...base,
+			today: '2026-11-13',
+			events: [
+				{ type: 'UPSELL', title: 'Ampliación de Licencia', date: '2026-05-01' },
+				{ type: 'ACTIVATION', title: 'Activación', date: '2026-02-01' },
+				{ type: 'UPSELL', title: 'Ampliación de Soporte', date: '2026-03-01' },
+				{ type: 'DOWNSELL', title: 'Reducción de Licencia', date: '2026-08-01' },
+				{ type: 'UPSELL', title: 'Ampliación de Licencia', date: '2026-06-15' },
+				{ type: 'RENEWAL', title: 'Renovación', date: '2026-02-01' },
+				{ type: 'INVOICE_EDITED', title: 'Factura editada', date: '2026-04-01' },
+			],
+			scheduled_changes: [
+				{ id: 'p-2', trigger: 'on_renewal', date: null, label: 'Reajuste por IPC' },
+				{ id: 'p-1', trigger: 'on_date', date: '2026-12-01', label: 'Reajuste +5 %' },
+			],
+		});
+
+		expect(
+			milestones.map((milestone) => [milestone.kind, milestone.label, milestone.date, milestone.end_date, milestone.count, milestone.future])
+		).toEqual([
+			['renewal', 'Renovación', '2026-02-01', null, 1, false],
+			['upsell', '3 ampliaciones', '2026-03-01', '2026-06-15', 3, false],
+			['downsell', 'Reducción', '2026-08-01', null, 1, false],
+			['scheduled_change', 'Reajuste +5 %', '2026-12-01', null, 1, true],
+			['scheduled_change', 'Reajuste por IPC', null, null, 1, true],
+		]);
+		expect(milestones[1].details).toEqual(['Ampliación de Soporte', 'Ampliación de Licencia', 'Ampliación de Licencia']);
+		expect(milestones[4].details).toEqual(['Reajuste por IPC · en la renovación']);
+		// Un borrador o un contrato cancelado no muestran hitos.
+		expect(
+			buildLifecycle({ ...base, derived_status: 'draft', events: [{ type: 'UPSELL', title: 'x', date: '2026-05-01' }], today: '2026-11-13' })
+				.milestones
+		).toEqual([]);
+	});
+
 	it('las etapas son Borrador → Activo → Vencimiento → Cerrado', () => {
 		expect(buildLifecycle(base).stages.map((stage) => [stage.key, stage.label])).toEqual([
 			['draft', 'Borrador'],

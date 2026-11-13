@@ -609,6 +609,19 @@ export class ContractsController {
 		return await this.contractScheduledChangesService.create(id, body, holdingId, authIdOf(req));
 	}
 
+	@Post(':id/scheduled-changes/preview')
+	@HttpCode(200)
+	@ApiOperation({
+		summary: 'Vista previa de un ajuste pactado antes de guardarlo',
+		description:
+			'Mismo cuerpo que crear. Devuelve el ChangePreview del cambio que el pacto materializará (ítems, facturas por emitir, MRR, bloqueos): on_renewal → la renovación con el pacto; en fecha → item_change desde el primer período de cada ítem en o después de la fecha. No escribe nada',
+	})
+	@ApiParam(CONTRACT_PARAM)
+	@ApiResponse({ status: 400, description: '`errors[{ field, message }]` (mismas reglas que crear)' })
+	async previewNewScheduledChange(@Param('id') id: string, @Body() body: CreateScheduledChangeDto, @HoldingId() holdingId: string) {
+		return await this.contractScheduledChangesService.createPreview(id, body, holdingId);
+	}
+
 	@Patch(':id/scheduled-changes/:changeId')
 	@ApiOperation({
 		summary: 'Editar un ajuste pactado programado',
@@ -655,6 +668,44 @@ export class ContractsController {
 		@Request() req: AuthRequest
 	) {
 		return await this.contractScheduledChangesService.cancel(id, changeId, body, holdingId, authIdOf(req));
+	}
+
+	@Post(':id/scheduled-changes/:changeId/revert/preview')
+	@HttpCode(200)
+	@ApiOperation({
+		summary: 'Vista previa de revertir un cambio programado aplicado',
+		description:
+			'`{ reason }`. Muestra el ítem de ajuste que se quita, las Por Emitir que cambian, las emitidas que se anulan con su NC espejo y las Por Emitir nuevas sin el ajuste (`reverted_change`). No escribe',
+	})
+	@ApiParam(CONTRACT_PARAM)
+	async previewRevertScheduledChange(
+		@Param('id') id: string,
+		@Param('changeId', ParseUUIDPipe) changeId: string,
+		@Body() body: ScheduledChangeReasonDto,
+		@HoldingId() holdingId: string
+	) {
+		return await this.contractScheduledChangesService.revertPreview(id, changeId, body, holdingId);
+	}
+
+	@Post(':id/scheduled-changes/:changeId/revert')
+	@HttpCode(200)
+	@ApiOperation({
+		summary: 'Revertir un cambio programado aplicado',
+		description:
+			'`{ reason }`. Deshace el cambio aunque ya esté facturado, sin downsell: quita el ítem de ajuste, saca su línea de las Por Emitir, anula las emitidas que lo incluyen (NC espejo, ambas Canceladas) y crea la Por Emitir del período sin el ajuste. El cambio queda `cancelled` con motivo "Revertido: …"; evento SCHEDULED_CHANGE_REVERTED',
+	})
+	@ApiParam(CONTRACT_PARAM)
+	@ApiHeader({ name: 'Idempotency-Key', required: false })
+	@ApiResponse({ status: 409, description: '`code: blocked` con el preview (período cerrado, factura pagada o con documento electrónico…)' })
+	async revertScheduledChange(
+		@Param('id') id: string,
+		@Param('changeId', ParseUUIDPipe) changeId: string,
+		@Body() body: ScheduledChangeReasonDto,
+		@HoldingId() holdingId: string,
+		@Request() req: AuthRequest,
+		@Headers('idempotency-key') idempotencyKey?: string
+	) {
+		return await this.contractScheduledChangesService.revert(id, changeId, body, holdingId, authIdOf(req), idempotencyKey);
 	}
 
 	@Post(':id/scheduled-changes/:changeId/apply/preview')

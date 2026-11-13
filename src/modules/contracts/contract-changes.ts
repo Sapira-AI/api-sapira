@@ -337,6 +337,8 @@ export interface ChangeInvoiceRow {
 	sent_to_odoo_at?: string | null;
 	/** Emitida anulada con NC de anulación activa (`voidedSql`): no recibe otra NC. */
 	voided?: boolean;
+	/** Tiene documento electrónico emitido (`dte_id`): no se anula sin su NC electrónica. */
+	electronic?: boolean;
 	/** Factura de origen dentro de una unificada (`invoices.consolidated_into_invoice_id`). */
 	consolidated_into_invoice_id?: string | null;
 	/**
@@ -577,6 +579,20 @@ export interface ChangePreview {
 		period_end_before: string;
 		period_end_after: string;
 	}>;
+	/** `scheduled_change_revert`: qué se deshace (ítems de ajuste que se quitan y emitidas que se anulan). */
+	reverted_change?: {
+		scheduled_change_id: string | null;
+		kind: string | null;
+		items: Array<{
+			item_id: string;
+			product_name: string | null;
+			categoria: string | null;
+			monthly_price: number;
+			start_date: string | null;
+			currency: string | null;
+		}>;
+		invoices_voided: Array<{ id: string; invoice_number: string | null; issue_date: string | null }>;
+	};
 	/** `reactivate` (§9.3.2): rama por ítem (annul = churn aún no vigente; revert = vigente en mes abierto; reactivation = mes cerrado). */
 	reactivation?: Array<{ item_id: string; branch: 'annul' | 'revert' | 'reactivation'; churn_date: string | null; mirror_item_id: string | null }>;
 	/** `pause` / `resume` (§9.3.3): pausa por ítem (la nueva o la que se cierra), días pausados y corrimiento del fin (`extend_term`). */
@@ -760,6 +776,8 @@ export type WriteOp =
 	| { kind: 'update_pause'; id: string; set: { pause_end: string | null; status: 'ended' | 'cancelled' } }
 	/** `reactivate` (rama anular/revertir): quita el espejo CHURN/DOWNSELL (sin facturas propias) y sus filas de RSM. */
 	| { kind: 'delete_item'; item_id: string }
+	/** `scheduled_change_revert`: borra el ítem de ajuste **después** de la NC espejo (sus líneas copian el ítem); mismas filas que `delete_item`. */
+	| { kind: 'delete_reverted_item'; item_id: string }
 	/** `price_model_change`: los consumos del ítem desde el corte pasan al ítem que lo continúa (RENEWAL con el modelo nuevo). */
 	| { kind: 'move_consumption'; from_item_id: string; to_key: string; from_period: string }
 	/** `change_entity` con `new_entity`: `client_entities` + `client_entity_clients` (`is_primary = false`); id → `NEW_ENTITY_KEY`. */
@@ -885,6 +903,8 @@ export const ALLOWED_STATES: Record<ChangeType, ContractDerivedStatus[]> = {
 	item_update: ['active', 'pending_renewal', 'expired', 'paused'],
 	// Cambio de modelo de precio (§9.3.11): contrato vigente (Activo o Por renovar).
 	price_model_change: ['active', 'pending_renewal'],
+	// Revertir un cambio programado aplicado: mismo alcance que el cambio de precio, más Vencido (el ajuste pudo quedar en un ítem ya terminado).
+	scheduled_change_revert: ['active', 'pending_renewal', 'expired', 'paused'],
 };
 
 export const STATUS_LABELS: Record<ContractDerivedStatus, string> = {
@@ -1320,6 +1340,21 @@ export interface PlanOptions {
 		effective_date: string | null;
 		interval_months: number | null;
 	};
+	/**
+	 * Cambio futuro "desde el mes" (Domi 13-11): inicio propio por ítem (`item_id → fecha`), su primer inicio de período en o después de
+	 * la fecha del pacto. Sin esto todos partían en la fecha del ítem más temprano y los de otro ciclo quedaban prorrateados.
+	 */
+	item_effective_dates?: Record<string, string>;
+	/**
+	 * Ítems ya renovados que todavía tienen períodos por facturar (la renovación automática corre 30 días antes del fin): un cambio
+	 * futuro agregado después también les aplica hasta su fin, además de aplicar al ítem de la renovación.
+	 */
+	renewed_item_ids?: string[];
+	/**
+	 * `scheduled_change_revert`: cambio programado aplicado que se deshace, el evento que lo aplicó y los ítems que creó esa aplicación
+	 * (`metadata.created_items` del evento). Lo arma `ContractScheduledChangesService.revert`; sin esto el cambio se bloquea.
+	 */
+	revert?: { scheduled_change_id: string; event_id: string | null; item_ids: string[] };
 }
 
 class Planner {
@@ -1480,7 +1515,7 @@ class Planner {
 		return item ?? null;
 	}
 
-	assertRemovable(item: ChangeItemRow) {
+	assertRemovable(item: ChangeItemRow, allowRenewed = false) {
 		if (item.churn_date || REMOVAL_CATEGORIES.has(item.categoria ?? '')) {
 			this.block(
 				'item_already_churned',
@@ -1489,7 +1524,7 @@ class Planner {
 
 			return false;
 		}
-		if (item.renewed_by_item_id) {
+		if (item.renewed_by_item_id && !allowRenewed) {
 			this.block('item_already_renewed', `"${item.product_name}" ya fue renovado: la baja o el cambio se hace sobre el ítem de la renovación`);
 
 			return false;
@@ -4400,8 +4435,30 @@ function recordedConsumption(ctx: ChangeContext, itemId: string, from: string): 
 
 export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto, options: PlanOptions = {}): ChangePlan {
 	const p = new Planner(ctx, req, 'item_change', options);
-	const refs = (req.change.items ?? []) as Array<Record<string, unknown>>;
+	const refs = [...((req.change.items ?? []) as Array<Record<string, unknown>>)];
 	const anchor = anchorDayOf(ctx.contract, ctx.items);
+	// Ítem ya renovado que sigue vigente (la renovación automática corre 30 días antes del fin, Domi 13-11): un cambio de precio o cantidad
+	// pedido a mano aplica a lo que le queda al ítem y, con los mismos valores, al ítem de su renovación desde que parte. Antes se bloqueaba.
+	const itemDates: Record<string, string> = { ...(options.item_effective_dates ?? {}) };
+	const renewedIds = new Set(options.renewed_item_ids ?? []);
+
+	if (!options.scheduled_change) {
+		for (const ref of [...refs]) {
+			const item = ctx.items.find((row) => row.id === String(ref.item_id ?? ''));
+			const successor = item?.renewed_by_item_id ? ctx.items.find((row) => row.id === item.renewed_by_item_id) : null;
+			const plain = ref.billing_frequency === undefined && ref.term_months === undefined && ref.end_date === undefined;
+
+			if (!item || !successor || !plain || item.churn_date || !item.end_date || item.end_date < p.effective || !successor.start_date) continue;
+			if (successor.churn_date || successor.renewed_by_item_id || refs.some((row) => row.item_id === successor.id)) continue;
+			renewedIds.add(item.id);
+			refs.push({ ...ref, item_id: successor.id });
+			itemDates[successor.id] = successor.start_date;
+			p.warn(
+				'renewed_item_change',
+				`"${item.product_name}" ya está renovado: el cambio rige hasta su fin (${item.end_date}) y también en su renovación, desde el ${successor.start_date}`
+			);
+		}
+	}
 	const groups = buildItemGroups(ctx.items, p.effective);
 	const newItems: NewItemRow[] = [];
 	const categories = new Set<string>();
@@ -4428,11 +4485,12 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 			p.error(`${field}.item_id`, `"${item.product_name}" no es recurrente o no tiene inicio: edítalo como corrección`);
 			continue;
 		}
-		if (!p.assertRemovable(item)) continue;
-		const group = groups.find((row) => row.item_ids.includes(item.id));
+		if (!p.assertRemovable(item, renewedIds.has(item.id))) continue;
+		const effective = itemDates[item.id] ?? p.effective;
+		const group = (effective === p.effective ? groups : buildItemGroups(ctx.items, effective)).find((row) => row.item_ids.includes(item.id));
 
 		if (!group) {
-			p.error(`${field}.item_id`, `"${item.product_name}" no está vigente a la fecha efectiva (${p.effective})`);
+			p.error(`${field}.item_id`, `"${item.product_name}" no está vigente a la fecha efectiva (${effective})`);
 			continue;
 		}
 		// §9.3.7: frecuencia o plazo nuevos → corte al próximo período + RENEWAL (+ ajuste si cambia el precio).
@@ -4508,15 +4566,15 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 		// todavía es una Por Emitir editable, también parte el día efectivo y esa factura se prorratea por días (tramo actual hasta efectiva−1
 		// y tramo nuevo desde efectiva, mismo cálculo de días que el upsell); si ya está emitida o la fecha es inicio de período, rige desde
 		// el próximo inicio de período sin prorrateo (S3-5/S3-6). Con modelo de precio, siempre desde el próximo período.
-		let start = p.effective;
+		let start = effective;
 		const groupIdsEarly = new Set(group.item_ids);
 		const prorated =
-			delta.categoria === 'DOWNSELL' && !pricedSpec && !p.multicurrency ? coveringPendingLine(ctx, item, groupIdsEarly, p.effective) : null;
+			delta.categoria === 'DOWNSELL' && !pricedSpec && !p.multicurrency ? coveringPendingLine(ctx, item, groupIdsEarly, effective) : null;
 
 		if ((delta.categoria === 'DOWNSELL' && !prorated) || pricedSpec) {
-			const next = nextPeriodStart(engineShape(item), itemAnchor, p.effective) ?? p.effective;
+			const next = nextPeriodStart(engineShape(item), itemAnchor, effective) ?? effective;
 
-			if (next !== p.effective)
+			if (next !== effective)
 				p.warn(
 					delta.categoria === 'DOWNSELL' ? 'downsell_from_next_period' : 'priced_item_from_next_period',
 					delta.categoria === 'DOWNSELL'
@@ -7882,7 +7940,251 @@ export function planChange(ctx: ChangeContext, req: ContractChangeRequestDto, op
 			return planItemUpdate(ctx, req);
 		case 'price_model_change':
 			return planPriceModelChange(ctx, req);
+		case 'scheduled_change_revert':
+			return planScheduledChangeRevert(ctx, req, options);
 	}
+}
+
+// ------------------------------------------------------------------ revertir un cambio programado aplicado (usuarias 13-11)
+
+const REVERT_NOTE = 'Reversión de un cambio programado';
+
+/**
+ * `scheduled_change_revert` (pedido de las usuarias 13-11): deshace un cambio programado ya aplicado, también si ya se facturó, sin
+ * registrar un downsell. Solo desde `…/scheduled-changes/:changeId/revert` (`options.revert` trae el cambio y los ítems que creó su
+ * aplicación, leídos del evento). Por cada ítem de ajuste (UPSELL / DOWNSELL colgado de su ítem) que creó el cambio:
+ * - **Por Emitir**: se quita la línea del ajuste (ajuste con línea propia) o se rehacen las líneas del grupo desde el inicio del ajuste
+ *   (ajuste neto: reducción);
+ * - **emitidas** que lo incluyen: NC espejo completa → la emitida y la NC quedan Canceladas (regla del 12-10) y el generador crea la Por
+ *   Emitir del mismo período sin el ajuste;
+ * - el ítem de ajuste se borra (después de la NC: `delete_reverted_item`), el MRR vuelve y el RSM se reconstruye desde su mes.
+ * El cambio queda `cancelled` con motivo "Revertido: …" (no hay estado nuevo en la base) y el evento que lo aplicó recibe
+ * `metadata.reversed_by`. Una renovación aplicada con el cambio no se deshace: solo se quita su ajuste.
+ * Bloqueos: período cerrado, emitida Pagada, con documento electrónico, con NC parcial previa o con consumo registrado; ajuste ya
+ * renovado; grupo con otra reducción o con modelo de precio (ajuste neto); plazo / frecuencia (no crean un ajuste).
+ */
+export function planScheduledChangeRevert(ctx: ChangeContext, req: ContractChangeRequestDto, options: PlanOptions = {}): ChangePlan {
+	const p = new Planner(ctx, req, 'scheduled_change_revert');
+	const revert = options.revert;
+	const pact = revert ? ((ctx.scheduled_changes ?? []).find((row) => row.id === revert.scheduled_change_id) ?? null) : null;
+	const label = (invoice: ChangeInvoiceRow) => invoice.invoice_number ?? `del ${invoice.issue_date ?? invoice.id}`;
+	const created = new Set(revert?.item_ids ?? []);
+	const adjustments = ctx.items.filter(
+		(item) => created.has(item.id) && Boolean(item.related_item_id) && (item.categoria === 'UPSELL' || item.categoria === 'DOWNSELL')
+	);
+	const adjustmentIds = new Set(adjustments.map((item) => item.id));
+	const restore: Array<{ item: ChangeItemRow; from: string; through?: string }> = [];
+	const voided = new Set<string>();
+	let mrrDelta = 0;
+
+	p.assertState();
+	if (!revert) p.block('revert_from_scheduled_change', 'Un cambio programado se revierte desde su fila en el contrato');
+	else if (!pact || pact.status !== 'applied')
+		p.block(
+			'scheduled_change_not_applied',
+			`El cambio programado no está aplicado (${pact?.status ?? 'no existe'}): no hay nada que revertir`,
+			pact?.status === 'scheduled' ? 'Un cambio que todavía no se aplica se cancela' : null
+		);
+	else if (pact.kind === 'term' || pact.kind === 'billing_frequency')
+		p.block(
+			'revert_not_supported',
+			'Un cambio de plazo o de frecuencia no se revierte así: reemplazó el ítem por uno nuevo',
+			'Usa "Cambiar frecuencia o plazo" para volver a las condiciones anteriores'
+		);
+	else if (!adjustments.length)
+		p.block(
+			'nothing_to_revert',
+			'No encontramos el ajuste que creó este cambio: puede que no haya cambiado el valor o que el ajuste ya no exista',
+			'Revisa los ítems del contrato; si hace falta, usa "Cambiar precio o cantidad"'
+		);
+
+	/** Emitida que incluye el ajuste: NC espejo completa (quedan Canceladas las dos) y sus demás líneas se vuelven a facturar. */
+	const voidIssued = (invoice: ChangeInvoiceRow) => {
+		if (voided.has(invoice.id)) return;
+		voided.add(invoice.id);
+		const stop = (code: string, why: string, next: string) =>
+			p.block(code, `La factura ${label(invoice)} ${why}: no se anula con la reversión`, next);
+
+		if (invoice.status === 'Pagada')
+			return stop('invoice_paid', 'ya está pagada', 'Corrige con una nota de crédito y usa "Cambiar precio o cantidad" hacia adelante');
+		if (invoice.electronic)
+			return stop('invoice_electronic', 'tiene documento electrónico emitido', 'Anúlala con su nota de crédito electrónica y después revierte');
+		if (invoice.lines.some((line) => num(line.previously_credited) > 0))
+			return stop('invoice_partially_credited', 'ya tiene una nota de crédito parcial', 'Anula la factura desde su vista y después revierte');
+		if (invoice.lines.some(isConsumptionLine))
+			return stop('invoice_with_consumption', 'lleva consumo registrado', 'Anula la factura desde su vista y después revierte');
+		const loose = invoice.lines.filter((line) => !line.contract_item_id);
+
+		if (loose.length)
+			p.warn(
+				'lines_without_item',
+				`La factura ${label(invoice)} tiene ${loose.length === 1 ? 'una línea que no es' : `${loose.length} líneas que no son`} de un ítem del contrato: no se ${loose.length === 1 ? 'rehace' : 'rehacen'} en la factura nueva`
+			);
+		p.ops.push({
+			kind: 'credit_note',
+			mirrors: invoice,
+			lines: invoice.lines.map((line) => ({ line, ratio: 1, period_start: line.billing_period_start ?? invoice.issue_date ?? p.effective })),
+			note: `NC de anulación por reversión de un cambio programado; factura original ${invoice.invoice_number ?? invoice.id}`,
+		});
+		p.creditNotes.push({
+			mirrors_invoice_id: invoice.id,
+			mirrors_invoice_number: invoice.invoice_number,
+			total: round2(invoice.lines.reduce((sum, line) => sum + line.subtotal, 0) * (1 + invoice.tax_rate / 100)),
+			currency: invoice.invoice_currency,
+			fx: invoice.fx,
+		});
+		if (hasErpDraft(invoice))
+			p.warn(
+				'erp_credit_note_pending',
+				`La factura ${label(invoice)} ya está en el ERP: queda Cancelada aquí y su nota de crédito se genera en el ERP`
+			);
+		for (const line of invoice.lines) {
+			const item = line.contract_item_id ? ctx.items.find((row) => row.id === line.contract_item_id) : null;
+
+			if (!item || adjustmentIds.has(item.id) || !line.billing_period_start || !line.billing_period_end) continue;
+			if (item.categoria === 'DOWNSELL')
+				p.block(
+					'revert_needs_manual',
+					`La factura ${label(invoice)} incluye una reducción de "${item.product_name}": no se puede rehacer sola`,
+					'Anula la factura desde su vista y usa "Cambiar precio o cantidad"'
+				);
+			else restore.push({ item, from: line.billing_period_start, through: line.billing_period_end });
+		}
+		// Desde aquí no cubre sus días: el generador los vuelve a facturar.
+		invoice.voided = true;
+	};
+
+	for (const adjustment of p.blockers.length ? [] : adjustments) {
+		const parent = ctx.items.find((row) => row.id === adjustment.related_item_id);
+		const start = adjustment.start_date ?? p.effective;
+
+		if (!parent) continue;
+		if (adjustment.renewed_by_item_id || adjustment.churn_date) {
+			p.block(
+				'adjustment_closed',
+				`El ajuste de "${adjustment.product_name}" ya ${adjustment.churn_date ? 'tiene una baja' : 'se renovó junto con su producto'}: no se revierte`,
+				'Usa "Cambiar precio o cantidad" sobre el ítem vigente'
+			);
+			continue;
+		}
+		p.assertOpenPeriod(start, `El inicio del ajuste de "${adjustment.product_name}"`);
+		const siblings = ctx.items.filter((row) => row.related_item_id === parent.id && !adjustmentIds.has(row.id) && !row.churn_date);
+		const groupIds = new Set([parent.id, adjustment.id, ...siblings.map((row) => row.id)]);
+		const ownLines = ctx.invoices.some((invoice) => invoice.lines.some((line) => line.contract_item_id === adjustment.id));
+		// Reducción (o ajuste fundido en la línea del ítem): las líneas del grupo llevan el valor neto → se rehacen desde el inicio del ajuste.
+		const net = adjustment.categoria === 'DOWNSELL' || !ownLines;
+		const inScope = (line: ChangeInvoiceLineRow) =>
+			net
+				? Boolean(line.contract_item_id && groupIds.has(line.contract_item_id) && (line.billing_period_start ?? '') >= start)
+				: line.contract_item_id === adjustment.id;
+
+		p.assertNoUnified(net ? groupIds : new Set([adjustment.id]), start);
+		if (net) {
+			const spec = priceSpecFromRow(parent.raw);
+
+			if (siblings.some((row) => row.categoria === 'DOWNSELL') || (spec && !isStandardFixed(spec))) {
+				p.block(
+					'revert_needs_manual',
+					`"${parent.product_name}" tiene ${spec && !isStandardFixed(spec) ? 'un modelo de precio' : 'otra reducción vigente'}: sus facturas no se pueden rehacer solas`,
+					'Usa "Cambiar precio o cantidad" para volver al valor anterior'
+				);
+				continue;
+			}
+		}
+		for (const invoice of ctx.invoices) {
+			const lines = invoice.lines.filter(inScope);
+
+			if (!lines.length) continue;
+			if (isEditablePending(invoice)) {
+				if (p.skipPartial(invoice)) continue;
+				if (net && lines.some(isConsumptionLine)) {
+					p.block(
+						'invoice_with_consumption',
+						`La factura ${label(invoice)} lleva consumo registrado de "${parent.product_name}": no se rehace sola`,
+						'Usa "Cambiar precio o cantidad" para volver al valor anterior'
+					);
+					continue;
+				}
+				for (const line of lines) p.deleteLine(invoice, line);
+			} else if (isIssued(invoice)) voidIssued(invoice);
+		}
+		if (net) for (const item of [parent, ...siblings]) restore.push({ item, from: start });
+		p.ops.push({ kind: 'delete_reverted_item', item_id: adjustment.id });
+		p.itemsAfter = p.itemsAfter.filter((row) => row.id !== adjustment.id);
+		mrrDelta -= p.toContract(itemMonthly(adjustment), adjustment.currency, start);
+		p.touchRsm(start);
+	}
+	if (!p.blockers.length) {
+		// Un ítem que se rehace completo desde una fecha no necesita además sus tramos por factura anulada.
+		const open = new Map<string, string>();
+
+		for (const entry of restore)
+			if (!entry.through && (!open.has(entry.item.id) || entry.from < open.get(entry.item.id)!)) open.set(entry.item.id, entry.from);
+		const seen = new Set<string>();
+		const runs = restore.filter((entry) => {
+			const from = open.get(entry.item.id);
+			const key = `${entry.item.id}:${entry.from}:${entry.through ?? ''}`;
+
+			if (seen.has(key) || (entry.through ? from !== undefined && entry.from >= from : entry.from !== from)) return false;
+			seen.add(key);
+
+			return true;
+		});
+
+		p.addRestoredInvoices(
+			runs.flatMap((entry) =>
+				p.restoreItemBilling(entry.item, entry.from, new Set(), { through: entry.through, note: 'sin el ajuste revertido' })
+			),
+			'se rehace sin el ajuste'
+		);
+		p.closeHeaders(REVERT_NOTE);
+		p.contractSet.total_value = totalValue(p.itemsAfter, p.conversion());
+		if (pact)
+			p.ops.push({
+				kind: 'update_scheduled_change',
+				id: pact.id,
+				set: { status: 'cancelled', status_reason: `Revertido: ${req.reason ?? ''}`.trim() },
+			});
+		if (revert?.event_id) p.ops.push({ kind: 'mark_events_reversed', event_ids: [revert.event_id] });
+	}
+	p.mrrDelta = round2(mrrDelta);
+	p.extras.reverted_change = {
+		scheduled_change_id: revert?.scheduled_change_id ?? null,
+		kind: pact?.kind ?? null,
+		items: adjustments.map((item) => ({
+			item_id: item.id,
+			product_name: item.product_name,
+			categoria: item.categoria ?? null,
+			monthly_price: itemMonthly(item),
+			start_date: item.start_date ?? null,
+			currency: item.currency ?? null,
+		})),
+		invoices_voided: [...voided].map((id) => {
+			const invoice = ctx.invoices.find((row) => row.id === id)!;
+
+			return { id, invoice_number: invoice.invoice_number, issue_date: invoice.issue_date };
+		}),
+	};
+	const names = [...new Set(adjustments.map((item) => item.product_name).filter(Boolean))].join(', ');
+
+	return p.finish({
+		type: 'SCHEDULED_CHANGE_REVERTED',
+		subtype: pact?.kind ?? null,
+		title: 'Cambio programado revertido',
+		description: `Se revirtió el cambio programado${names ? ` de ${names}` : ''}: MRR ${mrrDelta >= 0 ? '+' : ''}${money(mrrDelta)}${
+			voided.size
+				? ` · ${voided.size === 1 ? '1 factura emitida anulada' : `${voided.size} facturas emitidas anuladas`} y vuelta a dejar por emitir sin el ajuste`
+				: ''
+		}${req.reason ? `. Motivo: ${req.reason}` : ''}`,
+		amount_delta: round2(mrrDelta),
+		items_affected: [...new Set(adjustments.map((item) => item.related_item_id!).filter(Boolean))],
+		metadata: {
+			scheduled_change_id: revert?.scheduled_change_id ?? null,
+			reverted_event_id: revert?.event_id ?? null,
+			removed_item_ids: [...adjustmentIds],
+			voided_invoice_ids: [...voided],
+		},
+	});
 }
 
 /** Estado del ítem hoy, para la respuesta (mismo criterio que el 360). */

@@ -2,7 +2,7 @@
  * Materializar un ajuste pactado (`…/scheduled-changes/:changeId/apply`, spec modificaciones §9.3.6): arma el pedido de modificación
  * (`renewal` / `item_change`) con el valor del pacto. Las filas (lectura, validación, INSERT) viven en `scheduled-change-rows.ts`.
  */
-import { nextPeriodStart } from './billing-engine';
+import { addDays, nextPeriodStart } from './billing-engine';
 import {
 	anchorDayOf,
 	anchorOfItem,
@@ -11,17 +11,26 @@ import {
 	type ChangeItemRow,
 	engineShape,
 	indexVariation,
+	isIssued,
 	itemMonthly,
 	type PlanOptions,
 	roundPactUnit,
 } from './contract-changes';
 import { buildItemGroups } from './contract-items';
+import { priceSpecFromRow } from './price-rows';
+import { isStandardFixed } from './pricing-engine';
 import { frequencyOfMonths, type ScheduledChangeRow } from './scheduled-change-rows';
 
 import type { ContractChangeRequestDto } from './dtos/contract-changes.dto';
 import type { ApplyScheduledChangeDto } from './dtos/contract-scheduled-changes.dto';
 
 const toNumber = (value: unknown) => Number(value ?? 0) || 0;
+/** Ítem tarifado por un modelo de precio (no estándar fijo): un reajuste porcentual del unitario no le aplica. */
+export const hasPriceModel = (item: Pick<ChangeItemRow, 'raw'>) => {
+	const spec = priceSpecFromRow(item.raw);
+
+	return Boolean(spec && !isStandardFixed(spec));
+};
 const REMOVAL_CATEGORIES = new Set(['CHURN', 'DOWNSELL']);
 
 // ------------------------------------------------------------------ materializar un pacto (apply)
@@ -64,10 +73,13 @@ export function pactApplication(ctx: ChangeContext, pact: ScheduledChangeRow, dt
 			!item.renewed_by_item_id &&
 			item.start_date
 	);
+	// Alcance contrato con reajuste de precio: los ítems con modelo de precio (tramos, paquete, consumo medido) quedan fuera; su valor
+	// sale de su tarifa, no de un unitario, y se ajusta editando el precio del ítem.
+	const priceKind = pact.kind === 'percent_uplift' || pact.kind === 'index' || pact.kind === 'new_unit_price';
 	const targets = pact.contract_item_id
 		? [currentItemOf(ctx.items, pact.contract_item_id)].filter((item): item is ChangeItemRow => Boolean(item))
-		: live.filter((item) => !item.related_item_id);
-	const base = { origin: { type: 'manual' as const }, reason: dto.reason?.trim() || `Ajuste pactado (${pact.kind})`, notes: dto.notes };
+		: live.filter((item) => !item.related_item_id && !(priceKind && pact.trigger !== 'on_renewal' && hasPriceModel(item)));
+	const base = { origin: { type: 'manual' as const }, reason: dto.reason?.trim() || `Cambio programado (${pact.kind})`, notes: dto.notes };
 	const override = dto.value === null || dto.value === undefined ? null : Number(dto.value);
 	const options = (value: number): PlanOptions => ({
 		scheduled_change: {
@@ -92,17 +104,50 @@ export function pactApplication(ctx: ChangeContext, pact: ScheduledChangeRow, dt
 		};
 	}
 	const date = pactDate(pact) ?? ctx.today;
-	const effectiveFor = (item: ChangeItemRow) =>
-		dto.effective_date ??
-		(item.start_date && item.start_date >= date
-			? item.start_date
-			: (nextPeriodStart(engineShape(item), anchorOfItem(item, anchor), date) ?? date));
+	// Lo ya facturado no se ajusta (Domi 13-11): si el período del mes pedido ya está emitido (facturación anticipada de varios meses), el
+	// cambio rige desde el día siguiente al último período emitido del ítem, sin cobrar diferencias de lo emitido.
+	const issuedUntil = (item: ChangeItemRow) => {
+		const ids = new Set([item.id, ...ctx.items.filter((row) => row.related_item_id === item.id).map((row) => row.id)]);
+
+		return (
+			ctx.invoices
+				.filter(isIssued)
+				.flatMap((invoice) => invoice.lines)
+				.filter((line) => line.contract_item_id && ids.has(line.contract_item_id))
+				.map((line) => line.billing_period_end ?? '')
+				.sort()
+				.reverse()[0] ?? null
+		);
+	};
+	const effectiveFor = (item: ChangeItemRow) => {
+		if (dto.effective_date) return dto.effective_date;
+		const base =
+			item.start_date && item.start_date >= date
+				? item.start_date
+				: (nextPeriodStart(engineShape(item), anchorOfItem(item, anchor), date) ?? date);
+		const issued = issuedUntil(item);
+
+		return issued && base <= issued ? addDays(issued, 1) : base;
+	};
+	// Renovación automática 30 días antes del fin (Domi 13-11): el ítem ya renovado sigue facturando hasta su fin. Si le queda un período
+	// que parte en o después de la fecha del pacto, el cambio también le aplica (además del ítem de la renovación).
+	const successors = new Set(targets.map((item) => item.id));
+	const renewedInForce = ctx.items.filter((item) => {
+		if (!item.renewed_by_item_id || item.is_recurring === false || item.churn_date || item.related_item_id || !item.start_date) return false;
+		if (REMOVAL_CATEGORIES.has(item.categoria ?? '')) return false;
+		const head = currentItemOf(ctx.items, item.id);
+
+		return Boolean(head && successors.has(head.id) && item.end_date && effectiveFor(item) <= item.end_date);
+	});
+
+	targets.unshift(...renewedInForce);
 	const effective = targets.map(effectiveFor).sort()[0] ?? date;
-	const groups = buildItemGroups(ctx.items, effective);
+	// "Desde el mes" (Domi 13-11): cada ítem toma el cambio desde su propio inicio de período; el pedido lleva la fecha más temprana.
+	const itemDates = Object.fromEntries(targets.map((item) => [item.id, effectiveFor(item)]));
 	let applied = override ?? pact.value;
 	const blockers: ChangeBlocker[] = [];
 	const items = targets.map((item) => {
-		const group = groups.find((row) => row.item_ids.includes(item.id));
+		const group = buildItemGroups(ctx.items, itemDates[item.id]).find((row) => row.item_ids.includes(item.id));
 		const quantity = group?.quantity ?? toNumber(item.quantity);
 		const pct = item.discount_type === 'Porcentaje' ? toNumber(item.discount_value) : 0;
 		const mrr = group?.mrr ?? itemMonthly(item);
@@ -126,7 +171,7 @@ export function pactApplication(ctx: ChangeContext, pact: ScheduledChangeRow, dt
 					blockers.push({
 						code: 'index_value_missing',
 						message: `No hay valor publicado del índice ${pact.index_code ?? ''} para el reajuste del ${date}`.replace(/\s+/g, ' '),
-						next_step: 'Espera la publicación del índice o aplica el pacto con un valor (value) explícito',
+						next_step: 'Espera la publicación del índice o aplica el cambio con un valor (value) explícito',
 					});
 					break;
 				}
@@ -147,7 +192,7 @@ export function pactApplication(ctx: ChangeContext, pact: ScheduledChangeRow, dt
 
 	return {
 		request: { ...base, effective_date: effective, change: { type: 'item_change', items } },
-		options: options(applied),
+		options: { ...options(applied), item_effective_dates: itemDates, renewed_item_ids: renewedInForce.map((item) => item.id) },
 		blockers,
 	};
 }

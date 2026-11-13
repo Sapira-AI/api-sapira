@@ -24,6 +24,8 @@ export const RENEWAL_PROPOSED_NOTIFICATION_TYPE = 'contract_renewal_proposed';
 export const SCHEDULED_CHANGE_DUE_NOTIFICATION_TYPE = 'contract_scheduled_change_due';
 /** Aviso previo por defecto (`holding_settings.auto_renewal_notice_days`, migración B2: default 30). */
 export const DEFAULT_NOTICE_DAYS = 30;
+/** Plazo de la renovación automática de un ítem sin `auto_renew_term_months` (Domi 13-11): 12 meses, no su plazo original. */
+export const DEFAULT_AUTO_RENEW_TERM_MONTHS = 12;
 export const RENEWAL_PROPOSAL_CODES = {
 	not_found: 'renewal_proposal_not_found',
 	not_open: 'renewal_proposal_not_open',
@@ -56,6 +58,25 @@ export interface RenewalCandidate {
 	currency: string | null;
 	term_months: number | null;
 	billing_frequency: string | null;
+	/** Compañía emisora del contrato (para el resumen diario de renovaciones automáticas). */
+	company_name?: string | null;
+}
+
+/**
+ * Texto del resumen diario de renovaciones automáticas (Domi 13-11: un resumen, no un aviso por contrato): total del día y, si el holding
+ * tiene más de una compañía, el conteo por compañía.
+ */
+export function autoRenewalSummary(companies: Array<string | null>): string {
+	const total = companies.length;
+	const counts = new Map<string, number>();
+
+	for (const name of companies) counts.set(name?.trim() || 'Sin compañía', (counts.get(name?.trim() || 'Sin compañía') ?? 0) + 1);
+	const head = total === 1 ? 'Hoy se renovó solo 1 contrato' : `Hoy se renovaron solos ${total} contratos`;
+	const NONE = 'Sin compañía';
+	const sorted = [...counts].sort((a, b) => Number(a[0] === NONE) - Number(b[0] === NONE) || b[1] - a[1] || a[0].localeCompare(b[0]));
+	const detail = sorted.length === 1 ? ` de ${sorted[0][0]}` : `: ${sorted.map(([name, count]) => `${name} ${count}`).join(' · ')}`;
+
+	return `${head}${detail}. Cada renovación quedó en el Historial de su contrato, con las facturas por emitir del plazo nuevo.`;
 }
 
 /**

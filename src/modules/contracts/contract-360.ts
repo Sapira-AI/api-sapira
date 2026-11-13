@@ -771,6 +771,107 @@ export interface LifecycleStage {
 
 export const ACTIVATION_DATE_MISSING = 'Fecha de activación no registrada (contrato anterior a v2)';
 
+// ---------------------------------------------------------------- hitos de la línea de tiempo (Domi 13-11)
+
+export type LifecycleMilestoneKind = 'renewal' | 'upsell' | 'downsell' | 'cross_sell' | 'scheduled_change';
+
+/**
+ * Hito entre Activo y el vencimiento: lo que ya le pasó al contrato (renovaciones, ampliaciones, reducciones, productos agregados) y lo que
+ * tiene programado (cambios futuros). Varios seguidos del mismo tipo se compactan en uno (`count`, de `date` a `end_date`, con `details`).
+ */
+export interface LifecycleMilestone {
+	key: string;
+	kind: LifecycleMilestoneKind;
+	label: string;
+	/** Fecha del hito (el primero del grupo); null = en la próxima renovación. */
+	date: string | null;
+	/** Último del grupo cuando se compactaron varios. */
+	end_date: string | null;
+	count: number;
+	/** true = todavía no ocurre (cambio programado o cambio con fecha efectiva posterior a hoy). */
+	future: boolean;
+	/** Una línea por cada hito del grupo ("1 mar 2026 · Ampliación de PATHFINDER+"). */
+	details: string[];
+}
+
+export interface MilestoneEvent {
+	type: string;
+	title: string | null;
+	date: string | null;
+}
+
+export interface MilestonePact {
+	id: string;
+	trigger: 'on_renewal' | 'on_date' | 'every_n_months';
+	/** Fecha en que rige (`on_date` / próxima de `every_n_months`); null en `on_renewal`. */
+	date: string | null;
+	/** Descripción corta del cambio ("Reajuste +5 %"). */
+	label: string;
+}
+
+const MILESTONE_OF_EVENT: Record<string, LifecycleMilestoneKind> = {
+	RENEWAL: 'renewal',
+	UPSELL: 'upsell',
+	DOWNSELL: 'downsell',
+	CROSS_SELL: 'cross_sell',
+};
+const MILESTONE_LABELS: Record<LifecycleMilestoneKind, [string, string]> = {
+	renewal: ['Renovación', 'renovaciones'],
+	upsell: ['Ampliación', 'ampliaciones'],
+	downsell: ['Reducción', 'reducciones'],
+	cross_sell: ['Producto agregado', 'productos agregados'],
+	scheduled_change: ['Cambio programado', 'cambios programados'],
+};
+
+/**
+ * Hitos del contrato en orden: primero lo ocurrido (por fecha) y después lo programado (los que rigen al renovarse van al final). Los
+ * hitos seguidos del mismo tipo y mismo tiempo (pasado o futuro) se compactan: "3 ampliaciones" con su rango de fechas y el detalle.
+ */
+export function buildMilestones(events: MilestoneEvent[], pacts: MilestonePact[], today: string): LifecycleMilestone[] {
+	const single: LifecycleMilestone[] = [
+		...events
+			.filter((event) => MILESTONE_OF_EVENT[event.type] && event.date)
+			.map((event, index) => {
+				const kind = MILESTONE_OF_EVENT[event.type];
+
+				return {
+					key: `event-${index}`,
+					kind,
+					label: MILESTONE_LABELS[kind][0],
+					date: event.date,
+					end_date: null,
+					count: 1,
+					future: event.date! > today,
+					details: [event.title?.trim() || MILESTONE_LABELS[kind][0]],
+				};
+			}),
+		...pacts.map((pact) => ({
+			key: `pact-${pact.id}`,
+			kind: 'scheduled_change' as const,
+			label: pact.label,
+			date: pact.date,
+			end_date: null,
+			count: 1,
+			future: true,
+			details: [pact.trigger === 'on_renewal' ? `${pact.label} · en la renovación` : pact.label],
+		})),
+	].sort((a, b) => Number(a.future) - Number(b.future) || (a.date ?? '9999-12-31').localeCompare(b.date ?? '9999-12-31'));
+	const grouped: LifecycleMilestone[] = [];
+
+	for (const milestone of single) {
+		const last = grouped[grouped.length - 1];
+
+		if (last && last.kind === milestone.kind && last.future === milestone.future && Boolean(last.date) === Boolean(milestone.date)) {
+			last.count += 1;
+			last.end_date = milestone.date;
+			last.details.push(...milestone.details);
+			last.label = `${last.count} ${MILESTONE_LABELS[last.kind][1]}`;
+		} else grouped.push({ ...milestone, details: [...milestone.details] });
+	}
+
+	return grouped;
+}
+
 export interface LifecycleInput {
 	derived_status: ContractDerivedStatus;
 	created_at: string | null;
@@ -785,6 +886,10 @@ export interface LifecycleInput {
 	/** Fin del primer ítem que terminó sin renovarse ni darse de baja (fecha de "Por renovar"/"Vencido"). */
 	overdue_renewal_date: string | null;
 	closed_date: string | null;
+	/** Para los hitos: eventos del historial (tipo normalizado, título y fecha efectiva), cambios programados y hoy. */
+	events?: MilestoneEvent[];
+	scheduled_changes?: MilestonePact[];
+	today?: string;
 }
 
 /**
@@ -793,7 +898,7 @@ export interface LifecycleInput {
  * activos. El borrador lleva `created_at` y Activo la fecha del evento de activación (sin evento, sin fecha y con nota);
  * vencimiento y cierre se omiten si quedaran antes de la etapa anterior (fechas monotónicas).
  */
-export function buildLifecycle(input: LifecycleInput): { stages: LifecycleStage[] } {
+export function buildLifecycle(input: LifecycleInput): { stages: LifecycleStage[]; milestones: LifecycleMilestone[] } {
 	const status = input.derived_status;
 	const expiryLabel = status === 'pending_renewal' ? 'Por renovar' : status === 'expired' ? 'Vencido' : 'Vencimiento';
 	const expiryDate =
@@ -839,7 +944,11 @@ export function buildLifecycle(input: LifecycleInput): { stages: LifecycleStage[
 		else last = stage.date;
 	}
 
-	return { stages };
+	// Los hitos solo se muestran con el contrato ya activo y sin cancelar (un borrador no tiene historia; cancelado, ya no hay futuro).
+	const milestones =
+		status === 'draft' || status === 'cancelled' ? [] : buildMilestones(input.events ?? [], input.scheduled_changes ?? [], input.today ?? '');
+
+	return { stages, milestones };
 }
 
 // ---------------------------------------------------------------- calendario de facturación

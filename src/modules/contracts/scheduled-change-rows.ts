@@ -172,16 +172,16 @@ export function scheduledChangeErrors(
 		errors.push({ field: `${field}.contract_item_id`, message: `"${item.product_name}" tiene una baja registrada` });
 	if (item && item.renewed_by_item_id)
 		errors.push({ field: `${field}.contract_item_id`, message: `"${item.product_name}" ya fue renovado: pacta sobre el ítem de la renovación` });
-	if (dto.trigger === 'on_date' && !dto.effective_date) errors.push({ field: `${field}.effective_date`, message: 'Indica la fecha del pacto' });
+	if (dto.trigger === 'on_date' && !dto.effective_date) errors.push({ field: `${field}.effective_date`, message: 'Indica desde qué mes rige el cambio' });
 	if (dto.trigger === 'every_n_months') {
-		if (!dto.anchor_date) errors.push({ field: `${field}.anchor_date`, message: 'Indica desde cuándo se repite el pacto' });
+		if (!dto.anchor_date) errors.push({ field: `${field}.anchor_date`, message: 'Indica desde qué mes se repite el cambio' });
 		if (!(Number(dto.interval_months) > 0)) errors.push({ field: `${field}.interval_months`, message: 'Indica cada cuántos meses se repite' });
 	}
 	if (dto.kind === 'index') {
 		if (!dto.index_code?.trim()) errors.push({ field: `${field}.index_code`, message: 'Indica el índice (IPC, UF…)' });
 		if (!(Number(dto.index_base_value) > 0)) errors.push({ field: `${field}.index_base_value`, message: 'Indica el valor base del índice' });
 	}
-	if (!Number.isFinite(value)) errors.push({ field: `${field}.value`, message: 'Escribe el valor del pacto' });
+	if (!Number.isFinite(value)) errors.push({ field: `${field}.value`, message: 'Escribe el valor' });
 	else if ((dto.kind === 'quantity' || dto.kind === 'new_unit_price') && value <= 0)
 		errors.push({
 			field: `${field}.value`,
