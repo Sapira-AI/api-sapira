@@ -325,7 +325,7 @@ describe('assets RSM: decisiones de Domi 04-10 y 05-10 (D2-c + D3, rebuild-deven
 		expect(active).toContain('IF (v_entry_in_month OR v_line_deviation) AND v_service_lines > 0 THEN v_recognized_period := v_service_billed;');
 		// Sin línea vigente: la regla de D2 con la entry (monto fijado o unitario × cantidad, × (1 − % de la línea / del ítem)).
 		expect(active).toContain(
-			'SELECT COALESCE(e.amount_override, v_item.unit_price * e.quantity) * CASE WHEN e.apply_item_discount THEN (1 - COALESCE('
+			'SELECT COALESCE(e.amount_override, COALESCE(e.unit_price, v_item.unit_price) * e.quantity) * CASE WHEN e.apply_item_discount THEN (1 - COALESCE('
 		);
 		expect(active).toContain("CASE WHEN v_item.discount_type = 'Porcentaje' THEN v_item.discount_value END");
 		expect(active).toContain('IF v_override_amount IS NOT NULL THEN v_recognized_period := ROUND(v_override_amount, 2); END IF;');

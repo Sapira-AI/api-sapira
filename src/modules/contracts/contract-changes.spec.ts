@@ -3,7 +3,17 @@ import { BadRequestException } from '@nestjs/common';
 import { fieldErrorsOf } from '@/core/utils/validation-errors';
 
 import { CATALOG_PRICE_MESSAGES, type CatalogPrice } from './catalog-prices';
-import { type ChangePlan, monthsCeil, planChange, taxRateFor, telescopicShares, unifiedDelta, wholeMonths } from './contract-changes';
+import {
+	type ChangeInvoiceLineRow,
+	type ChangePlan,
+	monthsCeil,
+	planChange,
+	repriceConsumptionLine,
+	taxRateFor,
+	telescopicShares,
+	unifiedDelta,
+	wholeMonths,
+} from './contract-changes';
 import {
 	context,
 	CONTRACT_ID,
@@ -2931,5 +2941,29 @@ describe('unificadas (Brightcell 10-11): los orígenes de una unificada Por Emit
 		);
 
 		expect(plain.preview.warnings.map((warning) => warning.code)).not.toContain('unified_resync');
+	});
+});
+
+describe('repriceConsumptionLine · precio unitario del período (Ransa, Domi 13-11)', () => {
+	const item = { raw: { price_id: 'price-1', price_model: 'standard', price_quantity_type: 'metered', price_unit_amount: '19.92' } };
+	const line = (consumption: ChangeInvoiceLineRow['consumption']) =>
+		({ quantity: 352, unit_price: 19.92, quantity_source: 'consumption', consumption }) as ChangeInvoiceLineRow;
+
+	it('el unitario informado en el consumo manda: ni el precio del ítem ni el unitario nuevo del cambio lo pisan', () => {
+		const consumption = { quantity: 352, amount_override: null, unit_price: 20.1412, apply_item_discount: true, is_estimated: false };
+
+		expect(repriceConsumptionLine(line(consumption), item, 0, null)).toMatchObject({
+			quantity: 352,
+			subtotal: 7089.7,
+			effective_unit_price: 20.1412,
+		});
+		expect(repriceConsumptionLine(line(consumption), item, 0, 25).subtotal).toBe(7089.7);
+	});
+
+	it('sin unitario informado: la cantidad consumida al unitario del cambio (o al del precio)', () => {
+		const consumption = { quantity: 352, amount_override: null, unit_price: null, apply_item_discount: true, is_estimated: false };
+
+		expect(repriceConsumptionLine(line(consumption), item, 0, null).subtotal).toBe(7011.84);
+		expect(repriceConsumptionLine(line(consumption), item, 0, 25).subtotal).toBe(8800);
 	});
 });

@@ -98,7 +98,7 @@ const ITEMS_SQL = `SELECT ci.id, ci.product_id, ci.product_name, ci.account, ci.
 		ci.start_date::text AS start_date, ci.end_date::text AS end_date, ci.churn_date::text AS churn_date, ci.term_months, ci.is_recurring,
 		p.owner AS price_owner, ${PRICE_COLUMNS},
 		(SELECT COALESCE(jsonb_agg(jsonb_build_object(
-				'period_start', e.period_start, 'quantity', e.quantity, 'amount_override', e.amount_override,
+				'period_start', e.period_start, 'quantity', e.quantity, 'amount_override', e.amount_override, 'unit_price', e.unit_price,
 				'apply_item_discount', e.apply_item_discount, 'is_estimated', e.is_estimated)), '[]'::jsonb)
 			FROM consumption_entries e WHERE e.contract_item_id = ci.id AND e.holding_id = ci.holding_id) AS consumption
 	FROM contract_items ci

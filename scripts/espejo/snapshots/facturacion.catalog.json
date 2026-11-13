@@ -172,6 +172,49 @@
    }
   ]
  },
+ "dte_simulations": {
+  "comment": "DTE simulados (DTE_SIMULATED, solo QA): cuerpo, folio y envío sin pasar por api-factura. Solo la API",
+  "rls": true,
+  "rls_forced": false,
+  "columns": {},
+  "constraints": [
+   {
+    "name": "dte_simulations_company_external_ref_key",
+    "type": "u",
+    "cols": [
+     "company_id",
+     "external_ref"
+    ]
+   },
+   {
+    "name": "dte_simulations_company_id_fkey",
+    "type": "f",
+    "ondelete": "c",
+    "onupdate": "a",
+    "def": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE"
+   },
+   {
+    "name": "dte_simulations_company_tipo_folio_key",
+    "type": "u",
+    "cols": [
+     "company_id",
+     "tipo",
+     "folio"
+    ]
+   },
+   {
+    "name": "dte_simulations_pkey",
+    "type": "p",
+    "cols": [
+     "id"
+    ]
+   }
+  ],
+  "indexes": [],
+  "triggers": [],
+  "policies": [],
+  "policies_detail": []
+ },
  "invoice_adjustments": {
   "comment": null,
   "rls": true,

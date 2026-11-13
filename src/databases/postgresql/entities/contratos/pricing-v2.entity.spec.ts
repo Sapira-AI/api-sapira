@@ -161,6 +161,7 @@ describe('Pricing v2 (entities + migración + RLS)', () => {
 			period_end: false,
 			quantity: false,
 			amount_override: true,
+			unit_price: true,
 			apply_item_discount: false,
 			account: true,
 			is_estimated: false,
@@ -182,6 +183,7 @@ describe('Pricing v2 (entities + migración + RLS)', () => {
 			'consumption_entries_period_check',
 			'consumption_entries_quantity_check',
 			'consumption_entries_source_check',
+			'consumption_entries_unit_price_check',
 		]);
 		expect(fks(entity)).toEqual({
 			consumption_entries_holding_id_fkey: { table: 'company_holdings', onDelete: 'CASCADE' },
@@ -210,6 +212,7 @@ describe('Pricing v2 (entities + migración + RLS)', () => {
 			revision: false,
 			quantity: false,
 			amount_override: true,
+			unit_price: true,
 			apply_item_discount: false,
 			source: false,
 			reason: true,

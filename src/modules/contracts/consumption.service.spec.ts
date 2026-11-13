@@ -14,7 +14,7 @@ import { HoldingScopeGuard } from '@/guards/holding-scope.guard';
 import { lineDescription } from './billing-engine';
 import { todayFor } from './business-date';
 import { ConsumptionController } from './consumption.controller';
-import { ConsumptionService, fitConsumptionGlosa } from './consumption.service';
+import { ConsumptionService, fitConsumptionGlosa, PERIOD_UNIT_PRICE_MODEL_MESSAGE } from './consumption.service';
 import { Contract360Service } from './contract-360.service';
 import { ContractActivationService } from './contract-activation.service';
 import { ContractBulkService } from './contract-bulk.service';
@@ -218,10 +218,11 @@ describe('ConsumptionService.upsert (PUT /contracts/:id/items/:itemId/consumptio
 			null,
 			'user-1',
 			'inv-oct',
+			null,
 		]);
 		const [revision] = calls(runner.query, 'INSERT INTO consumption_entry_revisions');
 
-		expect(revision[1]).toEqual([HOLDING, 'entry-1', 1, 1250, null, true, 'manual', null, 'user-1']);
+		expect(revision[1]).toEqual([HOLDING, 'entry-1', 1, 1250, null, true, 'manual', null, 'user-1', null]);
 
 		// Línea: 1.250 rutas → 78,30 (mockup), IVA 19 % = 14,88, total 93,18; misma moneda → mismos montos en factura.
 		const [lineUpdate] = calls(runner.query, 'UPDATE invoice_items SET quantity');
@@ -357,6 +358,7 @@ describe('ConsumptionService.upsert (PUT /contracts/:id/items/:itemId/consumptio
 			'nota',
 			'user-1',
 			'inv-oct',
+			null,
 		]);
 		expect(calls(corrected.runner.query, 'INSERT INTO consumption_entry_revisions')[0][1]).toEqual([
 			HOLDING,
@@ -368,6 +370,7 @@ describe('ConsumptionService.upsert (PUT /contracts/:id/items/:itemId/consumptio
 			'manual',
 			'Reporte del cliente',
 			'user-1',
+			null,
 		]);
 		// 300 rutas → 23,40 + mínimo comprometido 26,60 = 50,00.
 		expect(calls(corrected.runner.query, 'UPDATE invoice_items SET quantity')[0][1][5]).toBe(50);
@@ -753,7 +756,7 @@ describe('ConsumptionService · factura emitida (§4.4: on_issued) y per_tier (�
 		expect(calls(runner.query, 'UPDATE invoice_items SET quantity')).toHaveLength(0);
 		expect(calls(runner.query, 'DELETE FROM invoice_items')).toHaveLength(0);
 		// Entry → la nueva; devengo del mes; evento con el vínculo a la Por Emitir.
-		expect(calls(runner.query, 'INSERT INTO consumption_entries')[0][1].at(-1)).toBe('inv-extra');
+		expect(calls(runner.query, 'INSERT INTO consumption_entries')[0][1].at(-2)).toBe('inv-extra');
 		expect(calls(runner.query, 'revenue_schedule_rebuild')[0][1]).toEqual([CONTRACT, '2026-10-01']);
 		const [event] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');
 
@@ -878,7 +881,7 @@ describe('ConsumptionService · factura emitida (§4.4: on_issued) y per_tier (�
 		expect(header[0]).toContain('COALESCE($28::text, (SELECT k.invoice_terms_and_conditions FROM contracts k WHERE k.id = $2::uuid))');
 		expect(calls(runner.query, 'COALESCE(hs.system_currency').map(([, params]) => (params as unknown[])[0])).toContainEqual(['inv-new']);
 		// La entry apunta a la complementaria; RSM del mes; evento con el vínculo.
-		expect(calls(runner.query, 'INSERT INTO consumption_entries')[0][1].at(-1)).toBe('inv-new');
+		expect(calls(runner.query, 'INSERT INTO consumption_entries')[0][1].at(-2)).toBe('inv-new');
 		expect(calls(runner.query, 'revenue_schedule_rebuild')[0][1]).toEqual([CONTRACT, '2026-10-01']);
 		const [event] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');
 
@@ -1027,7 +1030,7 @@ describe('ConsumptionService · factura emitida (§4.4: on_issued) y per_tier (�
 			invoice_id: 'inv-new',
 			lines_count: 2,
 		});
-		expect(calls(runner.query, 'INSERT INTO consumption_entries')[0][1].at(-1)).toBe('inv-new');
+		expect(calls(runner.query, 'INSERT INTO consumption_entries')[0][1].at(-2)).toBe('inv-new');
 
 		expect(result).toMatchObject({
 			mode: 'reissue',
@@ -1376,6 +1379,7 @@ describe('ConsumptionService.pending y list', () => {
 			revision: 25,
 			quantity: 1000,
 			amount_override: null,
+			unit_price: null,
 			correction_reason: 'ajuste',
 			recorded_by: { id: 'u-1', name: 'Domi' },
 			recorded_at: '2026-10-03T10:00:00.000Z',
@@ -1841,5 +1845,201 @@ describe('Consumo sobre un período consolidado y desde el almacén de datos (Do
 
 		expect(entry).toMatchObject({ id: 'entry-9', quantity: 10, unit_price: 0.7 });
 		expect((dataSource.query as jest.Mock).mock.calls[0][1]).toEqual([HOLDING, 'q-1']);
+	});
+});
+
+describe('ConsumptionService · precio unitario del período en el precio estándar (Ransa, Domi 13-11)', () => {
+	/** Soporte por consumo estándar (100 por unidad) con su línea Por Emitir de octubre (1 × 100, sin descuento, IVA 19, CLP→CLP). */
+	const standardWorld =
+		(existing: Row | null = null): Handler =>
+		(sql) => {
+			if (sql.includes('WHERE ci.id = $1::uuid')) return [standardMeteredRow];
+			if (sql.includes('ii.billing_period_start = $3::date')) return [pendingLine(standardLine)];
+			if (sql.includes('FROM consumption_entries e WHERE e.contract_item_id')) return existing ? [existing] : [];
+
+			return undefined;
+		};
+	const existingEntry = (overrides: Row = {}): Row => ({
+		id: 'entry-1',
+		contract_item_id: ITEM,
+		period_start: '2026-10-01',
+		period_end: '2026-10-31',
+		quantity: '5',
+		amount_override: null,
+		unit_price: '120.5',
+		apply_item_discount: true,
+		account: null,
+		is_estimated: false,
+		source: 'manual',
+		revision: 1,
+		correction_reason: null,
+		notes: null,
+		idempotency_key: null,
+		created_at: new Date('2026-11-02T10:00:00.000Z'),
+		updated_at: new Date('2026-11-02T10:00:00.000Z'),
+		...overrides,
+	});
+	const lineParams = (runner: { query: jest.Mock }) => (calls(runner.query, 'UPDATE invoice_items SET quantity')[0][1] as unknown[]).slice(0, 7);
+
+	it('registrar con cantidad y unitario: la entry y su revisión lo guardan y la Por Emitir queda en cantidad × ese unitario', async () => {
+		const { service, runner } = build(standardWorld());
+		const result = await service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 5, unit_price: 120.5 }, HOLDING, 'auth-1');
+
+		expect(calls(runner.query, 'INSERT INTO consumption_entries')[0][1].at(-1)).toBe(120.5);
+		expect(calls(runner.query, 'INSERT INTO consumption_entry_revisions')[0][1].at(-1)).toBe(120.5);
+		expect(lineParams(runner)).toEqual(['line-oct', HOLDING, 5, 120.5, 120.5, 602.5, 602.5]);
+		expect(result.entry).toMatchObject({ quantity: 5, unit_price: 120.5, revision: 1 });
+		expect(result.line).toMatchObject({ quantity: 5, effective_unit_price: 120.5, subtotal: 602.5, quantity_source: 'consumption' });
+		const [event] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');
+
+		expect(event[1][4]).toContain('a 120.5 c/u (precio unitario del período)');
+		expect(JSON.parse(event[1][8] as string)).toMatchObject({ quantity: 5, unit_price: 120.5, previous_unit_price: null });
+	});
+
+	it('sin unitario: cantidad × el unitario del precio del ítem y la entry queda sin unitario propio (como siempre)', async () => {
+		const { service, runner } = build(standardWorld());
+		const result = await service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 5 }, HOLDING, 'auth-1');
+
+		expect(calls(runner.query, 'INSERT INTO consumption_entries')[0][1].at(-1)).toBeNull();
+		expect(lineParams(runner)).toEqual(['line-oct', HOLDING, 5, 100, 100, 500, 500]);
+		expect(result.entry.unit_price).toBeNull();
+	});
+
+	it('un unitario igual al del precio no es un precio propio del período: se guarda NULL y sigue al precio del ítem', async () => {
+		const { service, runner } = build(standardWorld());
+
+		await service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 5, unit_price: 100 }, HOLDING, 'auth-1');
+		expect(calls(runner.query, 'INSERT INTO consumption_entries')[0][1].at(-1)).toBeNull();
+	});
+
+	it('corregir solo la cantidad conserva el unitario informado del período', async () => {
+		const { service, runner } = build(standardWorld(existingEntry()));
+		const result = await service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 8, correction_reason: 'Faltaban 3' }, HOLDING, 'auth-1');
+
+		expect(calls(runner.query, 'UPDATE consumption_entries SET')[0][1].at(-1)).toBe(120.5);
+		expect(calls(runner.query, 'INSERT INTO consumption_entry_revisions')[0][1]).toEqual([
+			HOLDING,
+			'entry-1',
+			2,
+			8,
+			null,
+			true,
+			'manual',
+			'Faltaban 3',
+			'user-1',
+			120.5,
+		]);
+		expect(lineParams(runner)).toEqual(['line-oct', HOLDING, 8, 120.5, 120.5, 964, 964]);
+		expect(result.entry).toMatchObject({ quantity: 8, unit_price: 120.5, revision: 2 });
+	});
+
+	it('corregir cantidad y unitario a la vez: quedan los dos valores nuevos, con el anterior en el evento', async () => {
+		const { service, runner } = build(standardWorld(existingEntry()));
+
+		await service.upsert(
+			CONTRACT,
+			ITEM,
+			'2026-10-01',
+			{ quantity: 8, unit_price: 110.25, correction_reason: 'Precio acordado' },
+			HOLDING,
+			'auth-1'
+		);
+		expect(calls(runner.query, 'UPDATE consumption_entries SET')[0][1].at(-1)).toBe(110.25);
+		expect(lineParams(runner)).toEqual(['line-oct', HOLDING, 8, 110.25, 110.25, 882, 882]);
+		const [event] = calls(runner.query, 'INSERT INTO contract_lifecycle_events');
+
+		expect(JSON.parse(event[1][8] as string)).toMatchObject({
+			previous_quantity: 5,
+			quantity: 8,
+			previous_unit_price: 120.5,
+			unit_price: 110.25,
+		});
+	});
+
+	it('unit_price null al corregir: el período vuelve al unitario del precio del ítem', async () => {
+		const { service, runner } = build(standardWorld(existingEntry()));
+
+		await service.upsert(
+			CONTRACT,
+			ITEM,
+			'2026-10-01',
+			{ quantity: 5, unit_price: null, correction_reason: 'Vuelve al precio' },
+			HOLDING,
+			'auth-1'
+		);
+		expect(calls(runner.query, 'UPDATE consumption_entries SET')[0][1].at(-1)).toBeNull();
+		expect(lineParams(runner)).toEqual(['line-oct', HOLDING, 5, 100, 100, 500, 500]);
+	});
+
+	it('modelo que no es estándar (tramos): 400 en unit_price y no se escribe nada; sin unitario sigue registrando', async () => {
+		const tiered = build();
+		const error = await rejection(
+			tiered.service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 1250, unit_price: 0.05 }, HOLDING, 'auth-1'),
+			BadRequestException
+		);
+
+		expect(fieldErrorsOf(error)).toEqual([{ field: 'unit_price', message: PERIOD_UNIT_PRICE_MODEL_MESSAGE }]);
+		expect(tiered.runner.rollbackTransaction).toHaveBeenCalled();
+		expect(calls(tiered.runner.query, 'INSERT INTO consumption_entries')).toHaveLength(0);
+
+		const plain = build();
+
+		await plain.service.upsert(CONTRACT, ITEM, '2026-10-01', { quantity: 1250, unit_price: null }, HOLDING, 'auth-1');
+		expect(calls(plain.runner.query, 'INSERT INTO consumption_entries')[0][1].at(-1)).toBeNull();
+	});
+
+	it('carga masiva: la fila lleva su unitario; la que no lo trae usa el del precio', async () => {
+		const { service, runner } = build(standardWorld());
+		const result = await service.bulk(
+			CONTRACT,
+			{
+				rows: [
+					{ item_id: ITEM, period_start: '2026-10-01', quantity: 5, unit_price: 120.5 },
+					{ item_id: ITEM, period_start: '2026-10-01', quantity: 6 },
+				],
+			} as ConsumptionBulkDto,
+			HOLDING,
+			'auth-1'
+		);
+
+		expect(result.applied).toBe(2);
+		const inserts = calls(runner.query, 'INSERT INTO consumption_entries');
+
+		expect(inserts[0][1].at(-1)).toBe(120.5);
+		expect(inserts[1][1].at(-1)).toBeNull();
+	});
+
+	it('almacén de datos: informa solo la cantidad y no pisa el unitario puesto a mano; su comparación ve el unitario informado', async () => {
+		const { service, runner, dataSource } = build((sql) => {
+			if (sql.includes("date_trunc('month', ii.billing_period_start) = date_trunc")) return [{ period_start: '2026-10-01', unit_price: '100' }];
+			if (sql.includes('e.unit_price AS entry_unit_price'))
+				return [
+					{
+						id: 'entry-1',
+						contract_id: CONTRACT,
+						contract_item_id: ITEM,
+						period_start: '2026-10-01',
+						quantity: '5',
+						amount_override: null,
+						entry_unit_price: '120.5',
+						unit_price: '100',
+						unit_of_measure: 'UND',
+						account: null,
+					},
+				];
+
+			return standardWorld(existingEntry())(sql, []);
+		});
+
+		await service.recordFromDwh(HOLDING, CONTRACT, ITEM, '2026-10-01', {
+			quantity: 9,
+			unit_price: 55,
+			account: null,
+			notes: null,
+			correction_reason: 'Almacén de datos',
+		});
+		expect(calls(runner.query, 'UPDATE consumption_entries SET')[0][1].at(-1)).toBe(120.5);
+		expect(await service.entryForMonth(HOLDING, ITEM, '2026-10-01')).toMatchObject({ quantity: 5, unit_price: 120.5 });
+		expect((dataSource.query as jest.Mock).mock.calls.some(([sql]) => (sql as string).includes('e.unit_price AS entry_unit_price'))).toBe(true);
 	});
 });

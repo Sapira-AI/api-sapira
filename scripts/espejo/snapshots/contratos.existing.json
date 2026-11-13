@@ -685,14 +685,6 @@
     "unique": false,
     "where": null
    },
-   "contracts_holding_number_unique": {
-    "columns": [
-     "holding_id",
-     "contract_number"
-    ],
-    "unique": true,
-    "where": "(deleted_at IS NULL)"
-   },
    "idx_contracts_holding_id": {
     "columns": [
      "holding_id"
@@ -5179,6 +5171,17 @@
     "scale": 2,
     "array": false
    },
+   "unit_price": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
+    "array": false
+   },
    "apply_item_discount": {
     "type": "boolean",
     "nullable": false,
@@ -5371,6 +5374,10 @@
     "expression": "\"period_end\" >= \"period_start\""
    },
    {
+    "name": "consumption_entries_unit_price_check",
+    "expression": "\"unit_price\" IS NULL OR \"unit_price\" >= 0"
+   },
+   {
     "name": "consumption_entries_quantity_check",
     "expression": "\"quantity\" >= 0"
    }
@@ -5487,6 +5494,17 @@
     "length": null,
     "precision": 18,
     "scale": 2,
+    "array": false
+   },
+   "unit_price": {
+    "type": "numeric",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": 18,
+    "scale": 6,
     "array": false
    },
    "apply_item_discount": {

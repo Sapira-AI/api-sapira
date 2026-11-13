@@ -225,10 +225,113 @@
    }
   ]
  },
+ "dte_simulations": {
+  "name": "public.dte_simulations",
+  "rls_enabled": true,
+  "rows": 0,
+  "columns": [
+   {
+    "name": "id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "sim_<uuid>: es el dte_id que queda en la factura"
+   },
+   {
+    "name": "company_id",
+    "data_type": "uuid",
+    "format": "uuid",
+    "type": "uuid",
+    "options": [
+     "updatable"
+    ]
+   },
+   {
+    "name": "tipo",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Tipo de DTE (33, 34, 56, 61, 110…)"
+   },
+   {
+    "name": "folio",
+    "data_type": "integer",
+    "format": "int4",
+    "type": "integer",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Folio simulado, correlativo por compañía y tipo"
+   },
+   {
+    "name": "external_ref",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Referencia externa (id de la factura); una reemisión archiva la anterior como <ref>:rechazado:<id>"
+   },
+   {
+    "name": "body",
+    "data_type": "jsonb",
+    "format": "jsonb",
+    "type": "jsonb",
+    "options": [
+     "updatable"
+    ],
+    "comment": "Cuerpo DTE tal como se habría enviado a api-factura (Encabezado, Detalle, Referencia)"
+   },
+   {
+    "name": "track_id",
+    "data_type": "text",
+    "format": "text",
+    "type": "text",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "TrackId simulado (SIM-<folio>) al \"enviar al SII\""
+   },
+   {
+    "name": "created_at",
+    "data_type": "timestamp with time zone",
+    "format": "timestamptz",
+    "type": "timestamp with time zone",
+    "options": [
+     "updatable"
+    ],
+    "default_value": "now()"
+   }
+  ],
+  "primary_keys": [
+   "id"
+  ],
+  "foreign_key_constraints": [
+   {
+    "name": "dte_simulations_company_id_fkey",
+    "source_table": "public.dte_simulations",
+    "source_columns": [
+     "company_id"
+    ],
+    "target_table": "public.companies",
+    "target_columns": [
+     "id"
+    ]
+   }
+  ]
+ },
  "invoice_adjustments": {
   "name": "public.invoice_adjustments",
   "rls_enabled": true,
-  "rows": 5,
+  "rows": 12,
   "columns": [
    {
     "name": "id",
@@ -728,7 +831,7 @@
  "invoice_items": {
   "name": "public.invoice_items",
   "rls_enabled": true,
-  "rows": 12306,
+  "rows": 12438,
   "columns": [
    {
     "name": "id",
@@ -1945,7 +2048,7 @@
  "invoices": {
   "name": "public.invoices",
   "rls_enabled": true,
-  "rows": 10292,
+  "rows": 10387,
   "columns": [
    {
     "name": "id",
