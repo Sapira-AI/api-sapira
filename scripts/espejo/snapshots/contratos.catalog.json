@@ -2595,6 +2595,10 @@
    "amount_override": {
     "precision": 18,
     "scale": 2
+   },
+   "unit_price": {
+    "precision": 18,
+    "scale": 6
    }
   },
   "constraints": [
@@ -2662,6 +2666,11 @@
     "name": "consumption_entries_source_check",
     "type": "c",
     "expr": "source = ANY (ARRAY['manual'::text, 'csv'::text, 'dwh'::text, 'api'::text])"
+   },
+   {
+    "name": "consumption_entries_unit_price_check",
+    "type": "c",
+    "expr": "(unit_price IS NULL) OR (unit_price >= (0)::numeric)"
    },
    {
     "name": "consumption_entries_updated_by_fkey",
@@ -2736,6 +2745,10 @@
    "amount_override": {
     "precision": 18,
     "scale": 2
+   },
+   "unit_price": {
+    "precision": 18,
+    "scale": 6
    }
   },
   "constraints": [

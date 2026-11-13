@@ -1030,7 +1030,7 @@
  "contract_items": {
   "name": "public.contract_items",
   "rls_enabled": true,
-  "rows": 1333,
+  "rows": 1500,
   "columns": [
    {
     "name": "id",
@@ -2032,7 +2032,7 @@
  "contract_lifecycle_events": {
   "name": "public.contract_lifecycle_events",
   "rls_enabled": true,
-  "rows": 1551,
+  "rows": 1998,
   "columns": [
    {
     "name": "id",
@@ -2496,7 +2496,7 @@
  "contract_item_change_log": {
   "name": "public.contract_item_change_log",
   "rls_enabled": true,
-  "rows": 1346,
+  "rows": 1531,
   "columns": [
    {
     "name": "id",
@@ -5171,6 +5171,17 @@
      "nullable",
      "updatable"
     ]
+   },
+   {
+    "name": "unit_price",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Precio unitario informado para el período (moneda del ítem, antes del descuento): solo en precio estándar por consumo; la línea queda en quantity × unit_price. NULL = el unitario del precio del ítem"
    }
   ],
   "primary_keys": [
@@ -5366,6 +5377,17 @@
      "updatable"
     ],
     "default_value": "now()"
+   },
+   {
+    "name": "unit_price",
+    "data_type": "numeric",
+    "format": "numeric",
+    "type": "numeric(18,6)",
+    "options": [
+     "nullable",
+     "updatable"
+    ],
+    "comment": "Precio unitario del período que valía en esta revisión (NULL = el del precio del ítem)"
    }
   ],
   "primary_keys": [
@@ -5577,7 +5599,7 @@
  "contract_scheduled_changes": {
   "name": "public.contract_scheduled_changes",
   "rls_enabled": true,
-  "rows": 1,
+  "rows": 2,
   "columns": [
    {
     "name": "id",

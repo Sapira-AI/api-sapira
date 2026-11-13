@@ -239,6 +239,121 @@
    }
   }
  },
+ "dte_simulations": {
+  "class": "DteSimulation",
+  "columns": {
+   "id": {
+    "type": "text",
+    "nullable": false,
+    "primary": true,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "company_id": {
+    "type": "uuid",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "tipo": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "folio": {
+    "type": "integer",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "external_ref": {
+    "type": "text",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "body": {
+    "type": "jsonb",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "track_id": {
+    "type": "text",
+    "nullable": true,
+    "primary": false,
+    "generated": null,
+    "default": null,
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   },
+   "created_at": {
+    "type": "timestamptz",
+    "nullable": false,
+    "primary": false,
+    "generated": null,
+    "default": "now()",
+    "length": null,
+    "precision": null,
+    "scale": null,
+    "array": false
+   }
+  },
+  "uniques": {
+   "dte_simulations_company_external_ref_key": [
+    "company_id",
+    "external_ref"
+   ],
+   "dte_simulations_company_tipo_folio_key": [
+    "company_id",
+    "tipo",
+    "folio"
+   ]
+  },
+  "indices": {},
+  "checks": [],
+  "foreignKeys": {
+   "dte_simulations_company_id_fkey": {
+    "columns": [
+     "company_id"
+    ],
+    "table": "companies",
+    "onDelete": "CASCADE"
+   }
+  }
+ },
  "invoice_adjustments": {
   "class": "InvoiceAdjustment",
   "columns": {

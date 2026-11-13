@@ -1721,7 +1721,7 @@ export class ContractChangesService {
 			db.query(CONTRACT_PREVIOUS_DISCOUNTS_SQL, [contractId, holdingId]) as Promise<Row[]>,
 			// Consumos registrados del contrato: la cantidad de esas líneas no la reinicia ninguna modificación.
 			db.query(
-				`SELECT e.contract_item_id, e.period_start::text AS period_start, e.quantity, e.amount_override, e.apply_item_discount, e.is_estimated
+				`SELECT e.contract_item_id, e.period_start::text AS period_start, e.quantity, e.amount_override, e.unit_price, e.apply_item_discount, e.is_estimated
 				FROM consumption_entries e JOIN contract_items ci ON ci.id = e.contract_item_id
 				WHERE ci.contract_id = $1 AND e.holding_id = $2`,
 				[contractId, holdingId]
@@ -1828,6 +1828,7 @@ export class ContractChangesService {
 				{
 					quantity: toNumber(row.quantity),
 					amount_override: toNullableNumber(row.amount_override),
+					unit_price: toNullableNumber(row.unit_price),
 					apply_item_discount: row.apply_item_discount !== false,
 					is_estimated: row.is_estimated === true,
 				},

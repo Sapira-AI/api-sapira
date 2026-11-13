@@ -1007,6 +1007,8 @@ export interface ConsumptionEntryRow {
 	period_end: string;
 	quantity: number;
 	amount_override: number | null;
+	/** Precio unitario informado para el período (precio estándar por consumo); null = el del precio del ítem. */
+	unit_price?: number | null;
 	apply_item_discount: boolean;
 	account: string | null;
 	is_estimated: boolean;
@@ -1028,6 +1030,7 @@ export interface ConsumptionEntryRow {
 		revision: number;
 		quantity: number;
 		amount_override: number | null;
+		unit_price?: number | null;
 		correction_reason: string | null;
 		recorded_by: { id: string; name: string | null } | null;
 		recorded_at: string | null;
@@ -1246,6 +1249,8 @@ export function buildConsumption(input: ConsumptionBuildInput) {
 			quantity: entry.quantity,
 			unit: item?.metric?.unit ?? item?.unit_of_measure ?? null,
 			amount_override: entry.amount_override,
+			// Unitario informado para el período (null = el del precio del ítem). `unit_price` a secas no: en estas filas el front lo lee como el c/u efectivo de la línea.
+			period_unit_price: entry.unit_price ?? null,
 			apply_item_discount: entry.apply_item_discount,
 			is_estimated: entry.is_estimated,
 			in_progress: entry.period_end >= today && entry.period_start <= today,

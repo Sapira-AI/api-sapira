@@ -53,6 +53,8 @@ export interface ConsumptionInput {
 	period_start: string;
 	quantity: number;
 	amount_override?: number | null;
+	/** Precio unitario informado para el período (solo `standard` por consumo); ausente o null = el del precio del ítem. */
+	unit_price?: number | null;
 	apply_item_discount?: boolean;
 	is_estimated?: boolean;
 }
@@ -63,6 +65,8 @@ export interface ResolvedQuantity {
 	quantity: number;
 	source: QuantitySource;
 	amount_override: number | null;
+	/** Precio unitario del período informado en el consumo (null = el del precio del ítem). */
+	unit_price: number | null;
 	apply_item_discount: boolean;
 }
 
@@ -108,6 +112,11 @@ export interface PricedLine {
 
 export interface PriceLineOptions {
 	amount_override?: number | null;
+	/**
+	 * Precio unitario del período informado en el consumo: en `standard` reemplaza a `unit_amount` (gratis, descuento, mínimo y tope
+	 * siguen igual). Los demás modelos lo ignoran (la escritura del consumo lo rechaza antes).
+	 */
+	unit_price?: number | null;
 	apply_item_discount?: boolean;
 	quantity_source?: QuantitySource;
 }
@@ -238,15 +247,16 @@ export function resolveQuantity(
 ): ResolvedQuantity {
 	const base = Math.max(0, num(item.quantity));
 
-	if (!isMetered(item.price)) return { quantity: base, source: 'fixed', amount_override: null, apply_item_discount: true };
+	if (!isMetered(item.price)) return { quantity: base, source: 'fixed', amount_override: null, unit_price: null, apply_item_discount: true };
 	const entry = entries.find((candidate) => String(candidate.period_start).slice(0, 10) === period.start);
 
-	if (!entry) return { quantity: base, source: 'pending', amount_override: null, apply_item_discount: true };
+	if (!entry) return { quantity: base, source: 'pending', amount_override: null, unit_price: null, apply_item_discount: true };
 
 	return {
 		quantity: Math.max(0, num(entry.quantity)),
 		source: entry.is_estimated ? 'estimated' : 'consumption',
 		amount_override: present(entry.amount_override) ? num(entry.amount_override) : null,
+		unit_price: present(entry.unit_price) ? num(entry.unit_price) : null,
 		apply_item_discount: entry.apply_item_discount !== false,
 	};
 }
@@ -256,7 +266,7 @@ export function resolveQuantity(
 /**
  * Aplica gratis → modelo → descuento → mínimo → tope y redondea (§3). Pura: sin fechas ni base. `discountPct` es el
  * descuento del ítem en porcentaje (0–100). Con `amount_override` el subtotal es ese monto (menos el descuento si
- * `apply_item_discount`), sin tramos, mínimo ni tope.
+ * `apply_item_discount`), sin tramos, mínimo ni tope. Con `unit_price` (solo `standard`) la cantidad se tarifa a ese unitario.
  */
 export function priceLine(price: PriceSpec, quantity: number, discountPct: number, options: PriceLineOptions = {}): PricedLine {
 	const warnings: string[] = [];
@@ -287,7 +297,8 @@ export function priceLine(price: PriceSpec, quantity: number, discountPct: numbe
 	// 2. Modelo / tramos.
 	switch (price.model) {
 		case 'standard': {
-			const unit = num(price.unit_amount);
+			// El unitario informado en el consumo del período manda sobre el del precio (Domi 13-11).
+			const unit = present(options.unit_price) ? num(options.unit_price) : num(price.unit_amount);
 
 			if (billable > 0) push({ kind: 'tier', quantity: billable, unit_amount: unit, amount: billable * unit, label: 'Por unidad' });
 			break;
@@ -402,7 +413,14 @@ export function priceLine(price: PriceSpec, quantity: number, discountPct: numbe
 		running = cap;
 	}
 
-	return finish(sublines, qty, billable, warnings, options.quantity_source);
+	const priced = finish(sublines, qty, billable, warnings, options.quantity_source);
+
+	// Unitario del período informado sin gratis, descuento, mínimo ni tope: la línea muestra el unitario que se escribió (20,1412), no el
+	// que resulta de dividir el subtotal redondeado por la cantidad (20,141193). El subtotal no cambia.
+	if (price.model === 'standard' && present(options.unit_price) && sublines.length === 1 && sublines[0].kind === 'tier')
+		return { ...priced, effective_unit_price: round6(num(options.unit_price)) };
+
+	return priced;
 }
 
 const formatPct = (pct: number) => String(round6(pct)).replace('.', ',');

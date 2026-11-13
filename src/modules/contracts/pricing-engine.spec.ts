@@ -393,6 +393,7 @@ describe('resolveQuantity (§3.7)', () => {
 			quantity: 3,
 			source: 'fixed',
 			amount_override: null,
+			unit_price: null,
 			apply_item_discount: true,
 		});
 		expect(resolveQuantity({ quantity: 3, price: { model: 'graduated', quantity_type: 'fixed', tiers: benchmarkTiers } }, period).source).toBe(
@@ -406,7 +407,7 @@ describe('resolveQuantity (§3.7)', () => {
 				{ period_start: '2026-09-01', quantity: 5 },
 				{ period_start: '2026-10-01', quantity: 1250, amount_override: 70, apply_item_discount: false },
 			])
-		).toEqual({ quantity: 1250, source: 'consumption', amount_override: 70, apply_item_discount: false });
+		).toEqual({ quantity: 1250, source: 'consumption', amount_override: 70, unit_price: null, apply_item_discount: false });
 		expect(resolveQuantity(metered, period, [{ period_start: '2026-10-01', quantity: 800, is_estimated: true }])).toMatchObject({
 			quantity: 800,
 			source: 'estimated',
@@ -415,7 +416,66 @@ describe('resolveQuantity (§3.7)', () => {
 	});
 
 	it('medida sin consumo: pendiente con la cantidad base del ítem (supuesto, pregunta 3)', () => {
-		expect(resolveQuantity(metered, period, [])).toEqual({ quantity: 1000, source: 'pending', amount_override: null, apply_item_discount: true });
+		expect(resolveQuantity(metered, period, [])).toEqual({
+			quantity: 1000,
+			source: 'pending',
+			amount_override: null,
+			unit_price: null,
+			apply_item_discount: true,
+		});
+	});
+
+	it('medida con precio unitario del período: el consumo lo lleva al motor (Domi 13-11)', () => {
+		expect(resolveQuantity(metered, period, [{ period_start: '2026-10-01', quantity: 352, unit_price: 20.1412 }])).toEqual({
+			quantity: 352,
+			source: 'consumption',
+			amount_override: null,
+			unit_price: 20.1412,
+			apply_item_discount: true,
+		});
+	});
+});
+
+describe('precio unitario del período en el modelo estándar (Ransa, Domi 13-11)', () => {
+	const standard = { model: 'standard' as const, quantity_type: 'metered' as const, unit_amount: 19.92 };
+
+	it('sin unitario informado: cantidad × el unitario del precio, como siempre', () => {
+		const priced = priceLine(standard, 369, 0, { quantity_source: 'consumption' });
+
+		expect(priced.subtotal).toBe(7350.48);
+		expect(priced.effective_unit_price).toBe(19.92);
+	});
+
+	it('con unitario informado: cantidad × ese unitario; el del precio no participa', () => {
+		const priced = priceLine(standard, 352, 0, { unit_price: 20.1412, quantity_source: 'consumption' });
+
+		expect(priced.subtotal).toBe(7089.7);
+		expect(priced.effective_unit_price).toBe(20.1412);
+		expect(priced.breakdown).toEqual([{ kind: 'tier', quantity: 352, unit_amount: 20.1412, amount: 7089.7, label: 'Por unidad' }]);
+	});
+
+	it('la línea muestra el unitario que se escribió, no subtotal ÷ cantidad; con descuento vuelve a ser el neto por unidad', () => {
+		// 352 × 20,1412 = 7.089,7024 → 7.089,70: dividir daría 20,141193.
+		expect(priceLine(standard, 352, 0, { unit_price: 20.1412 }).effective_unit_price).toBe(20.1412);
+		expect(priceLine(standard, 100, 10, { unit_price: 20 }).effective_unit_price).toBe(18);
+		// Sin unitario del período el motor no cambia: subtotal ÷ cantidad.
+		expect(priceLine({ ...standard, unit_amount: 20.1412 }, 352, 0).effective_unit_price).toBe(20.141193);
+	});
+
+	it('el descuento del ítem, el mínimo y el tope siguen aplicando sobre el unitario informado', () => {
+		expect(priceLine(standard, 100, 10, { unit_price: 20 }).subtotal).toBe(1800);
+		expect(priceLine({ ...standard, minimum_amount: 5000 }, 100, 0, { unit_price: 20 }).subtotal).toBe(5000);
+		expect(priceLine({ ...standard, cap_amount: 1500 }, 100, 0, { unit_price: 20 }).subtotal).toBe(1500);
+	});
+
+	it('unitario 0 informado: la línea queda en 0 (no cae al unitario del precio)', () => {
+		expect(priceLine(standard, 100, 0, { unit_price: 0 }).subtotal).toBe(0);
+	});
+
+	it('los demás modelos lo ignoran: tramos tarifa con sus tramos', () => {
+		const tiers = { model: 'graduated' as const, quantity_type: 'metered' as const, tiers: [{ from: 1, to: null, per_unit_amount: 3 }] };
+
+		expect(priceLine(tiers, 10, 0, { unit_price: 99 }).subtotal).toBe(30);
 	});
 });
 
