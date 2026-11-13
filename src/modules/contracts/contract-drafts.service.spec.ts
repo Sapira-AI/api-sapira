@@ -1730,7 +1730,7 @@ describe('ContractDraftsService · editar borrador (GET :id/form y PUT :id)', ()
 			const extras = previewSpy.mock.calls[0][2]!;
 
 			expect(extras.consumption!.get(ITEM_A)).toEqual([
-				{ period_start: '2026-10-01', quantity: 7, amount_override: null, apply_item_discount: true, is_estimated: false },
+				{ period_start: '2026-10-01', quantity: 7, amount_override: null, unit_price: null, apply_item_discount: true, is_estimated: false },
 			]);
 			expect(extras.description_template).toMatchObject({ blocks: [{ type: 'text', text: 'Servicio' }, { type: 'contract_number' }] });
 			// Glosa con la plantilla del contrato (texto + número) y ajustada al límite del documento (30).

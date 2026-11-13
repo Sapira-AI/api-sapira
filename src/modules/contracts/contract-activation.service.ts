@@ -368,7 +368,7 @@ export class ContractActivationService {
 				ci.billing_frequency, ci.billing_method, ci.start_date::text AS start_date, ci.end_date::text AS end_date,
 				ci.term_months, ci.is_recurring, ci.currency, ci.billing_anchor_day, ${PRICE_COLUMNS},
 				(SELECT COALESCE(jsonb_agg(jsonb_build_object(
-						'period_start', e.period_start, 'quantity', e.quantity, 'amount_override', e.amount_override,
+						'period_start', e.period_start, 'quantity', e.quantity, 'amount_override', e.amount_override, 'unit_price', e.unit_price,
 						'apply_item_discount', e.apply_item_discount, 'is_estimated', e.is_estimated)), '[]'::jsonb)
 					FROM consumption_entries e WHERE e.contract_item_id = ci.id AND e.holding_id = c.holding_id) AS consumption
 			FROM contract_items ci
@@ -435,6 +435,7 @@ export class ContractActivationService {
 			period_start: toText(entry.period_start)?.slice(0, 10) ?? '',
 			quantity: toNumber(entry.quantity),
 			amount_override: entry.amount_override === null || entry.amount_override === undefined ? null : toNumber(entry.amount_override),
+			unit_price: entry.unit_price === null || entry.unit_price === undefined ? null : toNumber(entry.unit_price),
 			apply_item_discount: entry.apply_item_discount !== false,
 			is_estimated: entry.is_estimated === true,
 		}));

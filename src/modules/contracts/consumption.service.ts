@@ -101,6 +101,10 @@ const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 type PeriodLine = ConsumptionPeriodLine & { sent_to_odoo_at?: string | null };
 const hasErpDraft = (line: PeriodLine) => (line.odoo_invoice_id !== null && line.odoo_invoice_id !== undefined) || Boolean(line.sent_to_odoo_at);
 export const ERP_DRAFT_STALE_CODE = 'erp_draft_stale';
+/** El unitario del período solo existe en el precio estándar (cantidad × precio): el resto de los modelos tarifa con sus tramos o paquetes. */
+export const PERIOD_UNIT_PRICE_MODEL_MESSAGE =
+	'El precio unitario del período solo se informa en ítems con precio Estándar (cantidad × precio): en este ítem el precio sale de su modelo';
+const acceptsPeriodUnitPrice = (item: { price: PriceSpec | null }) => !item.price || item.price.model === 'standard';
 /** Aviso: el consumo recalculó también el documento unificado Por Emitir que lleva la factura de origen del período. */
 export const CONSOLIDATED_RESYNC_CODE = 'consolidated_resynced';
 /** Origen de una escritura de consumo (`consumption_entries.source`): pantalla, CSV o sincronización del almacén de datos. */
@@ -113,7 +117,7 @@ export interface DwhEntryView {
 	contract_item_id: string;
 	period_start: string;
 	quantity: number;
-	/** Unitario efectivo: monto fijado ÷ cantidad, o el del ítem. */
+	/** Unitario efectivo: el informado para el período, monto fijado ÷ cantidad (consumos antiguos), o el del ítem. */
 	unit_price: number | null;
 	unit_of_measure: string | null;
 	account: string | null;
@@ -122,6 +126,7 @@ export interface DwhEntryView {
 const dwhEntryView = (row: Row): DwhEntryView => {
 	const quantity = toNumber(row.quantity);
 	const override = toNullableNumber(row.amount_override);
+	const informed = toNullableNumber(row.entry_unit_price);
 
 	return {
 		id: String(row.id),
@@ -129,7 +134,12 @@ const dwhEntryView = (row: Row): DwhEntryView => {
 		contract_item_id: String(row.contract_item_id),
 		period_start: String(row.period_start).slice(0, 10),
 		quantity,
-		unit_price: override !== null && quantity > 0 ? Math.round((override / quantity) * 1e6) / 1e6 : toNullableNumber(row.unit_price),
+		unit_price:
+			informed !== null
+				? informed
+				: override !== null && quantity > 0
+					? Math.round((override / quantity) * 1e6) / 1e6
+					: toNullableNumber(row.unit_price),
 		unit_of_measure: toText(row.unit_of_measure),
 		account: toText(row.account),
 	};
@@ -209,6 +219,8 @@ interface EntryView {
 	period_end: string;
 	quantity: number;
 	amount_override: number | null;
+	/** Precio unitario informado para el período (precio estándar por consumo); null = el del precio del ítem. */
+	unit_price: number | null;
 	apply_item_discount: boolean;
 	account: string | null;
 	is_estimated: boolean;
@@ -430,7 +442,7 @@ export class ConsumptionService {
 		const [entryRows, revisionRows, itemRows, lineRows] = await Promise.all([
 			this.dataSource.query<Row[]>(
 				`SELECT e.id, e.contract_item_id, e.period_start::text AS period_start, e.period_end::text AS period_end, e.quantity, e.amount_override,
-					e.apply_item_discount, e.account, e.is_estimated, e.source, e.revision, e.correction_reason, e.notes, e.idempotency_key, e.invoice_id,
+					e.unit_price, e.apply_item_discount, e.account, e.is_estimated, e.source, e.revision, e.correction_reason, e.notes, e.idempotency_key, e.invoice_id,
 					e.created_at, e.updated_at, u.id AS recorded_by_id, COALESCE(u.name, u.email) AS recorded_by_name,
 					(SELECT COUNT(*) FROM consumption_entry_revisions r WHERE r.entry_id = e.id) AS revisions_count
 				FROM consumption_entries e
@@ -441,7 +453,7 @@ export class ConsumptionService {
 			),
 			// Historial por entry (más nuevo primero, máximo 20 por entry) con quién lo registró.
 			this.dataSource.query<Row[]>(
-				`SELECT r.entry_id, r.revision, r.quantity, r.amount_override, r.reason, r.changed_at,
+				`SELECT r.entry_id, r.revision, r.quantity, r.amount_override, r.unit_price, r.reason, r.changed_at,
 					u.id AS recorded_by_id, COALESCE(u.name, u.email) AS recorded_by_name
 				FROM consumption_entry_revisions r
 				JOIN consumption_entries e ON e.id = r.entry_id
@@ -488,6 +500,7 @@ export class ConsumptionService {
 				revision: toNumber(row.revision),
 				quantity: toNumber(row.quantity),
 				amount_override: toNullableNumber(row.amount_override),
+				unit_price: toNullableNumber(row.unit_price),
 				correction_reason: toText(row.reason),
 				recorded_by: recordedBy(row),
 				recorded_at: iso(row.changed_at),
@@ -555,7 +568,7 @@ export class ConsumptionService {
 	async entryForMonth(holdingId: string, itemId: string, month: string): Promise<DwhEntryView | null> {
 		const [row] = (await this.dataSource.query(
 			`SELECT e.id, e.contract_id, e.contract_item_id, e.period_start::text AS period_start, e.quantity, e.amount_override, e.account,
-				ci.unit_price, ci.unit_of_measure
+				e.unit_price AS entry_unit_price, ci.unit_price, ci.unit_of_measure
 			FROM consumption_entries e JOIN contract_items ci ON ci.id = e.contract_item_id
 			WHERE e.holding_id = $1 AND e.contract_item_id = $2 AND date_trunc('month', e.period_start) = date_trunc('month', $3::date)
 			ORDER BY e.period_start LIMIT 1`,
@@ -569,7 +582,7 @@ export class ConsumptionService {
 	async entryById(holdingId: string, id: string): Promise<DwhEntryView | null> {
 		const [row] = (await this.dataSource.query(
 			`SELECT e.id, e.contract_id, e.contract_item_id, e.period_start::text AS period_start, e.quantity, e.amount_override, e.account,
-				ci.unit_price, ci.unit_of_measure
+				e.unit_price AS entry_unit_price, ci.unit_price, ci.unit_of_measure
 			FROM consumption_entries e JOIN contract_items ci ON ci.id = e.contract_item_id
 			WHERE e.holding_id = $1 AND (e.id::text = $2 OR e.idempotency_key = 'quantities:' || $2)
 			ORDER BY (e.id::text = $2) DESC LIMIT 1`,
@@ -859,6 +872,7 @@ export class ConsumptionService {
 					{
 						quantity: row.quantity,
 						amount_override: row.amount_override,
+						unit_price: row.unit_price,
 						notes: row.notes,
 						correction_reason: row.correction_reason,
 						idempotency_key: row.idempotency_key,
@@ -912,6 +926,9 @@ export class ConsumptionService {
 		if (classification.state === 'none') {
 			throw outOfItemConflict(periodStart, [...new Set(lines.map((line) => line.billing_period_start))].sort());
 		}
+		// El unitario del período es del precio estándar (cantidad × precio): en tramos, volumen, paquete o asiento el precio sale del modelo.
+		if (dto.unit_price !== null && dto.unit_price !== undefined && !acceptsPeriodUnitPrice(item))
+			throw validationException([{ field: 'unit_price', message: PERIOD_UNIT_PRICE_MODEL_MESSAGE }]);
 		const applyAs = resolveApplyAs(dto);
 		const anchor = classification.state === 'open' ? classification.target : classification.state === 'issued' ? classification.issued : null;
 		const periodEnd = anchor?.billing_period_end ?? lines[0].billing_period_end;
@@ -924,6 +941,7 @@ export class ConsumptionService {
 			// Monto final retirado (Domi 12-10): el consumo es solo cantidad; el precio sale del modelo. Los montos antiguos siguen en sus
 			// consumos hasta corregirlos (una corrección nueva ya no lo lleva).
 			amount_override: null,
+			unit_price: this.periodUnitPrice(item, existing, dto),
 			apply_item_discount: dto.apply_item_discount !== false,
 			account: dto.account?.trim() || existing?.account || null,
 			is_estimated: dto.is_estimated === true,
@@ -1147,16 +1165,33 @@ export class ConsumptionService {
 	}
 
 	/**
+	 * Precio unitario del período que queda en la entry (Domi 13-11): el que viene en el body; sin él, el que ya tenía el período (corregir
+	 * solo la cantidad no lo pierde); `null` explícito vuelve al del precio del ítem. Un valor igual al unitario del precio se guarda como
+	 * NULL (no es un precio propio del período: sigue al precio del ítem). Fuera del precio estándar no hay unitario del período.
+	 */
+	private periodUnitPrice(item: MeteredItem, existing: EntryView | null, dto: UpsertConsumptionDto): number | null {
+		if (!acceptsPeriodUnitPrice(item)) return null;
+		const value = dto.unit_price === undefined ? (existing?.unit_price ?? null) : dto.unit_price;
+
+		if (value === null) return null;
+		const unit = Math.round(Number(value) * 1e6) / 1e6;
+		const base = toNullableNumber(item.price?.unit_amount);
+
+		return base !== null && Math.abs(unit - base) < 5e-7 ? null : unit;
+	}
+
+	/**
 	 * Línea tarifada con la cantidad informada: el modelo de precio del ítem medido, o cantidad × unitario del período para un
 	 * ítem estándar (el unitario que la activación dejó en la línea; si falta, el del ítem). El descuento es el de la línea.
 	 */
 	private priceFor(
 		item: MeteredItem,
 		anchor: ConsumptionPeriodLine,
-		entry: Pick<EntryView, 'quantity' | 'amount_override' | 'apply_item_discount' | 'is_estimated'>
+		entry: Pick<EntryView, 'quantity' | 'amount_override' | 'unit_price' | 'apply_item_discount' | 'is_estimated'>
 	) {
 		const options: PriceLineOptions = {
 			amount_override: entry.amount_override,
+			unit_price: entry.unit_price,
 			apply_item_discount: entry.apply_item_discount,
 			quantity_source: entry.is_estimated ? 'estimated' : 'consumption',
 		};
@@ -1823,7 +1858,9 @@ export class ConsumptionService {
 					titles[plan.event],
 					`${verbs[plan.event]} el consumo de "${item.product_name ?? ''}" del período ${entry.period_start} a ${entry.period_end}: ${
 						previousQuantity === null ? '' : `${previousQuantity} → `
-					}${entry.quantity}${item.metric?.unit ? ` ${item.metric.unit}` : ''}${suffix}`.replace(/\s+/g, ' '),
+					}${entry.quantity}${item.metric?.unit ? ` ${item.metric.unit}` : ''}${
+						entry.unit_price === null ? '' : ` a ${entry.unit_price} c/u (precio unitario del período)`
+					}${suffix}`.replace(/\s+/g, ' '),
 					userId ?? SYSTEM_ACTOR_ID,
 					entry.period_start,
 					JSON.stringify([item.id]),
@@ -1835,6 +1872,8 @@ export class ConsumptionService {
 						previous_quantity: previousQuantity,
 						quantity: entry.quantity,
 						amount_override: entry.amount_override,
+						previous_unit_price: existing?.unit_price ?? null,
+						unit_price: entry.unit_price,
 						reason: entry.correction_reason,
 						mode: plan.mode,
 						invoice_id: invoice?.id ?? null,
@@ -1896,7 +1935,7 @@ export class ConsumptionService {
 			await runner.query(
 				`UPDATE consumption_entries SET quantity = $3, amount_override = $4, apply_item_discount = $5, account = $6, is_estimated = $7,
 					source = $8, idempotency_key = COALESCE($9, idempotency_key), revision = $10, correction_reason = $11, notes = $12,
-					updated_at = now(), updated_by = $13, invoice_id = $14
+					updated_at = now(), updated_by = $13, invoice_id = $14, unit_price = $15
 				WHERE id = $1 AND holding_id = $2 RETURNING id`,
 				[
 					existing.id,
@@ -1913,6 +1952,7 @@ export class ConsumptionService {
 					entry.notes,
 					userId,
 					entry.invoice_id,
+					entry.unit_price,
 				]
 			);
 			entryId = String(existing.id);
@@ -1920,8 +1960,8 @@ export class ConsumptionService {
 			const [inserted] = (await runner.query(
 				`INSERT INTO consumption_entries (
 					holding_id, contract_id, contract_item_id, period_start, period_end, quantity, amount_override, apply_item_discount, account,
-					is_estimated, source, idempotency_key, revision, correction_reason, notes, created_by, updated_by, invoice_id
-				) VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, $10, $11, $12, 1, NULL, $13, $14, $14, $15) RETURNING id`,
+					is_estimated, source, idempotency_key, revision, correction_reason, notes, created_by, updated_by, invoice_id, unit_price
+				) VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, $10, $11, $12, 1, NULL, $13, $14, $14, $15, $16) RETURNING id`,
 				[
 					holdingId,
 					contractId,
@@ -1938,6 +1978,7 @@ export class ConsumptionService {
 					entry.notes,
 					userId,
 					entry.invoice_id,
+					entry.unit_price,
 				]
 			)) as Row[];
 
@@ -1945,8 +1986,8 @@ export class ConsumptionService {
 		}
 		// Historial append-only: cada revisión (también la primera) deja su fila.
 		await runner.query(
-			`INSERT INTO consumption_entry_revisions (holding_id, entry_id, revision, quantity, amount_override, apply_item_discount, source, reason, changed_by)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			`INSERT INTO consumption_entry_revisions (holding_id, entry_id, revision, quantity, amount_override, apply_item_discount, source, reason, changed_by, unit_price)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 			[
 				holdingId,
 				entryId,
@@ -1957,6 +1998,7 @@ export class ConsumptionService {
 				source,
 				entry.correction_reason,
 				userId,
+				entry.unit_price,
 			]
 		);
 
@@ -2565,7 +2607,7 @@ export class ConsumptionService {
 	private async loadEntry(db: Queryable, itemId: string, periodStart: string, lock = false): Promise<EntryView | null> {
 		const [row] = (await db.query(
 			`SELECT e.id, e.contract_item_id, e.period_start::text AS period_start, e.period_end::text AS period_end, e.quantity, e.amount_override,
-				e.apply_item_discount, e.account, e.is_estimated, e.source, e.revision, e.correction_reason, e.notes, e.idempotency_key, e.invoice_id, e.created_at, e.updated_at
+				e.unit_price, e.apply_item_discount, e.account, e.is_estimated, e.source, e.revision, e.correction_reason, e.notes, e.idempotency_key, e.invoice_id, e.created_at, e.updated_at
 			FROM consumption_entries e WHERE e.contract_item_id = $1 AND e.period_start = $2::date ${lock ? 'FOR UPDATE' : ''}`,
 			[itemId, periodStart]
 		)) as Row[];
@@ -2581,6 +2623,7 @@ export class ConsumptionService {
 			period_end: String(row.period_end).slice(0, 10),
 			quantity: toNumber(row.quantity),
 			amount_override: toNullableNumber(row.amount_override),
+			unit_price: toNullableNumber(row.unit_price),
 			apply_item_discount: row.apply_item_discount !== false,
 			account: toText(row.account) || null,
 			is_estimated: row.is_estimated === true,

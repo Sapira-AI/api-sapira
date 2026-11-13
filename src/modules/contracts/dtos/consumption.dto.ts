@@ -48,6 +48,17 @@ export class UpsertConsumptionDto {
 	amount_override?: number | null;
 
 	@ApiPropertyOptional({
+		description:
+			'Precio unitario del período (moneda del ítem, antes del descuento), solo en ítems de precio estándar por consumo: la línea queda en cantidad × este unitario. Ausente = se conserva el del período (o el del precio si no había); null = vuelve al del precio del ítem',
+		nullable: true,
+		example: 20.1412,
+	})
+	@ValidateIf((_dto: UpsertConsumptionDto, value: unknown) => value !== null && value !== undefined)
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe el precio unitario del período (hasta 6 decimales)' })
+	@Min(0, { message: 'El precio unitario no puede ser negativo' })
+	unit_price?: number | null;
+
+	@ApiPropertyOptional({
 		default: true,
 		description: 'Aplicar el descuento del ítem sobre el consumo (S7-9); false = "No aplicar el descuento del ítem"',
 	})
@@ -142,6 +153,15 @@ export class ConsumptionBulkRowDto {
 	@IsNumber({ maxDecimalPlaces: 2 }, { message: 'Monto informado inválido' })
 	@Min(0, { message: 'El monto informado no puede ser negativo' })
 	amount_override?: number | null;
+
+	@ApiPropertyOptional({
+		description: 'Precio unitario del período (solo precio estándar por consumo); ausente = se conserva el del período o el del precio',
+		nullable: true,
+	})
+	@ValidateIf((_row: ConsumptionBulkRowDto, value: unknown) => value !== null && value !== undefined)
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Precio unitario inválido (hasta 6 decimales)' })
+	@Min(0, { message: 'El precio unitario no puede ser negativo' })
+	unit_price?: number | null;
 
 	@ApiPropertyOptional()
 	@IsString({ message: 'Notas inválidas' })

@@ -29,6 +29,7 @@ export type ConsumptionSource = (typeof CONSUMPTION_SOURCES)[number];
 @Index('idx_consumption_entries_holding_id', ['holding_id'])
 @Index('idx_consumption_entries_invoice_id', ['invoice_id'], { where: 'invoice_id IS NOT NULL' })
 @Check('consumption_entries_quantity_check', `"quantity" >= 0`)
+@Check('consumption_entries_unit_price_check', `"unit_price" IS NULL OR "unit_price" >= 0`)
 @Check('consumption_entries_period_check', `"period_end" >= "period_start"`)
 @Check('consumption_entries_source_check', `"source" = ANY (ARRAY['manual'::text, 'csv'::text, 'dwh'::text, 'api'::text])`)
 export class ConsumptionEntry {
@@ -61,6 +62,16 @@ export class ConsumptionEntry {
 		comment: 'Monto final informado por el cliente; si viene, la línea usa este monto y quantity queda informativa',
 	})
 	amount_override?: number | null;
+
+	@Column({
+		type: 'numeric',
+		precision: 18,
+		scale: 6,
+		nullable: true,
+		comment:
+			'Precio unitario informado para el período (moneda del ítem, antes del descuento): solo en precio estándar por consumo; la línea queda en quantity × unit_price. NULL = el unitario del precio del ítem',
+	})
+	unit_price?: number | null;
 
 	@Column({ type: 'boolean', default: true, comment: 'El descuento del ítem se aplica sobre el consumo (S7-9)' })
 	apply_item_discount: boolean;

@@ -224,7 +224,14 @@ export interface ChangeInvoiceLineRow {
 	/** Neto (moneda de contrato, positivo) ya acreditado por NC de descuento vigentes sobre esta línea (mismo ítem, período contenido). */
 	previously_credited?: number;
 	/** Consumo registrado del ítem y período (`consumption_entries`): la cantidad de la línea es esa y ninguna modificación la reinicia. */
-	consumption?: { quantity: number; amount_override: number | null; apply_item_discount: boolean; is_estimated: boolean } | null;
+	consumption?: {
+		quantity: number;
+		amount_override: number | null;
+		/** Precio unitario informado para el período (precio estándar por consumo): ninguna modificación lo reemplaza. */
+		unit_price?: number | null;
+		apply_item_discount: boolean;
+		is_estimated: boolean;
+	} | null;
 	/** Multimoneda: moneda de origen de la línea (`invoice_items.contract_currency` = moneda del ítem); los montos `subtotal`… están en ella. */
 	currency?: string | null;
 	/** Multimoneda: tasa de la línea moneda del ítem → factura (`invoice_items.fx_contract_to_invoice`). */
@@ -1126,6 +1133,8 @@ export function repriceConsumptionLine(
 	const source: QuantitySource = line.quantity_source === 'estimated' || line.consumption?.is_estimated ? 'estimated' : 'consumption';
 	const options = {
 		amount_override: line.consumption?.amount_override ?? null,
+		// El unitario informado en el consumo del período manda sobre `unitPerPeriod` (el precio nuevo del cambio no lo pisa).
+		unit_price: line.consumption?.unit_price ?? null,
 		apply_item_discount: line.consumption?.apply_item_discount !== false,
 		quantity_source: source,
 	};
@@ -4380,6 +4389,7 @@ function recordedConsumption(ctx: ChangeContext, itemId: string, from: string): 
 			period_start: period,
 			quantity: line.consumption?.quantity ?? rows.reduce((sum, row) => sum + num(row.quantity), 0),
 			amount_override: line.consumption?.amount_override ?? null,
+			unit_price: line.consumption?.unit_price ?? null,
 			apply_item_discount: line.consumption?.apply_item_discount !== false,
 			is_estimated: line.quantity_source === 'estimated' || line.consumption?.is_estimated === true,
 		});
@@ -7588,6 +7598,10 @@ function correctItemInvoices(
 			}
 			if (line.consumption?.amount_override !== null && line.consumption?.amount_override !== undefined) {
 				preserved.push(`el monto informado del consumo de ${label} (no se reescribe)`);
+				continue;
+			}
+			if (line.consumption?.unit_price !== null && line.consumption?.unit_price !== undefined) {
+				preserved.push(`el precio unitario informado en el consumo de ${label} (no se reescribe)`);
 				continue;
 			}
 			const values = correctedLine(line, before, after, anchor);

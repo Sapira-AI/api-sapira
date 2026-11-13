@@ -37,6 +37,15 @@ export class ConsumptionEntryRevision {
 	@Column({ type: 'numeric', precision: 18, scale: 2, nullable: true })
 	amount_override?: number | null;
 
+	@Column({
+		type: 'numeric',
+		precision: 18,
+		scale: 6,
+		nullable: true,
+		comment: 'Precio unitario del período que valía en esta revisión (NULL = el del precio del ítem)',
+	})
+	unit_price?: number | null;
+
 	@Column({ type: 'boolean', default: true })
 	apply_item_discount: boolean;
 

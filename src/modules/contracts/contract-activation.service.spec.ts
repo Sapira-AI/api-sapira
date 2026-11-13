@@ -717,3 +717,33 @@ describe('ContractsController (acciones masivas y activación)', () => {
 		expect(activation.activate).toHaveBeenCalledWith([A, B], 'h-1', 'auth-1');
 	});
 });
+
+describe('ContractActivationService.consumptionOf · precio unitario del período (Domi 13-11)', () => {
+	it('lleva al motor el unitario informado del consumo (null si el período usa el del precio)', () => {
+		expect(
+			ContractActivationService.consumptionOf({
+				consumption: [
+					{
+						period_start: '2026-08-01',
+						quantity: '352',
+						amount_override: null,
+						unit_price: '20.141200',
+						apply_item_discount: true,
+						is_estimated: false,
+					},
+					{
+						period_start: '2026-09-01',
+						quantity: '369',
+						amount_override: null,
+						unit_price: null,
+						apply_item_discount: true,
+						is_estimated: false,
+					},
+				],
+			})
+		).toEqual([
+			{ period_start: '2026-08-01', quantity: 352, amount_override: null, unit_price: 20.1412, apply_item_discount: true, is_estimated: false },
+			{ period_start: '2026-09-01', quantity: 369, amount_override: null, unit_price: null, apply_item_discount: true, is_estimated: false },
+		]);
+	});
+});

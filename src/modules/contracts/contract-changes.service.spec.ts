@@ -810,6 +810,7 @@ describe('ContractChangesService.apply (POST /contracts/:id/changes)', () => {
 		expect(invoice('inv-12').lines.find((line) => line.contract_item_id === LICENCIA)!.consumption).toEqual({
 			quantity: 7,
 			amount_override: null,
+			unit_price: null,
 			apply_item_discount: true,
 			is_estimated: false,
 		});

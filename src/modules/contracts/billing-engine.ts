@@ -841,6 +841,7 @@ function pricedLines(
 		const resolved = resolveQuantity(item, { start: installment.period_start, end: installment.period_end }, item.consumption ?? []);
 		const fullPriced = priceLine(price, resolved.quantity, pct, {
 			amount_override: resolved.amount_override,
+			unit_price: resolved.unit_price,
 			apply_item_discount: resolved.apply_item_discount,
 			quantity_source: resolved.source,
 		});

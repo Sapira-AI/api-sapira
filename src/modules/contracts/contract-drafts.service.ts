@@ -1934,7 +1934,7 @@ export class ContractDraftsService {
 				holdingId,
 			]),
 			this.dataSource.query<Row[]>(
-				`SELECT e.contract_item_id, e.period_start::text AS period_start, e.quantity, e.amount_override, e.apply_item_discount, e.is_estimated
+				`SELECT e.contract_item_id, e.period_start::text AS period_start, e.quantity, e.amount_override, e.unit_price, e.apply_item_discount, e.is_estimated
 				FROM consumption_entries e JOIN contract_items ci ON ci.id = e.contract_item_id
 				WHERE ci.contract_id = $1 AND e.holding_id = $2`,
 				[contract.id, holdingId]
@@ -1951,6 +1951,7 @@ export class ContractDraftsService {
 					period_start: String(row.period_start).slice(0, 10),
 					quantity: toNumber(row.quantity),
 					amount_override: row.amount_override === null || row.amount_override === undefined ? null : toNumber(row.amount_override),
+					unit_price: row.unit_price === null || row.unit_price === undefined ? null : toNumber(row.unit_price),
 					apply_item_discount: row.apply_item_discount !== false,
 					is_estimated: row.is_estimated === true,
 				},

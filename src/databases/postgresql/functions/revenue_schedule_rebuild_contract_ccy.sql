@@ -25,6 +25,8 @@ AS $function$
 --  D2-c   una sola regla: mes con desvío del plan (consumo / corrección de cantidad en consumption_entries —incluidos los overrides
 --         del front anterior, copiados desde quantities por la migración 1791600000000— o línea editada a mano) = lo facturado para
 --         su período de servicio (Por Emitir como estimado). Ya no lee quantities.
+-- Domi 13-11 (precio unitario del período): sin línea viva en el mes, el respaldo usa el unitario informado en el consumo
+--         (consumption_entries.unit_price) antes que el del ítem. Requiere la migración 1792520000000-ConsumptionUnitPrice.
 DECLARE
   v_contract RECORD;
   v_item RECORD;
@@ -356,7 +358,7 @@ BEGIN
         IF (v_entry_in_month OR v_line_deviation) AND v_service_lines > 0 THEN
           v_recognized_period := v_service_billed;
         ELSIF v_entry_in_month THEN
-          SELECT COALESCE(e.amount_override, v_item.unit_price * e.quantity)
+          SELECT COALESCE(e.amount_override, COALESCE(e.unit_price, v_item.unit_price) * e.quantity)
                  * CASE WHEN e.apply_item_discount THEN (1 - COALESCE(
                      (SELECT ii.discount_pct
                         FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id
