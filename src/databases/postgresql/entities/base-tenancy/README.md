@@ -1,7 +1,7 @@
-# Módulo 1 · Base / Tenancy — 14 tablas de prod (2026-11-02)
+# Módulo 1 · Base / Tenancy — 14 tablas de prod (2026-11-13)
 
 > Convención y reglas: `../README.md`. Rarezas verificadas: `../NOTAS-ESPEJO.md`. Veredictos de producto: `docs/v2-rediseno/04-spec-modelo-dominio-v2/00-tablas-por-modulo.md` (no aplican en este paso).
-> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-11-02 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/base-tenancy.{pgmeta,catalog}.json`); metadata real de las entities existentes en `base-tenancy.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
+> Origen de TODO lo que está en esta carpeta: lectura en vivo de prod `hklompkypzqtglprfobu` vía MCP de Supabase el 2026-11-13 — `list_tables verbose` + `execute_sql` de solo lectura sobre `pg_catalog` (`scripts/espejo/snapshots/base-tenancy.{pgmeta,catalog}.json`); metadata real de las entities existentes en `base-tenancy.existing.json` (`scripts/espejo/extract-existing-metadata.ts`). Generado con `scripts/espejo/generate-espejo.py`.
 
 ## A · Tablas que YA tenían entity en el repo (6) — no se tocaron ni se duplicaron
 
@@ -9,7 +9,7 @@ Estas entities están **prendidas en producción** exactamente como estaban (`da
 
 | Tabla (filas) | Entity existente (archivo · clase) | Estado vs prod | Columnas que faltan en la entity | Columnas que sobran | Diferencias en columnas existentes | Constraints / índices / FKs que la entity no declara |
 |---|---|---|---|---|---|---|
-| `users` (30) | `src/databases/postgresql/entities/base-tenancy/user.entity.ts` · `User` | ⚠️ difiere de prod | — | — | — | nombre de PK `users_pkey`<br>CHECK `users_avatar_one_kind_check`<br>CHECK `users_status_check` |
+| `users` (31) | `src/databases/postgresql/entities/base-tenancy/user.entity.ts` · `User` | ⚠️ difiere de prod | — | — | — | nombre de PK `users_pkey`<br>CHECK `users_avatar_one_kind_check`<br>CHECK `users_status_check` |
 | `user_holdings` (41) | `src/databases/postgresql/entities/base-tenancy/user-holding.entity.ts` · `UserHolding` | ⚠️ difiere de prod | — | — | — | nombre de PK `user_holdings_pkey` |
 | `company_holdings` (4) | `src/databases/postgresql/entities/base-tenancy/company-holding.entity.ts` · `CompanyHolding` | ⚠️ difiere de prod | — | — | — | nombre de PK `company_holdings_pkey` |
 | `companies` (24) | `src/databases/postgresql/entities/base-tenancy/companies.entity.ts` · `Company` | ⚠️ difiere de prod | — | — | — | nombre de PK `companies_pkey` |

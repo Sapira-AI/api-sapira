@@ -106,7 +106,7 @@
  "exchange_rates_monthly_avg": {
   "name": "public.exchange_rates_monthly_avg",
   "rls_enabled": true,
-  "rows": 388,
+  "rows": 398,
   "columns": [
    {
     "name": "id",

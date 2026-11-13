@@ -246,7 +246,7 @@
  "salesforce_accounts_stg": {
   "name": "public.salesforce_accounts_stg",
   "rls_enabled": true,
-  "rows": 256,
+  "rows": 260,
   "columns": [
    {
     "name": "id",
@@ -407,7 +407,7 @@
  "salesforce_opportunities_stg": {
   "name": "public.salesforce_opportunities_stg",
   "rls_enabled": true,
-  "rows": 194,
+  "rows": 204,
   "columns": [
    {
     "name": "id",
@@ -612,7 +612,7 @@
  "salesforce_line_items_stg": {
   "name": "public.salesforce_line_items_stg",
   "rls_enabled": true,
-  "rows": 211,
+  "rows": 222,
   "columns": [
    {
     "name": "id",
