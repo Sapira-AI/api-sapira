@@ -73,6 +73,9 @@ export type InvoiceDecisionAction = (typeof INVOICE_DECISION_ACTIONS)[number];
 export const ORIGIN_TYPES = ['manual', 'quote', 'renewal_proposal'] as const;
 export const FIRST_PERIOD_INVOICE = ['cycle', 'immediate'] as const;
 export type FirstPeriodInvoice = (typeof FIRST_PERIOD_INVOICE)[number];
+/** Qué hacer con lo cobrado de más cuando una rebaja rige desde antes de facturas ya emitidas (Domi 16-11). */
+export const ISSUED_OVERCHARGE_MODES = ['credit_note', 'compensate_next'] as const;
+export type IssuedOverchargeMode = (typeof ISSUED_OVERCHARGE_MODES)[number];
 export const RENEWAL_CATCH_UP = ['backdate', 'current_month'] as const;
 export const CHANGE_ITEMS_MAX = 100;
 
@@ -548,6 +551,16 @@ export class ContractChangeDto {
 	@IsIn(FIRST_PERIOD_INVOICE, { message: 'first_period_invoice: cycle o immediate' })
 	@IsOptional()
 	first_period_invoice?: FirstPeriodInvoice;
+
+	@ApiPropertyOptional({
+		enum: ISSUED_OVERCHARGE_MODES,
+		default: 'credit_note',
+		description:
+			'Rebaja (item_change) o corrección de una baja ya registrada (item_update) con fecha anterior a facturas emitidas: credit_note (por defecto) bloquea y lo emitido se corrige con nota de crédito; compensate_next aplica la rebaja desde su fecha real y compensa lo cobrado de más en las próximas facturas por emitir del mismo producto, que salen con menos cantidad (baja de cantidad) o menor precio unitario (baja de precio), sin descuento y sin líneas negativas',
+	})
+	@IsIn(ISSUED_OVERCHARGE_MODES, { message: 'issued_overcharge: credit_note o compensate_next' })
+	@IsOptional()
+	issued_overcharge?: IssuedOverchargeMode;
 
 	@ApiPropertyOptional({
 		enum: ['auto'],

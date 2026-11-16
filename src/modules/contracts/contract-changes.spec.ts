@@ -2564,7 +2564,8 @@ describe('item_update · corregir un dato mal cargado (F4, decisión 01-10)', ()
 		expect(fields(() => correct([{ item_id: LICENCIA, quantity: 12 }], { items: [priced, soporteRow()] }))).toEqual(['change.items.0']);
 		const mirror = itemRow({ id: '55555555-5555-4555-8555-555555555555', categoria: 'DOWNSELL', related_item_id: LICENCIA });
 
-		expect(fields(() => correct([{ item_id: mirror.id, quantity: 3 }], { items: [itemRow(), soporteRow(), mirror] }))).toEqual([
+		// El precio de un registro de baja no se corrige; su cantidad sí, por camino propio desde el 16-11 (contract-issued-compensation.spec).
+		expect(fields(() => correct([{ item_id: mirror.id, unit_price: 50 }], { items: [itemRow(), soporteRow(), mirror] }))).toEqual([
 			'change.items.0',
 		]);
 		// Glosa y tipo con cuenta de otro ítem en el mismo cambio: datos de varios ítems sí se corrigen juntos.

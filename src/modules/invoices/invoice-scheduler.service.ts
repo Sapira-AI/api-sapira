@@ -1252,6 +1252,8 @@ export class InvoiceSchedulerService {
 
 			this.logger.log(`✅ Item ${item.id}: tax_ids finales resueltos = [${finalTaxIds.join(', ')}]`);
 
+			// Una línea que compensa un cobro en exceso de períodos ya emitidos viaja como cualquier otra: ya trae menos cantidad (o menor
+			// unitario) y no lleva descuento por ese ajuste (`contracts/overcharge-compensation.ts`).
 			const discount = parseFloat(item.discount_pct?.toString() || '0');
 			const quantity = parseFloat(item.quantity?.toString() || '1');
 			const priceUnit = InvoiceSchedulerService.erpPriceUnit(
@@ -1679,6 +1681,17 @@ export class InvoiceSchedulerService {
 	 * (subtotal = cantidad × unitario) y además el descuento del ítem: mandar los dos hacía que el ERP descontara dos veces (TOPGROUP,
 	 * CTR-2026-85, 09-10). Si cantidad × unitario ya es el subtotal y hay descuento, se manda el unitario sin descontar; si no, tal cual.
 	 */
+	/** ¿La línea compensa un cobro en exceso de períodos ya emitidos? (marca `{ kind: compensation }` del desglose). */
+	static isCompensatedLine(item: { pricing_breakdown?: unknown }): boolean {
+		return (
+			Array.isArray(item.pricing_breakdown) &&
+			item.pricing_breakdown.some(
+				(subline) =>
+					!!subline && typeof subline === 'object' && (subline as { kind?: unknown }).kind === 'compensation' && 'compensation' in subline
+			)
+		);
+	}
+
 	static erpPriceUnit(unit: number, quantity: number, discountPct: number, subtotal: number | null): number {
 		if (!(discountPct > 0 && discountPct < 100) || subtotal === null || !(subtotal > 0) || !(quantity > 0)) return unit;
 		const gross = quantity * unit;
@@ -1992,8 +2005,20 @@ export class InvoiceSchedulerService {
 	 * Líneas que viajan al ERP (mismo criterio de `mapInvoiceToOdooFormat`): las visibles (`visible_line_id` NULL) con cantidad ≠ 0; si
 	 * todas las visibles están en 0, todas las visibles. Lo replica `UNMAPPED_PRODUCTS_SQL` (`contracts/contract-360.ts`) para los bloqueos.
 	 */
-	static itemsSentToErp<T extends { quantity?: unknown; visible_line_id?: unknown }>(invoice: { items?: T[] }): T[] {
-		const isZeroQuantity = (item: T) => Number(item.quantity) === 0;
+	static itemsSentToErp<
+		T extends {
+			quantity?: unknown;
+			visible_line_id?: unknown;
+			pricing_breakdown?: unknown;
+			subtotal_invoice_currency?: unknown;
+			subtotal_contract_currency?: unknown;
+		},
+	>(invoice: { items?: T[] }): T[] {
+		// Una línea que compensa un cobro en exceso y queda cubierta entera por lo ya facturado sale con cantidad 0 (no viaja, como toda
+		// línea en 0). Si compensa por precio unitario queda con cantidad y unitario 0: tampoco viaja (16-11).
+		const isZeroQuantity = (item: T) =>
+			Number(item.quantity) === 0 ||
+			(InvoiceSchedulerService.isCompensatedLine(item) && Number(item.subtotal_invoice_currency ?? item.subtotal_contract_currency ?? 0) === 0);
 		const isInternal = (item: T) => item.visible_line_id !== null && item.visible_line_id !== undefined;
 		const externalItems = (invoice.items || []).filter((item) => !isInternal(item));
 

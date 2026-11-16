@@ -121,6 +121,11 @@ export interface DescriptionContext {
 	contract_number?: string | null;
 	references?: DescriptionReference[] | null;
 	client_name?: string | null;
+	/**
+	 * Nota fija que cierra la glosa después de la plantilla (hoy: la compensación de un cobro en exceso, "61 del periodo menos 42 ya
+	 * facturados en sep-nov 2026 (14 x 3)"). No es un bloque: va siempre al final y la plantilla se ajusta al espacio que deja.
+	 */
+	note?: string | null;
 }
 
 export type PendingField = 'quantity' | 'unit_price' | 'amount' | 'fx_rate' | 'references';
@@ -388,10 +393,20 @@ function renderWith(
  * además completa por `asciiGlosa` (como `asciiGlosa(base - etiqueta)` del motor).
  */
 export function renderDescription(template: DescriptionTemplate | null | undefined, context: DescriptionContext): RenderedDescription {
-	const { text, length, pending_fields } = renderWith(template, context);
+	const { text, pending_fields } = renderWith(template, context);
+	const full = withNote(text, context);
 
-	return { text, length, pending_fields };
+	return { text: full, length: full.length, pending_fields };
 }
+
+/** Separador y texto de la nota final de la glosa (`DescriptionContext.note`). */
+const NOTE_SEPARATOR = '. ';
+const noteOf = (context: DescriptionContext) => (context.note?.trim() ? asciiGlosa(context.note.trim()) : '');
+const withNote = (text: string, context: DescriptionContext) => {
+	const note = noteOf(context);
+
+	return note ? (text ? `${text}${NOTE_SEPARATOR}${note}` : note) : text;
+};
 
 const DESCRIPTION_PENDING_ORDER: PendingField[] = ['quantity', 'unit_price', 'amount', 'fx_rate', 'references'];
 
@@ -564,6 +579,19 @@ export function fitDescription(
 	context: DescriptionContext,
 	maxChars: number | null
 ): FittedDescription {
+	const note = noteOf(context);
+
+	if (!note) return fitTemplate(template, context, maxChars);
+	// La nota final se conserva entera: la plantilla se ajusta al espacio que queda. Si ni así cabe (límite muy corto), se recorta la nota.
+	const room = maxChars === null ? null : maxChars - note.length - NOTE_SEPARATOR.length;
+	const base = fitTemplate(template, context, room === null ? null : Math.max(room, 0));
+	const joined = base.text ? `${base.text}${NOTE_SEPARATOR}${note}` : note;
+	const text = maxChars !== null && joined.length > maxChars ? cutAtWord(joined, maxChars).slice(0, maxChars) : joined;
+
+	return { ...base, text, length: text.length };
+}
+
+function fitTemplate(template: DescriptionTemplate | null | undefined, context: DescriptionContext, maxChars: number | null): FittedDescription {
 	const plain = renderWith(template, context);
 	const codes: FitStep[] = [];
 	const finish = (rendered: Pick<RenderedDescription, 'text' | 'pending_fields'>): FittedDescription => ({

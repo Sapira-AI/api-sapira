@@ -39,6 +39,29 @@ const base = (overrides: Partial<DescriptionContext> = {}): DescriptionContext =
 });
 
 describe('invoice-description (constructor de descripción, spec facturas §3.6)', () => {
+	describe('nota final de la glosa (compensación de un cobro en exceso, 16-11)', () => {
+		const note = '61 del periodo menos 42 ya facturados en sep–nov 2026 (14 × 3)';
+
+		it('cierra la glosa después de la plantilla, en ASCII; sin nota, la glosa de siempre', () => {
+			expect(renderDescription(null, base({ note })).text).toBe(
+				`${lineDescription('Licencia Sapira', 'Casa Matriz', '2026-09-01', '2026-09-30')}. 61 del periodo menos 42 ya facturados en sep-nov 2026 (14 x 3)`
+			);
+			expect(renderDescription(null, base({ note: null })).text).toBe(
+				lineDescription('Licencia Sapira', 'Casa Matriz', '2026-09-01', '2026-09-30')
+			);
+		});
+
+		it('con límite del documento se acorta la plantilla y la nota se conserva entera', () => {
+			const fitted = fitDescription(null, base({ note }), 100);
+
+			expect(fitted.length).toBeLessThanOrEqual(100);
+			expect(fitted.text.endsWith('. 61 del periodo menos 42 ya facturados en sep-nov 2026 (14 x 3)')).toBe(true);
+			expect(fitted.fitted).toBe(true);
+			// Límite menor que la propia nota: nunca supera el límite.
+			expect(fitDescription(null, base({ note }), 40).length).toBeLessThanOrEqual(40);
+		});
+	});
+
 	describe('DEFAULT_TEMPLATE = la glosa de hoy (paridad exacta)', () => {
 		const cases: Array<[string, string | null, string, string]> = [
 			['Licencia Sapira', 'Casa Matriz', '2026-09-01', '2026-09-30'],
