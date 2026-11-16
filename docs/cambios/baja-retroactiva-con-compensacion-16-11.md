@@ -155,7 +155,9 @@ cifras** (19 × 627) y la protección (reaplicar, reducir, perder, no tocar, des
 
 ## Despliegue
 
-Sin migración. En QA y luego en producción (con OK): `yarn postgres:assets --apply --only functions/revenue_schedule_rebuild_contract_ccy.sql`.
+Sin migración. La función se aplicó el 16-11 en QA y en producción (con OK de Domi) con
+`yarn postgres:assets --apply --only functions/revenue_schedule_rebuild_contract_ccy.sql --target <entorno>`; el código está en `qa` y
+`main` desde el mismo día (API v0.0.169, front v0.1.108).
 No recalcula nada por sí sola. Producción: 0 líneas con descuento puntual y 37 registros de baja al 16-11. S07212 lo corrige la usuaria
 desde la pantalla (Corregir un dato › la baja › 15 › Compensar en las próximas facturas); su factura de diciembre se emite sola el 01-12.
 
