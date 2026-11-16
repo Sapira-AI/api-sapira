@@ -156,7 +156,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 	}),
 	entry({
 		type: 'contract_renewal_proposed',
-		label: 'Renovación por confirmar',
+		label: 'Renovaciones de contratos',
 		module: 'contratos',
 		icon: 'calendar-clock',
 		severity: 'info',
@@ -164,8 +164,9 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 		default_roles: CONTRACT_ROLES,
 		action_type: 'review_renewal_proposal',
 		texts: {
-			what_happened: 'Un contrato está por vencer y preparamos la renovación con sus condiciones.',
-			what_to_do: 'Ábrela en el Resumen del contrato y confírmala u omítela. No se aplica sola.',
+			what_happened:
+				'Los contratos con renovación automática se renuevan solos 30 días antes de su fin: aquí llega el resumen del día y los que no se pudieron renovar.',
+			what_to_do: 'El resumen es informativo. Si es una renovación por confirmar, ábrela en el Resumen del contrato y confírmala u omítela.',
 		},
 	}),
 	entry({
@@ -185,7 +186,7 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 	}),
 	entry({
 		type: 'contract_scheduled_change_due',
-		label: 'Ajuste pactado por aplicar',
+		label: 'Cambio programado por aplicar',
 		module: 'contratos',
 		icon: 'trending-up',
 		severity: 'info',
@@ -193,8 +194,8 @@ export const NOTIFICATION_CATALOG: readonly NotificationCatalogEntry[] = [
 		default_roles: CONTRACT_ROLES,
 		action_type: 'review_scheduled_change',
 		texts: {
-			what_happened: 'Llegó la fecha de un ajuste de precio pactado en el contrato.',
-			what_to_do: 'Revísalo en el contrato y aplícalo, omítelo esta vez o cancélalo. No se aplica solo.',
+			what_happened: 'Un cambio programado del contrato llegó a su fecha y no se pudo aplicar solo.',
+			what_to_do: 'Revisa el motivo en el contrato y aplícalo, omítelo esta vez o cancélalo. Lo volvemos a intentar cada día.',
 		},
 	}),
 	entry({

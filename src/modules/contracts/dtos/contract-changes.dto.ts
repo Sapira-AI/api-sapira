@@ -59,6 +59,8 @@ export const CHANGE_TYPES = [
 	'resume',
 	'item_update',
 	'price_model_change',
+	// Revertir un cambio programado ya aplicado: solo desde `…/scheduled-changes/:changeId/revert` (lleva `PlanOptions.revert`).
+	'scheduled_change_revert',
 ] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];
 /** Tipos que no se construyen como cambio: se rechazan con 400 explicando el camino (reajuste = pactos §9.3.6). */

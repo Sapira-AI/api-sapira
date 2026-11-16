@@ -169,6 +169,9 @@ contratos en UF el reajuste ya está implícito y el sistema lo advierte).
 
 ## 5. Renovación automática v2 (reemplazo del cron roto)
 
+> **Superado el 13-11-2026**: la renovación automática y los cambios programados se aplican solos, 30 días antes. Ver
+> [`docs/cambios/renovacion-automatica-y-cambios-programados-13-11.md`](../cambios/renovacion-automatica-y-cambios-programados-13-11.md).
+
 **DECIDIDO** (#5, §2.5, E2): el cron viejo no se arregla; se apaga al publicar E2. **Propuesta de E2 con pactos**:
 
 1. **Job diario** `contracts-auto-renewal` (`@Cron` en `src/modules/contracts`, 06:00 después del RSM), por holding:

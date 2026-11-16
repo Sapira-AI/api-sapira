@@ -13,6 +13,8 @@ import { ConsumptionController } from './consumption.controller';
 import { ConsumptionService } from './consumption.service';
 import { Contract360Service } from './contract-360.service';
 import { ContractActivationService } from './contract-activation.service';
+import { ContractBulkChangesController } from './contract-bulk-changes.controller';
+import { ContractBulkChangesService } from './contract-bulk-changes.service';
 import { ContractBulkService } from './contract-bulk.service';
 import { ContractChangesService } from './contract-changes.service';
 import { ContractDraftsService } from './contract-drafts.service';
@@ -42,6 +44,7 @@ import { ContractDocumentsStorageService } from './storage/contract-documents-st
 @Module({
 	imports: [PostgreSQLDatabaseModule, MetricsModule, InvoicesModule, NotificationsModule, FacturaModule, BancoCentralModule],
 	controllers: [
+		ContractBulkChangesController,
 		ContractsController,
 		ContractInvoiceDteController,
 		BillableMetricsController,
@@ -55,6 +58,7 @@ import { ContractDocumentsStorageService } from './storage/contract-documents-st
 		ContractSubscriptionsService,
 		Contract360Service,
 		ContractBulkService,
+		ContractBulkChangesService,
 		ContractActivationService,
 		ContractChangesService,
 		ContractInvoicesService,

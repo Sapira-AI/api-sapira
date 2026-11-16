@@ -109,6 +109,13 @@ export class QueryContractsDto {
 	@IsOptional()
 	productId?: string;
 
+	@ApiPropertyOptional({
+		description: 'Contratos con al menos un ítem de alguno de estos tipos (contract_items.item_type); varios separados por coma',
+	})
+	@Matches(CLIENT_TEXT_LIST, { message: 'itemType debe ser uno o varios tipos de ítem separados por coma' })
+	@IsOptional()
+	itemType?: string;
+
 	@ApiPropertyOptional({ description: 'Contratos activos cuyo próximo fin de ítem cae entre hoy y hoy + N días' })
 	@Type(() => Number)
 	@IsInt()
@@ -178,6 +185,14 @@ export class QueryContractsDto {
 	@IsIn(BOOL)
 	@IsOptional()
 	multicurrency?: 'true' | 'false';
+
+	@ApiPropertyOptional({
+		enum: BOOL,
+		description: 'Renovación automática: true = algún ítem recurrente vigente la tiene encendida; false = ninguno',
+	})
+	@IsIn(BOOL)
+	@IsOptional()
+	autoRenew?: 'true' | 'false';
 
 	@ApiPropertyOptional({ enum: BOOL, description: 'Requiere OC/HES para facturar (`requires_references_for_billing`, Domi 26-10)' })
 	@IsIn(BOOL)

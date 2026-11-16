@@ -49,6 +49,7 @@ import { cleanPaymentTerms, QUOTE_CONTRACT_CREATED_STAGE, resolveUserId } from '
 import { ContractInvoiceConsolidationService } from './contract-invoice-consolidation.service';
 import { ContractInvoiceDescriptionsService } from './contract-invoice-descriptions.service';
 import { ContractInvoiceEditService, type PendingTermsPlan } from './contract-invoice-edit.service';
+import { SYSTEM_ACTOR_ID } from './contract-renewals';
 import { ContractsService } from './contracts.service';
 import { parseStoredTemplate } from './invoice-description';
 import { type ContractConversion, itemRate, multicurrencyHeader, upperCode } from './multicurrency';
@@ -63,6 +64,8 @@ type Row = Record<string, unknown>;
 type Queryable = Pick<DataSource, 'query'> | QueryRunner;
 
 const toText = (value: unknown) => (value === null || value === undefined ? null : String(value));
+/** Columnas con FK a `users` (`prices.created_by`, `invoice_adjustments.adjusted_by`): el actor sistema de los jobs no es un usuario. */
+const userFk = (userId: string) => (userId === SYSTEM_ACTOR_ID ? null : userId);
 
 /** Estado de la unificada de un origen (`unified_state`, Brightcell 10-11): editable, con borrador en el ERP o emitida; null sin unificada. */
 function unifiedStateOf(row: Row): UnifiedState | null {
@@ -288,7 +291,8 @@ export class ContractChangesService {
 	): Promise<ChangeApplyResult> {
 		validateChangeRequest(dto);
 		const resolved = await this.contracts.resolveContract(idOrNumber, holdingId);
-		const userId = await resolveUserId(this.dataSource, authId);
+		// Jobs (renovación automática, cambios futuros): actor sistema, sin usuario de Sapira detrás.
+		const userId = authId === SYSTEM_ACTOR_ID ? SYSTEM_ACTOR_ID : await resolveUserId(this.dataSource, authId);
 		const key = idempotencyKey?.trim() || null;
 		// "Hoy" del holding en su zona (ronda 4 de Configuración), leído antes de abrir la transacción.
 		const day = todayFor(await holdingTimezone(this.dataSource, holdingId), today);
@@ -582,6 +586,8 @@ export class ContractChangesService {
 			'insert_entity',
 			'insert_item',
 			'update_item',
+			// Corrección del modelo de precio: el precio del ítem ya corregido, antes de rehacer sus líneas.
+			'set_item_price',
 			// `price_model_change`: los consumos pasan al RENEWAL ya insertado.
 			'move_consumption',
 			// §9.3.3: pausas después de los ítems (el devengo las lee al reconstruirse, después de todo).
@@ -599,6 +605,8 @@ export class ContractChangesService {
 			'cancel_invoice',
 			'create_invoices',
 			'credit_note',
+			// `scheduled_change_revert`: el ítem de ajuste se borra con la NC espejo ya escrita.
+			'delete_reverted_item',
 			'update_invoices_fields',
 			'update_invoices_document',
 			'update_invoices_fx',
@@ -649,6 +657,7 @@ export class ContractChangesService {
 					break;
 				}
 				case 'delete_item':
+				case 'delete_reverted_item':
 					// Espejo de baja sin facturas propias (`reactivate` §9.3.2): primero sus filas de devengo (FK), después el ítem.
 					await runner.query(`DELETE FROM revenue_schedule_monthly WHERE contract_item_id = $1 AND holding_id = $2`, [
 						op.item_id,
@@ -870,7 +879,7 @@ export class ContractChangesService {
 								spec.free_units ?? 0,
 								spec.minimum_amount ?? null,
 								spec.cap_amount ?? null,
-								userId,
+								userFk(userId),
 								spec.invoice_line_mode ?? DEFAULT_INVOICE_LINE_MODE,
 								spec.charge_flat_when_free === true,
 								item.list_price_id ?? null,
@@ -937,9 +946,56 @@ export class ContractChangesService {
 						'discount_value',
 						'monthly_price',
 						'billing_period_price',
+						'billing_method',
 					] as const)
 						if (op.set[column] !== undefined) add(column, op.set[column]);
 					if (sets.length) await runner.query(`UPDATE contract_items SET ${sets.join(', ')} WHERE id = $1 AND holding_id = $2`, params);
+					break;
+				}
+				case 'set_item_price': {
+					// Corrección del modelo de precio (`item_update` con `price`): precio propio del contrato, versión siguiente si ya tenía uno.
+					const spec = op.spec;
+					const [price] = (await runner.query(
+						`INSERT INTO prices (
+							holding_id, owner, product_id, contract_id, name, currency, model, quantity_type, billable_metric_id,
+							unit_amount, tiers, package_size, package_amount, seat_minimum_quantity, free_units, minimum_amount, cap_amount,
+							status, version, supersedes_price_id, created_by, updated_by, published_at, invoice_line_mode, charge_flat_when_free
+						) VALUES (
+							$1, 'contract', $2, $3, $4, $5, $6, $7, $8,
+							$9, $10::jsonb, $11, $12, $13, $14, $15, $16,
+							'active', $20, $21, $17, $17, now(), $18, $19
+						) RETURNING id`,
+						[
+							holdingId,
+							op.product_id,
+							contract.id,
+							op.name,
+							op.currency,
+							spec.model,
+							spec.quantity_type,
+							spec.billable_metric_id ?? null,
+							spec.unit_amount ?? null,
+							spec.tiers ? JSON.stringify(spec.tiers) : null,
+							spec.package_size ?? null,
+							spec.package_amount ?? null,
+							spec.seat_minimum_quantity ?? 0,
+							spec.free_units ?? 0,
+							spec.minimum_amount ?? null,
+							spec.cap_amount ?? null,
+							userFk(userId),
+							spec.invoice_line_mode ?? DEFAULT_INVOICE_LINE_MODE,
+							spec.charge_flat_when_free === true,
+							op.version,
+							op.supersedes_price_id,
+						]
+					)) as Row[];
+
+					await runner.query(`UPDATE contract_items SET price_id = $3 WHERE id = $1 AND holding_id = $2 AND contract_id = $4`, [
+						op.item_id,
+						holdingId,
+						String(price.id),
+						contract.id,
+					]);
 					break;
 				}
 				case 'regenerate_descriptions': {
@@ -963,7 +1019,7 @@ export class ContractChangesService {
 				case 'insert_invoice_adjustment':
 					await runner.query(
 						`INSERT INTO invoice_adjustments (invoice_id, holding_id, type, amount_diff, notes, adjusted_by) VALUES ($1, $2, $3, $4, $5, $6)`,
-						[op.invoice_id, holdingId, op.type, op.amount_diff, op.notes, userId]
+						[op.invoice_id, holdingId, op.type, op.amount_diff, op.notes, userFk(userId)]
 					);
 					break;
 				case 'delete_line':
@@ -1561,7 +1617,7 @@ export class ContractChangesService {
 		const productIds =
 			change.type === 'item_add' ? [...new Set((change.items ?? []).map((item) => String(item.product_id ?? '')).filter(Boolean))] : [];
 		const metricIds =
-			change.type === 'item_add' || change.type === 'price_model_change'
+			change.type === 'item_add' || change.type === 'price_model_change' || change.type === 'item_update'
 				? [
 						...new Set(
 							(change.items ?? [])
@@ -1639,7 +1695,7 @@ export class ContractChangesService {
 					i.issue_date::text AS issue_date, i.due_date::text AS due_date, i.client_entity_id, i.contract_currency, i.invoice_currency,
 					i.fx_contract_to_invoice, i.tax_rate, i.amount_contract_currency, i.vat, i.amount_invoice_currency, i.total_invoice_currency,
 					i.odoo_invoice_id, i.sent_to_odoo_at, i.client_tax_id, i.credit_reason, i.credit_type, i.related_invoice_id, ${voidedSql('i')} AS voided,
-					i.consolidated_into_invoice_id, u.invoice_number AS unified_number, u.status AS unified_status, u.is_active AS unified_active,
+					(i.dte_id IS NOT NULL) AS electronic, i.consolidated_into_invoice_id, u.invoice_number AS unified_number, u.status AS unified_status, u.is_active AS unified_active,
 					u.odoo_invoice_id AS unified_odoo_invoice_id,
 					(SELECT COUNT(*) FROM invoice_references r WHERE r.invoice_id = i.id)
 						+ (SELECT COUNT(*) FROM invoice_reference_links rl WHERE rl.invoice_id = i.id) AS references_count
@@ -1900,6 +1956,7 @@ export class ContractChangesService {
 			sent_to_odoo_at: row.sent_to_odoo_at instanceof Date ? row.sent_to_odoo_at.toISOString() : toText(row.sent_to_odoo_at),
 			references_count: toNumber(row.references_count),
 			voided: row.voided === true,
+			electronic: row.electronic === true,
 			client_tax_id: toText(row.client_tax_id),
 			credit_reason: toText(row.credit_reason),
 			credit_type: toText(row.credit_type),

@@ -1,5 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsOptional, IsUUID } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDefined, IsOptional, IsUUID, ValidateNested } from 'class-validator';
+
+import { CreateScheduledChangeDto } from './contract-scheduled-changes.dto';
 
 /** Máximo de contratos por acción masiva de configuración o borrado. */
 export const BULK_MAX_IDS = 500;
@@ -54,4 +57,33 @@ export class ActivateContractsDto {
 	@ArrayMaxSize(ACTIVATE_MAX_IDS, { message: `Máximo ${ACTIVATE_MAX_IDS} contratos por activación` })
 	@IsUUID(undefined, { each: true, message: 'Contrato inválido' })
 	ids!: string[];
+}
+
+/**
+ * Body de `POST /contracts/bulk-scheduled-changes(/preview)`: el mismo cambio futuro del 360 (`CreateScheduledChangeDto`, siempre de
+ * alcance contrato) para varios contratos. Con `product_ids`, solo los ítems de esos productos: se guarda un cambio por ítem.
+ */
+export class BulkScheduledChangeDto extends BulkContractIdsDto {
+	@ApiProperty({ type: () => CreateScheduledChangeDto, description: 'Cambio futuro a guardar en cada contrato (sin contract_item_id)' })
+	@ValidateNested()
+	@Type(() => CreateScheduledChangeDto)
+	@IsDefined({ message: 'Indica el cambio' })
+	change!: CreateScheduledChangeDto;
+
+	@ApiPropertyOptional({
+		type: [String],
+		description: 'Productos a los que aplica (pedido de las usuarias 13-11). Sin lista = todos los ítems recurrentes vigentes del contrato',
+	})
+	@IsArray({ message: 'Productos inválidos' })
+	@ArrayMaxSize(200, { message: 'Máximo 200 productos' })
+	@IsUUID(undefined, { each: true, message: 'Producto inválido' })
+	@IsOptional()
+	product_ids?: string[];
+}
+
+/** Body de `POST /contracts/bulk-auto-renew(/preview)`: enciende o apaga la renovación automática de los ítems recurrentes vigentes. */
+export class BulkAutoRenewDto extends BulkContractIdsDto {
+	@ApiProperty({ description: 'true = se renuevan solos 30 días antes del fin; false = no' })
+	@IsBoolean({ message: 'Indica si se enciende o se apaga' })
+	auto_renew!: boolean;
 }
