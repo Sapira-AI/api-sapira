@@ -37,6 +37,7 @@ import {
 	tierLabelFromBreakdown,
 	validateTemplate,
 } from './invoice-description';
+import { compensationNote } from './overcharge-compensation';
 import { DESCRIPTION_LIMITS_SQL, type DescriptionLimitRow, resolveDescriptionMaxChars } from './tax-document-types';
 
 import type {
@@ -772,6 +773,8 @@ export class ContractInvoiceDescriptionsService {
 				contract_number: toText(row.contract_number),
 				references,
 				client_name: toText(row.legal_name),
+				// Línea que compensa un cobro en exceso: la nota cierra la glosa también al regenerarla.
+				note: compensationNote(breakdown as Parameters<typeof compensationNote>[0]),
 			},
 		};
 	}

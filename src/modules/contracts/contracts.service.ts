@@ -25,6 +25,7 @@ import { CONTRACT_DERIVED_STATUSES, type ContractDerivedStatus, derivedStatusLat
 import { isUnifiedType, UNIFIED_READ_SQL, type UnifiedReadFields, unifiedReadFields } from './invoice-consolidation-read';
 import { referenceKind } from './invoice-description';
 import { oneOffOf, type OneOffSubline } from './one-off-discount';
+import { type CompensationInfo, compensationOf } from './overcharge-compensation';
 import { PRICE_COLUMNS, priceSummaryFromRow } from './price-rows';
 import { loadScheduledChanges } from './scheduled-change-rows';
 import { DESCRIPTION_LIMITS_SQL, type DescriptionLimitRow, documentTypeLabel, resolveDescriptionMaxChars } from './tax-document-types';
@@ -1577,6 +1578,8 @@ export class ContractsService {
 					visible_line_id: toText(line.visible_line_id),
 					// Descuento puntual de la línea (sublínea `one_off` del desglose), el que mueve el devengo con `nc_revenue_treatment`.
 					one_off_discount: oneOffDiscountOf(json<PricedSubline[]>(line.pricing_breakdown)),
+					// Línea que compensa un cobro en exceso de períodos ya emitidos (sin descuento: menos cantidad o menor unitario).
+					compensation: compensationViewOf(json<PricedSubline[]>(line.pricing_breakdown)),
 					discount_pct: toNullableNumber(line.discount_pct),
 					unit_price_contract_currency: toNullableNumber(line.unit_price_contract_currency),
 					unit_price_invoice_currency: toNullableNumber(line.unit_price_invoice_currency),
@@ -1843,4 +1846,14 @@ function oneOffDiscountOf(breakdown: PricedSubline[] | null): { type: string; va
 		amount: subline.total,
 		label: subline.label,
 	};
+}
+
+/**
+ * Compensación de un cobro en exceso que lleva la línea (baja con fecha anterior a lo emitido): no es un descuento. La línea ya trae la
+ * cantidad o el unitario reducidos; esto es lo que la vista muestra al lado ("61 del período menos 42 ya facturados en sep-nov 2026").
+ */
+function compensationViewOf(breakdown: PricedSubline[] | null): (CompensationInfo & { label: string }) | null {
+	const marker = compensationOf(breakdown);
+
+	return marker ? { ...marker.compensation, label: marker.label } : null;
 }

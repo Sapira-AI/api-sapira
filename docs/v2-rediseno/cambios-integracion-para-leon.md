@@ -539,3 +539,20 @@ ERP…". Detalle y causa raíz en `docs/cambios/errores-emision-erp-28-10.md`. L
   timbrada en Odoo queda Enviada hasta que se pague.
 - **Pendiente:** E) resumen de la corrida por causa.
 
+## Línea que compensa un cobro en exceso: viaja como cualquier otra (16-11, Domi)
+
+Rebaja con fecha anterior a facturas ya emitidas en modo "compensar en las próximas facturas" (caso S07212, México). Detalle en
+`docs/cambios/baja-retroactiva-con-compensacion-16-11.md`. **No es un descuento**: lo facturado de más cubre parte de los períodos
+siguientes, así que la línea del producto sale con menos cantidad (S07212: 61 − 14 × 3 = 19 × 627) o con menor unitario si la rebaja fue de
+precio. La línea lleva en `invoice_items.pricing_breakdown` una marca `{ kind: 'compensation', amount: 0, compensation: {…} }` que el
+envío no usa para calcular nada.
+
+- **`mapInvoiceToOdooFormat` no cambia:** la línea viaja con su cantidad, su unitario y el descuento del ítem si lo tiene, como todas. No
+  hay descuento alto ni unitario ajustado (la primera versión del 16-11, que mandaba 68,85 % y un unitario de 626,950504, se descartó
+  antes de subirla).
+- **Línea en cero (`itemsSentToErp`):** si lo ya facturado cubre el período completo, la línea queda con cantidad 0 y no viaja, como toda
+  línea en 0. Si compensa por precio queda con unitario 0 y tampoco viaja (único caso nuevo: se reconoce por la marca). Si es la única
+  línea de la factura, viaja igual. `UNMAPPED_PRODUCTS_SQL` no cambió.
+- **Para validar contigo:** con prorrateo por días la cantidad lleva hasta 4 decimales (por ejemplo 53,0667). ¿Cuántos decimales de
+  cantidad conserva el ERP? Si redondea a menos, esa línea diferiría en centavos de la de Sapira.
+

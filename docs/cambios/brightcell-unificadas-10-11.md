@@ -201,6 +201,40 @@ conservando OC, fecha y glosas. Las dos funciones llaman además a `assertNoUnif
 `unified_invoice_in_erp` con el paso de restablecer, y `unified_issued` si ya se emitió). Test: `contract-changes.spec` → "Brightcell 10-11:
 mover el inicio del upsell…". Ayuda: `modificar-un-contrato.md` → Corregir la fecha de inicio.
 
-Pendiente (otra tarea, con plan presentado): Editar factura y Reorganizar sobre orígenes de una unificada, y la marca "no unificar" para
-dejar una línea suelta Por Emitir del mismo mes sin que la regla la vuelva a juntar.
+## Pendiente: editar y reorganizar orígenes de una unificada, y la marca "no unificar" (plan presentado 10/11-11, sin OK)
+
+Estado en [`ROADMAP-OPERATIVO.md`](../ROADMAP-OPERATIVO.md) → "Pendientes del sistema nuevo" (U1 a U6).
+
+**Qué pasa hoy.** Editar factura y Reorganizar pasan la factura tal cual a los bloqueos comunes. Un origen de unificada sale con dos
+bloqueos ("no está Por Emitir (estado: Por Emitir, inactiva)" y "Está dentro de la unificada U-…: hazlo en la unificada") y la unificada
+responde "Haz el cambio en la factura de origen". En el front la unificada no ofrece "Editar" y el origen tampoco, porque está inactivo.
+La regla de unificación (cron de las 06:30) agrupa por mes, compañía, moneda, documento y serie: una factura nueva del mismo mes creada
+por Reorganizar vuelve a absorberse. No existe ningún campo "no unificar".
+
+**Caso.** Brightcell octubre, CTR-2026-110: sacar la línea "Agentes AI / MODULO" de la unificada (la orden de compra no la cubre) y dejarla
+como factura suelta Por Emitir del mismo mes.
+
+**Plan.**
+
+1. **Bloqueo contradictorio** (`contract-invoices.ts`, `commonBlockers`): un origen Por Emitir no agrega `not_pending`; queda solo el de
+   unificada con su paso siguiente. Test en `contract-invoices.spec.ts`.
+2. **Editar un origen** (`contract-invoice-edit.service.ts`, `invoice-edit.ts`): si su unificada está Por Emitir sin borrador en el ERP
+   (`consolidated_into.in_erp` ya viene en la fila), se planifica como Por Emitir y la vista previa avisa `unified_resync`. Al aplicar, la
+   re-copia va en la misma transacción. El desvío contra el plan excluye las copias de la unificada (mismo ítem y período). Con borrador
+   en el ERP o emitida, los bloqueos de hoy. Tests en `invoice-edit.spec.ts` y `contract-invoice-edit.service.spec.ts`.
+3. **Reorganizar con orígenes** (`contract-invoice-reorganize.service.ts`, `invoice-reorganize.ts`): mover, dividir línea y dividir
+   factura tratan los orígenes editables como Por Emitir; re-copia de cada unificada tocada en la misma transacción. La factura nueva del
+   mismo mes nace marcada "no unificar" y la vista previa lo dice.
+4. **Marca "no unificar"** (cambio de esquema: campo en `invoices`, entity + migración según la guía): la regla y su vista previa
+   ignoran las marcadas; chip "No se unifica" y acción "Volver a unificar" en la vista rápida; aviso en la regla cuando hay sueltas
+   marcadas.
+5. **Front**: la API agrega a cada aporte por contrato su factura de origen (id, folio, contrato); "Editar en el origen" por fila en la
+   vista rápida de la unificada; el origen gana "Editar factura" y "Reorganizar" cuando su unificada es editable; el texto "deshaz la
+   consolidación" pasa a "edita la factura de origen: la unificada se actualiza sola". Tests en `FacturaVistaRapidaDrawer.test.tsx`,
+   `factura-edicion.test.ts` y `ContratoFacturasTab.test.tsx`.
+6. **Docs**: esta nota, ayuda de facturación unificada, facturas del contrato y reorganizar, spec de facturas del 360.
+
+**Otros pendientes del bloque:** 4d (aviso de línea con tasa fija sin tasa; `fx_mixed_in_pair` y `pair_rates_differ` ya existen), neto
+de la orden de compra por línea (hoy `net_by_pair`), listas de Facturación y de los 360 de cliente y razón social con orígenes en
+"Todas" (módulos cerrados), e invariantes en el conocimiento de soporte.
 

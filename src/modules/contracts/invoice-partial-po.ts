@@ -28,6 +28,7 @@ import {
 } from './invoice-edit';
 import { invoiceOperability, type NewInvoiceRules, scaleBreakdown } from './invoice-reorganize';
 import { oneOffOf } from './one-off-discount';
+import { compensationOf } from './overcharge-compensation';
 
 /**
  * Facturas en el Contrato 360, etapa 6 (`docs/v2-rediseno/spec-facturas-en-contrato-360.md` §3.7b, flexibilidad caso 6 tal cual, decisiones 4 y 5
@@ -299,6 +300,14 @@ export function planPartialByPo(ctx: PartialByPoContext, input: PartialByPoInput
 			code: 'spot_without_rate',
 			message: 'La factura está en spot sin tasa: no se puede comparar el monto de la OC con sus líneas',
 			next_step: 'Fija el tipo de cambio de la factura (Tipo de cambio) y vuelve a facturar por OC',
+		});
+	// Una línea que compensa un cobro en exceso de períodos ya emitidos no se parte entre la OC y el remanente: su cantidad (o su unitario)
+	// ya viene reducida y el motor de cambios la reaplica entera.
+	if (ctx.lines.some((row) => compensationOf(row.pricing_breakdown)))
+		blockers.push({
+			code: 'compensation_line_protected',
+			message: 'La factura tiene una línea que compensa un cobro en exceso de períodos ya emitidos: no se factura por OC',
+			next_step: 'Mueve esa línea a otra factura con Reorganizar, o factura por OC otra Por Emitir',
 		});
 	// Candidatas: líneas visibles (cantidad ≠ 0, no internas) con monto, en el orden del documento (período, luego la carga).
 	const candidates = ctx.lines.filter((row) => isVisibleLine(row.quantity, row.visible_line_id) && row.subtotal > 0);

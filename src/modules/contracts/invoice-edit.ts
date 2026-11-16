@@ -37,6 +37,7 @@ import {
 	type RevenueEffect,
 	withoutOneOff,
 } from './one-off-discount';
+import { compensationNote, compensationOf, isCompensationMarker } from './overcharge-compensation';
 import {
 	distributeTax,
 	type InvoiceLineMode,
@@ -426,7 +427,7 @@ export function taxRateForDocument(
 
 /** ¿El descuento del ítem ya está dentro del unitario? (línea con modelo de precio: el motor lo aplica como sublínea). */
 export const discountEmbedded = (row: Pick<EditLineRow, 'pricing_breakdown'>) =>
-	Array.isArray(row.pricing_breakdown) && row.pricing_breakdown.some((subline) => !isOneOffSubline(subline));
+	Array.isArray(row.pricing_breakdown) && row.pricing_breakdown.some((subline) => !isOneOffSubline(subline) && !isCompensationMarker(subline));
 
 /**
  * Subtotal de una línea manual SIN aplanar: cantidad × unitario × (1 − descuento). Con `exact_total` el subtotal es el pedido y el unitario
@@ -678,6 +679,8 @@ export function renderLine(state: LineState, render: RenderInput, kind?: Descrip
 			contract_number: render.contract_number,
 			references: render.references,
 			client_name: render.client_name,
+			// Línea que compensa un cobro en exceso: la nota cierra la glosa también cuando se regenera al editar.
+			note: compensationNote(state.pricing_breakdown),
 		},
 		render.max_chars ?? null
 	).text;
@@ -1326,6 +1329,20 @@ export function planInvoiceEdit(ctx: EditContext, input: InvoiceEditInput): Edit
 
 				return;
 			}
+			// Compensación de un cobro en exceso (baja con fecha anterior a lo emitido): la línea ya trae la cantidad o el unitario
+			// reducidos por lo facturado de más. Desde la factura solo se edita su glosa: cambiar cantidad, precio, descuento o período
+			// dejaría el saldo sin compensar (o compensado dos veces).
+			const compensation = compensationOf(row.pricing_breakdown);
+
+			if (compensation && (numericChanged || periodChanged || oneOffChanged)) {
+				block(
+					'compensation_line_protected',
+					`La línea "${row.description ?? row.id}" compensa un cobro en exceso de períodos ya emitidos (${compensation.label}): su cantidad, su precio, su descuento y su período no se editan desde la factura`,
+					'Si el ajuste ya no corresponde, corrige la baja desde Modificar contrato'
+				);
+
+				return;
+			}
 			if (descriptionChanged && exceedsMax(description!.length, ctx.max_chars))
 				errors.push({
 					field: field('description'),
@@ -1515,6 +1532,15 @@ export function planInvoiceEdit(ctx: EditContext, input: InvoiceEditInput): Edit
 
 	for (const row of ctx.lines) {
 		if (removes.has(row.id)) {
+			const compensation = compensationOf(row.pricing_breakdown);
+
+			// Quitar la línea que compensa un cobro en exceso dejaría ese saldo sin compensar.
+			if (compensation)
+				block(
+					'compensation_line_protected',
+					`La línea "${row.description ?? row.id}" compensa un cobro en exceso de períodos ya emitidos (${compensation.label}): no se quita desde la factura`,
+					'Si el ajuste ya no corresponde, corrige la baja desde Modificar contrato'
+				);
 			plans.set(row.id, { id: row.id, action: 'remove', before: stateOf(row), after: null, is_visible: false });
 			continue;
 		}

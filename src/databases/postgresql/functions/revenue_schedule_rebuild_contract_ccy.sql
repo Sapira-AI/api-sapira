@@ -308,7 +308,8 @@ BEGIN
         --   una reemisión neta: original + NC espejo + nueva). Cada línea se reparte en partes iguales (redondeo telescópico) entre los
         --   meses de su período de servicio: n = meses entre el mes de inicio y el mes de (fin + 1 día), mínimo 1 (mensual = su mes de
         --   inicio, igual que D2; trimestral = 3 cuotas; anual = 12). El descuento puntual de la línea (sublínea one_off) se suma de
-        --   vuelta cuando nc_discount_revenue_adjustment lo descuenta aparte (sin doble conteo). Las unificadas cuentan por línea: cada
+        --   vuelta cuando nc_discount_revenue_adjustment lo descuenta aparte (sin doble conteo); lo que una línea deja de facturar por
+        --   compensar un cobro en exceso (marca `compensation`) se suma de vuelta siempre. Las unificadas cuentan por línea: cada
         --   copia apunta al ítem de su contrato (contract_item_id); el origen inactivo no cuenta.
         -- Desvío sin ninguna línea vigente en el mes (p. ej. override de un período sin factura): la regla de D2 con la entry del mes
         -- (monto fijado, o unitario del ítem × cantidad, × (1 − descuento %) si aplica el descuento del ítem). Reemplaza el mensual del
@@ -329,7 +330,15 @@ BEGIN
                                            FROM jsonb_array_elements(CASE WHEN jsonb_typeof(ii.pricing_breakdown) = 'array'
                                                                           THEN ii.pricing_breakdown ELSE '[]'::jsonb END) elem
                                           WHERE elem->>'kind' = 'discount' AND COALESCE((elem->>'one_off')::boolean, false)), 0)
-                          ELSE 0 END AS amount,
+                          ELSE 0 END
+                   -- Compensación de un cobro en exceso de períodos ya emitidos (16-11): la línea sale con menos cantidad (o menor
+                   -- unitario) porque lo facturado de más en OTROS períodos cubre parte de este. No es menor ingreso del mes: lo que
+                   -- dejó de facturar (`compensation.amount` de la marca, positivo) se suma de vuelta siempre; el ingreso de los
+                   -- períodos emitidos ya lo bajó la baja desde su fecha real.
+                   + COALESCE((SELECT SUM((elem->'compensation'->>'amount')::numeric)
+                                 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(ii.pricing_breakdown) = 'array'
+                                                                THEN ii.pricing_breakdown ELSE '[]'::jsonb END) elem
+                                WHERE elem->>'kind' = 'compensation'), 0) AS amount,
                  s.n, s.k
             FROM invoice_items ii
             JOIN invoices i ON i.id = ii.invoice_id
@@ -647,4 +656,4 @@ BEGIN
 END;
 $function$;
 
-COMMENT ON FUNCTION public."revenue_schedule_rebuild_contract_ccy"(p_contract_id uuid, p_from_month date) IS 'Calcula revenue schedule en moneda de contrato. v2.8: CMRR gateado por booking_date del item. v3.3: ítems en otra moneda (multimoneda) convertidos con la tasa fija purpose item; sin tasa, montos NULL y calc_version missing_fx_rate. v3.4 (sin vueltas): ítem en la moneda de la compañía o del sistema escribe esas columnas con su monto directo (fx_to_*_source item_currency_direct), también sin tasa item. v3.5 (01-10): U8 rebuild parcial continúa el devengo acumulado y los saldos desde la última fila previa del ítem; S5-16 mensual = monthly_price (final/term solo de respaldo sin monthly_price); U5 CHURN y REACTIVATION prorratean el primer mes por días. v3.6 (04-10, Domi D2): override del período (quantities) = devengo del mes con la regla de la factura (sync_invoice_items_amounts_from_quantities); el MRR sigue siendo el plan. v3.7 (04-10, Domi D3): el rebuild arranca en el mes de la primera factura de un ítem cuando es anterior al inicio (devengo y MRR 0 en esos meses); sin guard por estado. v3.8 (05-10, Domi D2-c): mes con desvío del plan (consumption_entries o línea manual) = lo facturado para su período de servicio (Por Emitir estimado, NC restan, líneas multi-mes en partes iguales); sin línea vigente, regla D2 con la entry; ya no lee quantities.';
+COMMENT ON FUNCTION public."revenue_schedule_rebuild_contract_ccy"(p_contract_id uuid, p_from_month date) IS 'Calcula revenue schedule en moneda de contrato. v2.8: CMRR gateado por booking_date del item. v3.3: ítems en otra moneda (multimoneda) convertidos con la tasa fija purpose item; sin tasa, montos NULL y calc_version missing_fx_rate. v3.4 (sin vueltas): ítem en la moneda de la compañía o del sistema escribe esas columnas con su monto directo (fx_to_*_source item_currency_direct), también sin tasa item. v3.5 (01-10): U8 rebuild parcial continúa el devengo acumulado y los saldos desde la última fila previa del ítem; S5-16 mensual = monthly_price (final/term solo de respaldo sin monthly_price); U5 CHURN y REACTIVATION prorratean el primer mes por días. v3.6 (04-10, Domi D2): override del período (quantities) = devengo del mes con la regla de la factura (sync_invoice_items_amounts_from_quantities); el MRR sigue siendo el plan. v3.7 (04-10, Domi D3): el rebuild arranca en el mes de la primera factura de un ítem cuando es anterior al inicio (devengo y MRR 0 en esos meses); sin guard por estado. v3.8 (05-10, Domi D2-c): mes con desvío del plan (consumption_entries o línea manual) = lo facturado para su período de servicio (Por Emitir estimado, NC restan, líneas multi-mes en partes iguales); sin línea vigente, regla D2 con la entry; ya no lee quantities. v3.9 (16-11): en el mes con desvío, lo que una línea deja de facturar por compensar un cobro en exceso de períodos ya emitidos (marca compensation del desglose: menos cantidad o menor unitario, sin descuento) se suma de vuelta: no es menor ingreso del mes.';

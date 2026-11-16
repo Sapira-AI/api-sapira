@@ -13,6 +13,7 @@ import {
 	reconcileDeviation,
 	stateOf,
 } from './invoice-edit';
+import { compensationMarker } from './overcharge-compensation';
 import { priceLine, type PriceSpec, splitInvoiceLines } from './pricing-engine';
 
 import type { ContractInvoiceContext } from './contract-invoices';
@@ -572,6 +573,84 @@ describe('invoice-edit (spec facturas §3.4, lógica pura)', () => {
 			);
 
 			expect(deviation).toMatchObject({ has_deviation: false, total_diff: 0 });
+		});
+	});
+
+	describe('línea que compensa un cobro en exceso de períodos ya emitidos (16-11)', () => {
+		const marker = compensationMarker({
+			item_id: ITEM,
+			periods: [{ invoice_id: 'inv-9', invoice_number: 'F-09', period_start: '2026-09-01', period_end: '2026-09-30', amount: 300 }],
+			mode: 'quantity',
+			count: { quantity: 3, months: 1 },
+			base_quantity: 7,
+			base_unit_price: 100,
+			units: 3,
+			amount: 300,
+		});
+		/** 7 del período menos 3 ya facturadas = 4 × 100, sin descuento. */
+		const compensated = () =>
+			line({
+				quantity: 4,
+				subtotal: 400,
+				tax_amount: 76,
+				total: 476,
+				subtotal_invoice: 400,
+				tax_amount_invoice: 76,
+				total_invoice: 476,
+				pricing_breakdown: [marker],
+			});
+		const sameLine = { quantity: 4 };
+
+		it('es una línea normal: sin descuento puntual, sin tratamiento de devengo y sin modelo de precio', () => {
+			const unchanged = planInvoiceEdit(ctx({ lines: [compensated()] }), body([edit(sameLine)]));
+
+			expect(unchanged.errors).toEqual([]);
+			expect(unchanged.blockers).toEqual([]);
+			expect(unchanged.lines[0].action).toBe('unchanged');
+			expect(unchanged.header.after.nc_revenue_treatment ?? null).toBeNull();
+			expect(unchanged.revenue_effect).toBeNull();
+		});
+
+		it('la glosa sí se edita y la marca se conserva', () => {
+			const result = planInvoiceEdit(
+				ctx({ lines: [compensated()] }),
+				body([edit({ ...sameLine, description: 'Plataforma octubre, con ajuste de septiembre' })])
+			);
+
+			expect(result.blockers).toEqual([]);
+			expect(result.lines[0].after).toMatchObject({
+				quantity: 4,
+				unit_price_contract_currency: 100,
+				subtotal_contract_currency: 400,
+				discount_pct: 0,
+				description: 'Plataforma octubre, con ajuste de septiembre',
+			});
+			expect(result.lines[0].after.pricing_breakdown).toEqual([marker]);
+		});
+
+		it('cantidad, precio, descuento, período, descuento puntual y quitar la línea: no se editan desde la factura', () => {
+			const attempts = [
+				body([edit({ ...sameLine, quantity: 7 })], { deviation: { type: 'correction', reason: 'Vuelve a 7' } }),
+				body([edit({ ...sameLine, quantity: 0 })]),
+				body([edit({ ...sameLine, unit_price: 90 })], { deviation: { type: 'correction', reason: 'Otro precio' } }),
+				body([edit({ ...sameLine, discount_pct: 10 })], { deviation: { type: 'correction', reason: 'Descuento' } }),
+				body([edit({ ...sameLine, billing_period_end: '2026-10-15' })], { deviation: { type: 'correction', reason: 'Período' } }),
+				body([edit({ ...sameLine, one_off_discount: { type: 'amount', value: 50 } })], {
+					deviation: { type: 'discount', reason: 'Otro', revenue_treatment: 'service_period' },
+				}),
+			];
+
+			for (const attempt of attempts) {
+				const result = planInvoiceEdit(ctx({ lines: [compensated()] }), attempt);
+
+				expect(result.blockers).toContainEqual(
+					expect.objectContaining({
+						code: 'compensation_line_protected',
+						message: expect.stringContaining('7 del período menos 3 ya facturados en sep 2026 (3 x 1)'),
+						next_step: 'Si el ajuste ya no corresponde, corrige la baja desde Modificar contrato',
+					})
+				);
+			}
 		});
 	});
 

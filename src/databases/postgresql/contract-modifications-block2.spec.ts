@@ -335,6 +335,14 @@ describe('assets RSM: decisiones de Domi 04-10 y 05-10 (D2-c + D3, rebuild-deven
 		expect(flat).toContain('v_mrr_contracted := COALESCE(v_item.monthly_price, v_monthly_revenue);');
 		expect(flat).not.toMatch(/v_mrr_contracted := [^;]*(v_override_amount|v_service_billed)/);
 		expect(flat).toContain('v3.8 (05-10, Domi D2-c)');
+		// 16-11: la compensación de un cobro en exceso no es un descuento (la línea lleva menos cantidad o menor unitario y una marca
+		// `compensation` que vale 0). En el mes con desvío, lo que la línea dejó de facturar se suma de vuelta siempre: no es menor
+		// ingreso del mes. El descuento puntual sigue igual que antes.
+		expect(active).toContain("AND COALESCE((elem->>'one_off')::boolean, false)), 0) ELSE 0 END");
+		expect(active).toContain("+ COALESCE((SELECT SUM((elem->'compensation'->>'amount')::numeric)");
+		expect(active).toContain("WHERE elem->>'kind' = 'compensation'), 0) AS amount,");
+		expect(active).not.toContain("elem ? 'compensation'");
+		expect(flat).toContain('v3.9 (16-11)');
 	});
 
 	it('D3: el rebuild arranca en el mes de la primera factura de un ítem cuando es anterior al inicio; un rebuild parcial no cambia', () => {

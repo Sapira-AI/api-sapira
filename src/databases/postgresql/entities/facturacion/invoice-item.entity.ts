@@ -15,7 +15,7 @@ export type InvoiceItemQuantitySource = (typeof INVOICE_ITEM_QUANTITY_SOURCES)[n
 
 /** Pricing v2: sublínea del desglose guardado en `pricing_breakdown` (misma forma que `PricedLine.breakdown`). */
 export interface PricingBreakdownRow {
-	kind: 'free' | 'tier' | 'package' | 'seat' | 'discount' | 'minimum' | 'cap';
+	kind: 'free' | 'tier' | 'package' | 'seat' | 'discount' | 'minimum' | 'cap' | 'compensation';
 	tier_index?: number;
 	from?: number;
 	to?: number | null;

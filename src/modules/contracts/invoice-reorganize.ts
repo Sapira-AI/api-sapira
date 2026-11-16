@@ -35,6 +35,7 @@ import {
 } from './invoice-edit';
 import { multicurrencyHeader, type PairRateContext } from './multicurrency';
 import { isOneOffSubline, oneOffOf } from './one-off-discount';
+import { compensationOf } from './overcharge-compensation';
 import { isMetered, type PricedSubline } from './pricing-engine';
 
 /**
@@ -768,8 +769,24 @@ export function planReorganize(ctx: ReorganizeContext, input: ReorganizeInput): 
 		[...lines.values()].filter((line) => !line.removed && line.invoice_key === invoiceKey).sort((a, b) => a.order - b.order);
 	const unitOf = (line: WLine): WLine[] =>
 		line.group ? [...lines.values()].filter((other) => !other.removed && other.group === line.group).sort((a, b) => a.order - b.order) : [line];
-	const lockOf = (line: WLine): 'manual' | 'one_off' | null =>
-		line.state.quantity_source === MANUAL_QUANTITY_SOURCE ? 'manual' : oneOffOf(line.state.pricing_breakdown) ? 'one_off' : null;
+	// Líneas que Reorganizar conserva tal cual: editada a mano, con descuento puntual o que compensa un cobro en exceso de períodos ya
+	// emitidos (su cantidad o su unitario ya vienen reducidos: re-montarla o dividirla dejaría el saldo sin compensar).
+	const lockOf = (line: WLine): 'manual' | 'one_off' | 'compensation' | null =>
+		line.state.quantity_source === MANUAL_QUANTITY_SOURCE
+			? 'manual'
+			: compensationOf(line.state.pricing_breakdown)
+				? 'compensation'
+				: oneOffOf(line.state.pricing_breakdown)
+					? 'one_off'
+					: null;
+	const lockCode = (lock: 'manual' | 'one_off' | 'compensation') =>
+		lock === 'manual' ? MANUAL_EDIT_KEPT : lock === 'compensation' ? 'compensation_kept' : 'one_off_discount_kept';
+	const lockText = (lock: 'manual' | 'one_off' | 'compensation') =>
+		lock === 'manual'
+			? 'está editada a mano'
+			: lock === 'compensation'
+				? 'compensa un cobro en exceso de períodos ya emitidos'
+				: 'tiene un descuento puntual';
 	const meteredItem = (itemId: string | null) => !!itemId && isMetered(ctx.items.get(itemId)?.price);
 	const itemName = (itemId: string | null) => (itemId ? (ctx.items.get(itemId)?.product_name ?? ctx.product_names.get(itemId)) : null) ?? 'Ítem';
 	const splitFromOf = (invoice: WInvoice) => invoice.id ?? invoice.split_from;
@@ -986,10 +1003,8 @@ export function planReorganize(ctx: ReorganizeContext, input: ReorganizeInput): 
 
 				if (lock) {
 					warn(
-						lock === 'manual' ? MANUAL_EDIT_KEPT : 'one_off_discount_kept',
-						`La línea "${rows[0].state.description || itemName(itemId)}" (${rows[0].state.billing_period_start ?? ''}) ${
-							lock === 'manual' ? 'está editada a mano' : 'tiene un descuento puntual'
-						}: se conserva tal cual`
+						lockCode(lock),
+						`La línea "${rows[0].state.description || itemName(itemId)}" (${rows[0].state.billing_period_start ?? ''}) ${lockText(lock)}: se conserva tal cual`
 					);
 					continue;
 				}
@@ -1021,10 +1036,8 @@ export function planReorganize(ctx: ReorganizeContext, input: ReorganizeInput): 
 
 			if (lock) {
 				warn(
-					lock === 'manual' ? MANUAL_EDIT_KEPT : 'one_off_discount_kept',
-					`La línea "${line.state.description || itemName(line.state.contract_item_id)}" ${
-						lock === 'manual' ? 'está editada a mano' : 'tiene un descuento puntual'
-					}: se puede mover, pero no se re-monta (queda igual)`
+					lockCode(lock),
+					`La línea "${line.state.description || itemName(line.state.contract_item_id)}" ${lockText(lock)}: se puede mover, pero no se re-monta (queda igual)`
 				);
 
 				return null;

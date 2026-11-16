@@ -76,7 +76,17 @@ import {
 	upperCode,
 	valuateLinesByPair,
 } from './multicurrency';
-import { oneOffOf, withoutOneOff } from './one-off-discount';
+import { isOneOffSubline, oneOffOf, type OneOffSubline, withoutOneOff } from './one-off-discount';
+import {
+	applyCompensation,
+	type CompensationInfo,
+	compensationMarker,
+	type CompensationMode,
+	compensationNote,
+	compensationOf,
+	type CompensationPeriod,
+	withoutCompensation,
+} from './overcharge-compensation';
 import { normalizePriceSpec, priceSpecFromRow } from './price-rows';
 import {
 	type ConsumptionInput,
@@ -601,6 +611,13 @@ export interface ChangePreview {
 	items_after?: ItemUpdatePreview[];
 	/** `item_update` con cantidad/precio/descuento: diferencia con lo ya emitido y entre qué Por Emitir se reparte. */
 	issued_difference?: IssuedDifferencePreview;
+	/**
+	 * Rebaja con fecha anterior a facturas emitidas en modo `compensate_next` (16-11): por producto, lo cobrado de más en cada período
+	 * emitido, en qué Por Emitir del mismo producto se compensa (con menos cantidad o menor unitario, sin descuento) y el saldo que no cabe.
+	 */
+	issued_compensation?: IssuedCompensationPreview[];
+	/** El bloqueo por facturas emitidas admite el modo `compensate_next` (`change.issued_overcharge`): la vista previa ofrece la opción. */
+	issued_compensation_available?: boolean;
 }
 
 /** Un ítem en el preview de `item_update` (§9.2): cuenta antes y después y cada dato corregido (antes → después). */
@@ -772,7 +789,7 @@ export type WriteOp =
 			supersedes_price_id: string | null;
 	  }
 	/** `item_update` (corrección): motivo del desvío de la Por Emitir que recibe su parte de la diferencia emitida (`invoice_adjustments`). */
-	| { kind: 'insert_invoice_adjustment'; invoice_id: string; type: 'correction'; amount_diff: number; notes: string }
+	| { kind: 'insert_invoice_adjustment'; invoice_id: string; type: 'correction' | 'downsell'; amount_diff: number; notes: string }
 	/** `pause` (§9.3.3): fila nueva en `contract_item_pauses` (se liga al evento con `pause_event_id`). */
 	| {
 			kind: 'insert_pause';
@@ -1083,7 +1100,7 @@ export function lineGlosa(
 		'invoice_description_template' | 'description_max_chars' | 'contract_currency' | 'invoice_currency' | 'contract_number'
 	>,
 	item: Pick<ChangeItemRow, 'product_name' | 'account' | 'unit_of_measure' | 'currency'>,
-	line: { start: string; end: string; quantity: number; unit_price: number; amount: number }
+	line: { start: string; end: string; quantity: number; unit_price: number; amount: number; note?: string | null }
 ): string {
 	return fitDescription(
 		contract.invoice_description_template ?? null,
@@ -1102,6 +1119,7 @@ export function lineGlosa(
 			invoice_currency: contract.invoice_currency ?? contract.contract_currency ?? null,
 			fx_rate: null,
 			contract_number: contract.contract_number ?? null,
+			note: line.note ?? null,
 		},
 		contract.description_max_chars ?? null
 	).text;
@@ -1370,6 +1388,31 @@ export interface PlanOptions {
 	revert?: { scheduled_change_id: string; event_id: string | null; item_ids: string[] };
 }
 
+/** Descuento puntual retirado de una línea Por Emitir mientras se planifica (`Planner.holdOneOff`). */
+interface HeldOneOff {
+	invoice: ChangeInvoiceRow;
+	line: ChangeInvoiceLineRow;
+	subline: OneOffSubline;
+	/** Monto (positivo) a descontar de la línea. */
+	amount: number;
+	original: Pick<ChangeInvoiceLineRow, 'subtotal' | 'discount_pct' | 'tax_amount' | 'total' | 'pricing_breakdown'>;
+}
+
+/**
+ * Compensación de un cobro en exceso retirada de una línea Por Emitir mientras se planifica (`Planner.holdCompensation`): la línea
+ * vuelve en memoria a la cantidad y el unitario del período, y `settleCompensations` la reduce de nuevo sobre el valor final.
+ */
+interface HeldCompensation {
+	invoice: ChangeInvoiceRow;
+	line: ChangeInvoiceLineRow;
+	info: Pick<CompensationInfo, 'item_id' | 'periods' | 'mode' | 'count'>;
+	/** Neto (positivo) que la línea deja de facturar. */
+	amount: number;
+	/** Hay que escribir la línea aunque ningún planificador la haya tocado (compensación nueva o ampliada). */
+	write: boolean;
+	original: Pick<ChangeInvoiceLineRow, 'quantity' | 'unit_price' | 'subtotal' | 'tax_amount' | 'total' | 'pricing_breakdown'>;
+}
+
 class Planner {
 	readonly blockers: ChangeBlocker[] = [];
 	readonly warnings: ChangeWarning[] = [];
@@ -1411,6 +1454,14 @@ class Planner {
 	private readonly headersTouched = new Map<string, { before: number; lines: number; change: string }>();
 	/** Por Emitir facturadas por OC que el cambio habría tocado y deja como están (aviso `partial_billing_skipped`). */
 	private readonly partialSkipped = new Map<string, ChangeInvoiceRow>();
+	/**
+	 * Descuentos puntuales y compensaciones de cobro en exceso de las Por Emitir, retirados mientras se planifica (16-11): cada planificador
+	 * calcula sobre la línea sin ellos (desde cero o en proporción, da igual) y `settleOneOffs` los vuelve a aplicar sobre el valor nuevo.
+	 * Así ningún cambio pisa en silencio el descuento ni el ajuste de una línea. Son dos cosas distintas: el descuento puntual es un
+	 * descuento (`discount_pct`); la compensación no lo es (la línea lleva menos cantidad o menor unitario).
+	 */
+	private readonly heldOneOffs = new Map<string, HeldOneOff>();
+	private readonly heldCompensations = new Map<string, HeldCompensation>();
 
 	constructor(
 		readonly ctx: ChangeContext,
@@ -1421,6 +1472,11 @@ class Planner {
 		this.itemsAfter = ctx.items.map((item) => ({ ...item }));
 		this.invoicesBefore = new Map(ctx.invoices.map((invoice) => [invoice.id, { ...invoice, lines: invoice.lines.map((line) => ({ ...line })) }]));
 		this.pausesAfter = (ctx.pauses ?? []).map((pause) => ({ ...pause }));
+		for (const invoice of ctx.invoices.filter(isEditablePending))
+			for (const line of invoice.lines) {
+				this.holdCompensation(invoice, line);
+				this.holdOneOff(invoice, line);
+			}
 		for (const item of ctx.items) if (validAnchorDay(item.billing_anchor_day)) this.ownCycleKeys.add(item.id);
 		// Pacto que se materializa: tiene que seguir programado (otro apply concurrente o un skip/cancel lo cierran).
 		const pact = options.scheduled_change ? (ctx.scheduled_changes ?? []).find((row) => row.id === options.scheduled_change!.id) : null;
@@ -1640,7 +1696,10 @@ class Planner {
 		invoice.lines = invoice.lines.filter((row) => row.id !== line.id);
 		this.touchHeader(invoice, 'línea quitada');
 		// El neto vigente de la PE sigue a sus líneas (una línea que se suma después parte de él); multimoneda lo recalcula el encabezado.
-		if (this.ctx.contract.requires_multicurrency_billing !== true) invoice.subtotal = round2(invoice.subtotal - line.subtotal);
+		if (this.ctx.contract.requires_multicurrency_billing !== true)
+			invoice.subtotal = round2(
+				invoice.subtotal - line.subtotal + (this.heldOneOffs.get(line.id)?.amount ?? 0) + (this.heldCompensations.get(line.id)?.amount ?? 0)
+			);
 	}
 
 	updateLine(invoice: ChangeInvoiceRow, line: ChangeInvoiceLineRow, values: ChangeLineAmounts, change: string) {
@@ -1656,8 +1715,282 @@ class Planner {
 		this.touchHeader(invoice, change);
 	}
 
+	// ---- marcas de la línea: descuento puntual y compensación de cobro en exceso
+
+	/** Retira de la línea en memoria su descuento puntual y lo guarda para reaplicarlo al cierre. */
+	private holdOneOff(invoice: ChangeInvoiceRow, line: ChangeInvoiceLineRow) {
+		const one = oneOffOf(line.pricing_breakdown);
+
+		if (!one) return;
+		const { total, ...subline } = one;
+		const amount = round2(-total);
+		const subtotal = round2(line.subtotal + amount);
+		const tax = round2((subtotal * invoice.tax_rate) / 100);
+
+		this.heldOneOffs.set(line.id, {
+			invoice,
+			line,
+			subline,
+			amount,
+			original: {
+				subtotal: line.subtotal,
+				discount_pct: line.discount_pct,
+				tax_amount: line.tax_amount,
+				total: line.total,
+				pricing_breakdown: line.pricing_breakdown ?? null,
+			},
+		});
+		line.subtotal = subtotal;
+		line.discount_pct = num(subline.base_discount_pct ?? line.discount_pct);
+		line.tax_amount = tax;
+		line.total = round2(subtotal + tax);
+		line.pricing_breakdown = (line.pricing_breakdown ?? []).filter((row) => !isOneOffSubline(row));
+		if (!line.pricing_breakdown.length) line.pricing_breakdown = null;
+	}
+
+	/** Descuento puntual retirado de una línea Por Emitir (su monto positivo); null si la línea no lleva. */
+	heldOneOff(lineId: string): { amount: number } | null {
+		const held = this.heldOneOffs.get(lineId);
+
+		return held ? { amount: held.amount } : null;
+	}
+
+	/**
+	 * Retira de la línea en memoria la compensación de un cobro en exceso: la línea vuelve a la cantidad y el unitario del período (lo que
+	 * valdría sin el ajuste) y se guarda cuánto compensa para reducirla de nuevo al cierre.
+	 */
+	private holdCompensation(invoice: ChangeInvoiceRow, line: ChangeInvoiceLineRow) {
+		const marker = compensationOf(line.pricing_breakdown);
+
+		if (!marker) return;
+		const info = marker.compensation;
+		const amount = round2(num(info.amount));
+		const subtotal = round2(line.subtotal + amount);
+		const tax = round2((subtotal * invoice.tax_rate) / 100);
+
+		this.heldCompensations.set(line.id, {
+			invoice,
+			line,
+			info: { item_id: info.item_id, periods: info.periods ?? [], mode: info.mode, count: info.count ?? null },
+			amount,
+			write: false,
+			original: {
+				quantity: line.quantity,
+				unit_price: line.unit_price,
+				subtotal: line.subtotal,
+				tax_amount: line.tax_amount,
+				total: line.total,
+				pricing_breakdown: line.pricing_breakdown ?? null,
+			},
+		});
+		line.quantity = num(info.base_quantity);
+		line.unit_price = num(info.base_unit_price);
+		line.subtotal = subtotal;
+		line.tax_amount = tax;
+		line.total = round2(subtotal + tax);
+		line.pricing_breakdown = withoutCompensation(line.pricing_breakdown);
+	}
+
+	/** Neto que una línea Por Emitir ya deja de facturar por compensar un cobro en exceso (0 si no compensa). */
+	heldCompensation(lineId: string): number {
+		return this.heldCompensations.get(lineId)?.amount ?? 0;
+	}
+
+	/**
+	 * Compensa en una línea Por Emitir un cobro en exceso de períodos ya emitidos (baja con fecha anterior a lo emitido). No es un
+	 * descuento: `settleCompensations` deja la línea con menos cantidad (`quantity`) o con menor unitario (`unit_price`). Si la línea ya
+	 * compensaba otro cobro en exceso, se suman.
+	 */
+	addCompensation(
+		invoice: ChangeInvoiceRow,
+		line: ChangeInvoiceLineRow,
+		amount: number,
+		periods: CompensationPeriod[],
+		itemId: string,
+		mode: CompensationMode,
+		count: CompensationInfo['count']
+	) {
+		const held = this.heldCompensations.get(line.id);
+
+		if (held) {
+			held.amount = round2(held.amount + amount);
+			held.info = { ...held.info, periods: [...held.info.periods, ...periods], count: null };
+			held.write = true;
+
+			return;
+		}
+		this.heldCompensations.set(line.id, {
+			invoice,
+			line,
+			info: { item_id: itemId, periods, mode, count: count ?? null },
+			amount: round2(amount),
+			write: true,
+			original: {
+				quantity: line.quantity,
+				unit_price: line.unit_price,
+				subtotal: line.subtotal,
+				tax_amount: line.tax_amount,
+				total: line.total,
+				pricing_breakdown: line.pricing_breakdown ?? null,
+			},
+		});
+	}
+
+	/**
+	 * Vuelve a aplicar las compensaciones retiradas (`holdCompensation`) sobre el valor final de cada línea: la misma cantidad de neto,
+	 * expresada en menos cantidad o en menor unitario (tope: el neto de la línea). La línea que nadie tocó vuelve a quedar como estaba,
+	 * sin operación. Una compensación que se pierde (la línea se quita) o que ya no cabe completa avisa con el saldo: nunca desaparece
+	 * en silencio.
+	 */
+	private settleCompensations() {
+		for (const [lineId, held] of this.heldCompensations) {
+			const { invoice, line, info } = held;
+			const label = invoice.invoice_number ?? `del ${invoice.issue_date ?? invoice.id}`;
+
+			this.heldCompensations.delete(lineId);
+			if (!invoice.lines.includes(line)) {
+				this.warn(
+					'compensation_lost',
+					`La factura ${label} compensaba ${money(held.amount)} de un cobro en exceso de períodos ya emitidos y este cambio quita esa línea: ese saldo queda sin compensar (corrígelo con una nota de crédito o vuelve a registrar la baja)`
+				);
+				continue;
+			}
+			const opIndex = this.ops.reduce((last, op, index) => (op.kind === 'update_line' && op.line_id === line.id ? index : last), -1);
+
+			if (opIndex < 0 && !held.write) {
+				Object.assign(line, held.original);
+				continue;
+			}
+			const op = opIndex >= 0 ? (this.ops[opIndex] as Extract<WriteOp, { kind: 'update_line' }>) : null;
+			const values: ChangeLineAmounts = op?.values ?? {
+				quantity: num(line.quantity),
+				unit_price: num(line.unit_price),
+				discount_pct: num(line.discount_pct),
+				subtotal: line.subtotal,
+				tax_amount: line.tax_amount,
+				total: line.total,
+			};
+			const base = { quantity: num(values.quantity), unit_price: num(values.unit_price), subtotal: values.subtotal };
+			const result = applyCompensation(base, held.amount, info.mode);
+
+			if (held.amount - base.subtotal >= 0.005)
+				this.warn(
+					'compensation_reduced',
+					`La factura ${label} compensaba ${money(held.amount)} de un cobro en exceso de períodos ya emitidos y la línea queda en ${money(base.subtotal)}: ${money(round2(held.amount - base.subtotal))} quedan sin compensar (corrígelo con una nota de crédito o vuelve a registrar la baja)`
+				);
+			const tax = round2((result.subtotal * invoice.tax_rate) / 100);
+			const rest = withoutCompensation(values.pricing_breakdown ?? held.original.pricing_breakdown) ?? [];
+			const marker =
+				result.amount > 0
+					? compensationMarker({
+							...info,
+							base_quantity: base.quantity,
+							base_unit_price: base.unit_price,
+							units: result.units,
+							amount: result.amount,
+						})
+					: null;
+			const breakdown = marker ? [...rest, marker] : rest;
+			const item = this.itemOf(line.contract_item_id);
+			const periodStart = values.billing_period_start ?? line.billing_period_start;
+			const periodEnd = values.billing_period_end ?? line.billing_period_end;
+			// Glosa: la compensación nueva (o una línea que el cambio reescribe con glosa propia) cierra con su nota.
+			const description =
+				marker && item && periodStart && periodEnd && (held.write || values.description)
+					? lineGlosa(this.ctx.contract, item, {
+							start: periodStart,
+							end: periodEnd,
+							quantity: result.quantity,
+							unit_price: result.unit_price,
+							amount: result.subtotal,
+							note: compensationNote([marker]),
+						})
+					: values.description;
+			const settled: ChangeLineAmounts = {
+				...values,
+				quantity: result.quantity,
+				unit_price: result.unit_price,
+				subtotal: result.subtotal,
+				tax_amount: tax,
+				total: round2(result.subtotal + tax),
+				pricing_breakdown: breakdown,
+				...(description ? { description } : {}),
+			};
+
+			if (op) op.values = settled;
+			else {
+				this.ops.push({ kind: 'update_line', invoice_id: invoice.id, line_id: line.id, values: settled });
+				this.touchHeader(invoice, 'ajuste por cobro en exceso');
+			}
+			line.quantity = result.quantity;
+			line.unit_price = result.unit_price;
+			line.subtotal = result.subtotal;
+			line.tax_amount = tax;
+			line.total = settled.total;
+			line.pricing_breakdown = breakdown.length ? breakdown : null;
+		}
+	}
+
+	/**
+	 * Reaplica las marcas retiradas de las líneas Por Emitir sobre su valor final: primero la compensación de un cobro en exceso
+	 * (`settleCompensations`) y después el descuento puntual (un % sobre el neto nuevo; un monto, el mismo, con tope en el neto de la
+	 * línea). La línea que nadie tocó vuelve a quedar como estaba, sin operación.
+	 */
+	settleOneOffs() {
+		this.settleCompensations();
+		for (const [lineId, held] of this.heldOneOffs) {
+			const { invoice, line, subline } = held;
+			const label = invoice.invoice_number ?? `del ${invoice.issue_date ?? invoice.id}`;
+
+			this.heldOneOffs.delete(lineId);
+			if (!invoice.lines.includes(line)) continue;
+			const opIndex = this.ops.reduce((last, op, index) => (op.kind === 'update_line' && op.line_id === line.id ? index : last), -1);
+
+			if (opIndex < 0) {
+				Object.assign(line, held.original);
+				continue;
+			}
+			const op = this.ops[opIndex] as Extract<WriteOp, { kind: 'update_line' }>;
+			const values = op.values;
+			const base = values.subtotal;
+			const wanted =
+				subline.one_off_type === 'pct' && subline.one_off_value !== undefined && subline.one_off_value !== null
+					? round2((base * num(subline.one_off_value)) / 100)
+					: held.amount;
+			const amount = Math.max(0, Math.min(wanted, base));
+
+			if (wanted - amount >= 0.005)
+				this.warn(
+					'one_off_discount_reduced',
+					`El descuento puntual de la factura ${label} (${money(wanted)}) supera el valor nuevo de la línea (${money(base)}): queda en ${money(amount)}`
+				);
+			const subtotal = round2(base - amount);
+			const gross = values.quantity * values.unit_price;
+			const tax = round2((subtotal * invoice.tax_rate) / 100);
+			const rest = (values.pricing_breakdown ?? held.original.pricing_breakdown ?? []).filter((row) => !isOneOffSubline(row));
+			const applied: OneOffSubline | null = amount > 0 ? { ...subline, amount: -amount, base_discount_pct: num(values.discount_pct) } : null;
+			const breakdown = applied ? [...rest, applied] : rest;
+			const settled: ChangeLineAmounts = {
+				...values,
+				discount_pct: gross > 0 ? round6((1 - subtotal / gross) * 100) : values.discount_pct,
+				subtotal,
+				tax_amount: tax,
+				total: round2(subtotal + tax),
+				pricing_breakdown: breakdown,
+			};
+
+			op.values = settled;
+			line.subtotal = subtotal;
+			line.discount_pct = settled.discount_pct;
+			line.tax_amount = tax;
+			line.total = settled.total;
+			line.pricing_breakdown = breakdown.length ? breakdown : null;
+		}
+	}
+
 	/** Cierra los encabezados tocados: recalcula (o cancela si quedó sin líneas) y arma `invoices.updated/cancelled`. */
 	closeHeaders(note: string) {
+		this.settleOneOffs();
 		// PE que reciben líneas nuevas del generador (F3): aunque se queden sin sus líneas viejas no se cancelan.
 		const mergedInto = new Set(
 			this.ops.flatMap((op) => (op.kind === 'create_invoices' ? op.merge_into.filter((id): id is string => Boolean(id)) : []))
@@ -2417,6 +2750,11 @@ class Planner {
 		}
 	): ChangePlan {
 		if (this.errors.length) throw codedValidationException(this.errors);
+		// Planificadores sin facturas que cerrar: las líneas con descuento retirado vuelven a su estado (y los encabezados que falten).
+		const openHeaders = this.headersTouched.size;
+
+		this.settleOneOffs();
+		if (this.headersTouched.size > openHeaders) this.closeHeaders('Ajuste por cobro en exceso');
 		this.closeInvoiceWarnings();
 		const { contract, items, today } = this.ctx;
 		const statusBefore = deriveContractStatus(contract.status, items, today, this.ctx.pauses);
@@ -2645,6 +2983,315 @@ export function unifiedDelta(input: DeltaInput): DeltaResult | null {
 		unit_price: round6(mrrDelta / quantity),
 		quantity_delta: quantityDelta,
 	};
+}
+
+// ------------------------------------------------------------------ cobro en exceso de períodos emitidos (compensación)
+
+/** Cobro en exceso de un producto en períodos ya emitidos y dónde se compensa (`change.issued_overcharge = compensate_next`). */
+export interface IssuedCompensationPreview {
+	item_id: string;
+	product_name: string | null;
+	currency: string | null;
+	/** Cómo se expresa en la línea que compensa: menos cantidad (baja de cantidad) o menor precio unitario (baja de precio). */
+	mode: CompensationMode;
+	/** Σ cobrado de más (positivo, moneda del ítem). */
+	amount: number;
+	issued: Array<{
+		invoice_id: string;
+		invoice_number: string | null;
+		issue_date: string | null;
+		period_start: string;
+		period_end: string;
+		/** Lo emitido del producto en el período (neto de notas de crédito de descuento vigentes). */
+		issued: number;
+		/** Lo que debió emitirse con la rebaja desde su fecha real. */
+		expected: number;
+		overcharge: number;
+	}>;
+	compensated: Array<{
+		invoice_id: string;
+		invoice_number: string | null;
+		issue_date: string | null;
+		period_start: string | null;
+		period_end: string | null;
+		line_before: number;
+		amount: number;
+		line_after: number;
+		/** Cantidad y unitario de la línea antes y después de compensar (cambia uno u otro según `mode`). */
+		quantity_before: number;
+		quantity_after: number;
+		unit_price_before: number;
+		unit_price_after: number;
+	}>;
+	/** Saldo que no cabe en las Por Emitir del producto (> 0 bloquea con `compensation_exceeds_pending`). */
+	pending_balance: number;
+}
+
+/** " · lo cobrado de más en lo ya emitido (MXN 26.334,00) se compensa en las próximas facturas" para la descripción del evento. */
+const compensationSentence = (compensations: IssuedCompensationPreview[]) => {
+	const total = round2(compensations.reduce((sum, entry) => sum + entry.amount - entry.pending_balance, 0));
+
+	return total > 0
+		? ` · lo cobrado de más en lo ya emitido (${compensations[0].currency ?? ''} ${money(total)}) se compensa en las próximas facturas del mismo producto`
+		: '';
+};
+
+export const COMPENSATION_BALANCE_STEP =
+	'Corrige ese saldo con una nota de crédito sobre lo emitido, o renueva o extiende el contrato para tener períodos donde compensarlo';
+export const COMPENSATION_UNSUPPORTED_STEP = 'Lo emitido de este producto se corrige con nota de crédito';
+
+/**
+ * ¿La factura cuenta como emitida para medir un cobro en exceso? Una emitida vigente (la unificada no: sus líneas son copia de los
+ * orígenes) o el origen de una unificada ya emitida (su línea se emitió dentro de ella).
+ */
+export const countsAsIssuedLine = (invoice: ChangeInvoiceRow) =>
+	(isIssued(invoice) && invoice.invoice_type !== UNIFIED_INVOICE_TYPE) ||
+	(Boolean(invoice.consolidated_into_invoice_id) && invoice.unified_state === 'issued' && invoice.status !== 'Cancelada');
+
+/** Último día ya emitido del ítem madre (fin del período emitido más tardío); null si no tiene emitidas. */
+export const issuedFrontierOf = (ctx: Pick<ChangeContext, 'invoices'>, itemId: string): string | null =>
+	ctx.invoices
+		.filter(countsAsIssuedLine)
+		.flatMap((invoice) => invoice.lines)
+		.filter((line) => line.contract_item_id === itemId && line.billing_period_end)
+		.map((line) => line.billing_period_end!)
+		.sort()
+		.at(-1) ?? null;
+
+interface CompensationInput {
+	/** Ítem madre del producto (el que lleva las líneas netas). */
+	item: ChangeItemRow;
+	groupIds: Set<string>;
+	/** Fecha real desde la que rige la rebaja. */
+	start: string;
+	/** ΔMRR de la rebaja (negativo, moneda del ítem). */
+	monthly_delta: number;
+	/**
+	 * Unidades que bajan al mismo precio (0 si la rebaja toca el precio): con unidades, la línea que compensa lleva menos cantidad; sin
+	 * ellas, menor precio unitario.
+	 */
+	quantity_delta: number;
+	anchor: number;
+}
+
+/**
+ * Rebaja con fecha anterior a facturas ya emitidas, modo "compensar en próximas facturas" (Domi 16-11, caso S07212): mide lo cobrado de
+ * más por período emitido del producto con las reglas del motor (`ΔMRR × meses` del tramo desde la fecha real, prorrateado por días a
+ * mitad de período; nunca más que lo emitido sobre lo que debió emitirse) y lo compensa en las Por Emitir del **mismo producto**, en
+ * orden. **No es un descuento**: lo facturado de más cubre parte de los períodos siguientes, así que la línea sale con menos cantidad
+ * (baja de cantidad: 61 − 14 × 3 = 19, al mismo precio) o con menor unitario (baja de precio), sin líneas negativas
+ * (`Planner.addCompensation`, `overcharge-compensation.ts`). La factura que compensa más las ya emitidas suman el total con el ajuste.
+ * Si una línea no alcanza queda en 0 y el saldo pasa a la siguiente (también a las de su renovación); el saldo que no cabe bloquea
+ * (`compensation_exceeds_pending`). Nunca se reparte a otros productos. Las emitidas no se tocan. Un ajuste `downsell` por factura destino.
+ * Debe llamarse con las líneas Por Emitir del producto ya en su valor nuevo.
+ */
+function compensateIssuedOvercharge(p: Planner, input: CompensationInput, measureOnly = false): IssuedCompensationPreview | null {
+	const { item, groupIds, start, anchor } = input;
+	const ctx = p.ctx;
+	const name = item.product_name ?? 'Producto';
+	const currency = item.currency ?? ctx.contract.contract_currency;
+	// Baja de cantidad → la línea que compensa lleva menos cantidad; baja solo de precio → lleva menor unitario.
+	const mode: CompensationMode = input.quantity_delta > 0 ? 'quantity' : 'unit_price';
+	const issuedInvoices = ctx.invoices.filter(countsAsIssuedLine);
+	const groupMonthly = (date: string) => buildItemGroups(ctx.items, date).find((group) => group.item_ids.includes(item.id))?.mrr ?? 0;
+	const periods = new Map<string, { invoice: ChangeInvoiceRow; start: string; end: string }>();
+
+	for (const invoice of issuedInvoices) {
+		for (const line of invoice.lines) {
+			if (line.contract_item_id !== item.id || !line.billing_period_start || !line.billing_period_end) continue;
+			if (line.billing_period_end < start) continue;
+			if (isConsumptionLine(line)) {
+				p.block(
+					'compensation_not_supported',
+					`"${name}" tiene consumo registrado en la factura ${invoice.invoice_number ?? invoice.issue_date ?? invoice.id}: lo cobrado de más no se calcula solo`,
+					COMPENSATION_UNSUPPORTED_STEP
+				);
+
+				return null;
+			}
+			const key = `${line.billing_period_start}|${line.billing_period_end}`;
+
+			if (!periods.has(key)) periods.set(key, { invoice, start: line.billing_period_start, end: line.billing_period_end });
+		}
+	}
+	const issued: IssuedCompensationPreview['issued'] = [];
+	const queue: Array<CompensationPeriod & { months: number; full: number }> = [];
+
+	for (const period of [...periods.values()].sort((a, b) => a.start.localeCompare(b.start))) {
+		const from = period.start < start ? start : period.start;
+		const months = monthsBetween(from, period.end, anchor);
+		const byDelta = round2(-input.monthly_delta * months);
+		const billed = round2(
+			issuedInvoices
+				.flatMap((invoice) => invoice.lines)
+				.filter(
+					(line) =>
+						line.contract_item_id &&
+						groupIds.has(line.contract_item_id) &&
+						(line.billing_period_start ?? '') >= period.start &&
+						(line.billing_period_end ?? '') <= period.end
+				)
+				.reduce((sum, line) => sum + num(line.subtotal) - num(line.previously_credited), 0)
+		);
+		const head = from > period.start ? round2(groupMonthly(period.start) * monthsBetween(period.start, addDays(from, -1), anchor)) : 0;
+		const expected = round2(head + round2((groupMonthly(from) + input.monthly_delta) * months));
+		const overcharge = Math.max(0, Math.min(byDelta, round2(billed - expected)));
+
+		if (overcharge < 0.005) continue;
+		issued.push({
+			invoice_id: period.invoice.id,
+			invoice_number: period.invoice.invoice_number,
+			issue_date: period.invoice.issue_date,
+			period_start: from,
+			period_end: period.end,
+			issued: billed,
+			expected,
+			overcharge,
+		});
+		queue.push({
+			invoice_id: period.invoice.id,
+			invoice_number: period.invoice.invoice_number,
+			period_start: from,
+			period_end: period.end,
+			amount: overcharge,
+			months,
+			full: overcharge,
+		});
+	}
+	const amount = round2(issued.reduce((sum, row) => sum + row.overcharge, 0));
+
+	if (!issued.length || amount <= 0) return null;
+	// Solo medir (el cambio no pidió compensar): lo cobrado de más queda entero como saldo.
+	if (measureOnly)
+		return { item_id: item.id, product_name: item.product_name, currency, mode, amount, issued, compensated: [], pending_balance: amount };
+	// Destinos: las Por Emitir del mismo producto (el ítem y sus renovaciones), en orden de período. Fuera: facturadas por OC, líneas por
+	// consumo o editadas a mano y las que ya llevan un descuento puntual comercial.
+	const chain = new Set<string>([item.id]);
+	let cursor: ChangeItemRow | undefined = item;
+
+	while (cursor?.renewed_by_item_id && !chain.has(cursor.renewed_by_item_id)) {
+		chain.add(cursor.renewed_by_item_id);
+		cursor = p.itemsAfter.find((row) => row.id === cursor!.renewed_by_item_id);
+	}
+	const targets = ctx.invoices
+		.filter((invoice) => isEditablePending(invoice) && !isPartialBilled(invoice))
+		.flatMap((invoice) =>
+			invoice.lines
+				.filter(
+					(line) =>
+						line.contract_item_id &&
+						chain.has(line.contract_item_id) &&
+						!isConsumptionLine(line) &&
+						line.quantity_source !== 'manual' &&
+						num(line.quantity) > 0 &&
+						!p.heldOneOff(line.id)
+				)
+				.map((line) => ({ invoice, line }))
+		)
+		.sort(
+			(a, b) =>
+				(a.line.billing_period_start ?? '').localeCompare(b.line.billing_period_start ?? '') ||
+				(a.invoice.issue_date ?? '').localeCompare(b.invoice.issue_date ?? '')
+		);
+	const compensated: IssuedCompensationPreview['compensated'] = [];
+	const range = (rows: CompensationPeriod[]) => rows.map((row) => row.invoice_number ?? `del ${row.period_start}`);
+	let balance = amount;
+
+	for (const { invoice, line } of targets) {
+		if (balance < 0.005) break;
+		// La línea está en memoria en su valor del período (sin compensar): lo que ya compensaba se le resta para saber cuánto le queda.
+		const base = { quantity: num(line.quantity), unit_price: num(line.unit_price), subtotal: line.subtotal };
+		const already = p.heldCompensation(line.id);
+		const before = applyCompensation(base, already, mode);
+		const capacity = before.subtotal;
+		const take = Math.min(balance, capacity);
+
+		if (take < 0.005) continue;
+		// Reparte en orden los períodos emitidos que cubre este descuento (para la glosa y la trazabilidad de la línea).
+		const covered: CompensationPeriod[] = [];
+		let months: number | null = 0;
+		let left = take;
+
+		while (left >= 0.005 && queue.length) {
+			const head = queue[0];
+			const part = Math.min(left, head.amount);
+
+			covered.push({
+				invoice_id: head.invoice_id,
+				invoice_number: head.invoice_number,
+				period_start: head.period_start,
+				period_end: head.period_end,
+				amount: round2(part),
+			});
+			months = months !== null && Math.abs(part - head.full) < 0.005 ? months + head.months : null;
+			head.amount = round2(head.amount - part);
+			left = round2(left - part);
+			if (head.amount < 0.005) queue.shift();
+		}
+		const after = applyCompensation(base, round2(already + take), mode);
+
+		p.addCompensation(
+			invoice,
+			line,
+			take,
+			covered,
+			item.id,
+			mode,
+			months !== null && input.quantity_delta > 0 ? { quantity: input.quantity_delta, months } : null
+		);
+		p.ops.push({
+			kind: 'insert_invoice_adjustment',
+			invoice_id: invoice.id,
+			type: 'downsell',
+			amount_diff: -round2(p.toContract(take, item.currency, invoice.issue_date ?? p.effective)),
+			notes: `Cobro en exceso de "${name}" en períodos ya emitidos (${range(covered).join(', ')}): ${currency} ${money(take)} compensados en esta factura, en la línea del mismo producto (${
+				mode === 'quantity' ? `cantidad ${before.quantity} → ${after.quantity}` : `precio unitario ${before.unit_price} → ${after.unit_price}`
+			})`,
+		});
+		compensated.push({
+			invoice_id: invoice.id,
+			invoice_number: invoice.invoice_number,
+			issue_date: invoice.issue_date,
+			period_start: line.billing_period_start,
+			period_end: line.billing_period_end,
+			line_before: capacity,
+			amount: round2(capacity - after.subtotal),
+			line_after: after.subtotal,
+			quantity_before: before.quantity,
+			quantity_after: after.quantity,
+			unit_price_before: before.unit_price,
+			unit_price_after: after.unit_price,
+		});
+		if (capacity - take < 0.005)
+			p.warn(
+				'compensation_line_zero',
+				`La línea de "${name}" en la factura ${invoice.invoice_number ?? `del ${invoice.issue_date ?? invoice.id}`} queda en 0 (lo ya facturado cubre el período completo): se conserva con el ajuste y no se envía al ERP`
+			);
+		balance = round2(balance - take);
+	}
+	const numbers = issued.map((row) => row.invoice_number ?? `del ${row.issue_date ?? row.period_start}`);
+
+	if (balance >= 0.005)
+		p.block(
+			'compensation_exceeds_pending',
+			`Lo cobrado de más por "${name}" (${currency} ${money(amount)}) no cabe en ${
+				compensated.length ? 'las facturas por emitir del producto' : 'ninguna factura por emitir del producto'
+			}: quedan ${currency} ${money(balance)} sin compensar`,
+			COMPENSATION_BALANCE_STEP
+		);
+	else
+		p.warn(
+			'issued_overcharge_compensated',
+			`"${name}" se cobró de más en ${numbers.length === 1 ? `la factura ${numbers[0]}` : `${numbers.length} facturas ya emitidas (${numbers.join(', ')})`}: ${currency} ${money(amount)}. Lo ya facturado de más se compensa en ${
+				compensated.length === 1
+					? `la factura por emitir del ${compensated[0].issue_date ?? compensated[0].period_start ?? ''}`
+					: `las ${compensated.length} próximas facturas por emitir`
+			} del mismo producto, que ${compensated.length === 1 ? 'sale' : 'salen'} con ${
+				mode === 'quantity' ? 'menos cantidad' : 'menor precio unitario'
+			} y sin descuento; las emitidas no se tocan`
+		);
+
+	return { item_id: item.id, product_name: item.product_name, currency, mode, amount, issued, compensated, pending_balance: Math.max(0, balance) };
 }
 
 // ------------------------------------------------------------------ planificadores por tipo
@@ -4481,6 +5128,8 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 	const categories = new Set<string>();
 	const subtypes = new Set<string>();
 	const reterms: RetermResult['reterm'][] = [];
+	/** Rebajas con fecha anterior a facturas emitidas en modo `compensate_next`: se compensan al final, con todas las líneas ya reescritas. */
+	const retroactiveDownsells: CompensationInput[] = [];
 	let mrrDelta = 0;
 
 	p.assertState();
@@ -4587,8 +5236,15 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 		const groupIdsEarly = new Set(group.item_ids);
 		const prorated =
 			delta.categoria === 'DOWNSELL' && !pricedSpec && !p.multicurrency ? coveringPendingLine(ctx, item, groupIdsEarly, effective) : null;
+		// Rebaja con fecha anterior a facturas ya emitidas (Domi 16-11, S07212). Por defecto rige desde el próximo período o bloquea (lo
+		// emitido se corrige con nota de crédito). Con `issued_overcharge: compensate_next` rige desde su fecha real (contrato, MRR y devengo
+		// correctos desde ese día) y lo cobrado de más se compensa en las próximas Por Emitir del mismo producto (`compensateIssuedOvercharge`).
+		const issuedUntil = delta.categoria === 'DOWNSELL' && !pricedSpec ? issuedFrontierOf(ctx, item.id) : null;
+		const overIssued = Boolean(issuedUntil) && effective <= issuedUntil!;
+		const retroactive = overIssued && req.change.issued_overcharge === 'compensate_next';
 
-		if ((delta.categoria === 'DOWNSELL' && !prorated) || pricedSpec) {
+		if (overIssued) p.extras.issued_compensation_available = true;
+		if (((delta.categoria === 'DOWNSELL' && !prorated) || pricedSpec) && !retroactive) {
 			const next = nextPeriodStart(engineShape(item), itemAnchor, effective) ?? effective;
 
 			if (next !== effective)
@@ -4655,11 +5311,13 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 					`"${item.product_name}" ya está facturado hasta el ${frontier} y el cambio va como línea neta: rige desde el ${next}`
 				);
 				start = next;
-			} else {
+			} else if (!retroactive) {
 				p.block(
 					'issued_after_effective_date',
 					`"${item.product_name}" ya está facturado en firme hasta el ${frontier}`,
-					`Usa fecha efectiva ${addDays(frontier, 1)} o posterior; lo emitido se corrige con nota de crédito`
+					overIssued
+						? `Usa fecha efectiva ${addDays(frontier, 1)} o posterior y corrige lo emitido con nota de crédito, o elige compensar lo cobrado de más en las próximas facturas`
+						: `Usa fecha efectiva ${addDays(frontier, 1)} o posterior; lo emitido se corrige con nota de crédito`
 				);
 			}
 		}
@@ -4674,7 +5332,8 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 				`"${item.product_name}" tiene cantidades variables registradas: los períodos con consumo conservan su cantidad (S7-7)`
 			);
 		}
-		p.assertNoUnified(groupIds, start);
+		// Modo compensación: lo emitido solo se mide (también dentro de una unificada emitida); las unificadas cuentan desde lo que falta emitir.
+		p.assertNoUnified(groupIds, retroactive ? addDays(issuedUntil!, 1) : start);
 		const term = monthsCeil(start, item.end_date);
 		// El mensual del ajuste sale de `unit × qty` (= ΔMRR) en UPSELL y DOWNSELL (`pricingFields`, 28-10), así que el valor es el real por
 		// días: Σ facturas = TV también cuando la rebaja parte a mitad de período. En inicio de período da ΔMRR × término, como siempre.
@@ -4940,7 +5599,22 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 				}
 			}
 		} else newItems.push(newItem);
+		if (retroactive)
+			retroactiveDownsells.push({
+				item,
+				groupIds,
+				start,
+				monthly_delta: delta.mrr_delta,
+				// Baja la cantidad al mismo precio → se compensa en cantidad; si el precio también cambia, en precio unitario.
+				quantity_delta: delta.quantity_delta !== 0 && !bothAxes ? -delta.quantity_delta : 0,
+				anchor: itemAnchor,
+			});
 	}
+	const compensations = retroactiveDownsells
+		.map((entry) => compensateIssuedOvercharge(p, entry))
+		.filter((entry): entry is IssuedCompensationPreview => Boolean(entry));
+
+	if (compensations.length) p.extras.issued_compensation = compensations;
 	p.addGeneratedInvoices(newItems, req.change.first_period_invoice ?? 'cycle');
 	p.closeHeaders(reterms.length ? 'Cambio de frecuencia o plazo' : 'Cambio de precio o cantidad');
 	p.mrrDelta = round2(mrrDelta);
@@ -4975,11 +5649,12 @@ export function planItemChange(ctx: ChangeContext, req: ContractChangeRequestDto
 							`${entry.frequency_before ?? '—'} → ${entry.frequency_after}, ${entry.term_before ?? '—'} → ${entry.term_after} meses desde el ${entry.cut}`
 					)
 					.join('; ')}${mrrDelta ? ` · MRR ${mrrDelta >= 0 ? '+' : ''}${money(mrrDelta)}` : ''}`
-			: `Se ${type === 'DOWNSELL' ? 'redujo' : 'aumentó'} ${names}: MRR ${mrrDelta >= 0 ? '+' : ''}${money(mrrDelta)}`,
+			: `Se ${type === 'DOWNSELL' ? 'redujo' : 'aumentó'} ${names}: MRR ${mrrDelta >= 0 ? '+' : ''}${money(mrrDelta)}${compensationSentence(compensations)}`,
 		amount_delta: round2(mrrDelta),
 		items_affected: refs.map((ref) => String(ref.item_id ?? '')).filter(Boolean),
 		metadata: {
 			first_period_invoice: req.change.first_period_invoice ?? 'cycle',
+			...(compensations.length ? { issued_overcharge: 'compensate_next', issued_compensation: compensations } : {}),
 			...(reterms.length
 				? {
 						reterm:
@@ -6891,6 +7566,13 @@ export function issuedDifferenceSentence(
 export function planItemUpdate(ctx: ChangeContext, req: ContractChangeRequestDto): ChangePlan {
 	// Corregir el modelo de precio mal cargado (Bolivia 13-11): camino propio, el ítem se reescribe desde su inicio.
 	if (((req.change.items ?? []) as Array<Record<string, unknown>>).some((ref) => 'price' in ref)) return planPriceModelCorrection(ctx, req);
+	// Corregir la cantidad de una baja ya registrada (S07212, 16-11): camino propio, con lo cobrado de más en lo emitido.
+	if (
+		((req.change.items ?? []) as Array<Record<string, unknown>>).some(
+			(ref) => 'quantity' in ref && ctx.items.find((row) => row.id === ref.item_id)?.categoria === 'DOWNSELL'
+		)
+	)
+		return planDownsellRecordCorrection(ctx, req);
 	const p = new Planner(ctx, req, 'item_update');
 	const refs = (req.change.items ?? []) as Array<Record<string, unknown>>;
 	const seen = new Set<string>();
@@ -7097,6 +7779,218 @@ export function planItemUpdate(ctx: ChangeContext, req: ContractChangeRequestDto
 			pending_descriptions_updated: lineIds.length,
 			...(issuedDifference ? { issued_difference: issuedDifference } : {}),
 			...(preserved.length ? { preserved: [...new Set(preserved)] } : {}),
+		},
+	});
+}
+
+/**
+ * `item_update` con `quantity` sobre el **registro de una baja** (categoría DOWNSELL; caso S07212, 16-11: se registró 1 licencia de baja y
+ * eran 15). Es una corrección: el registro se reescribe en su lugar (misma fecha de inicio, mismo `booking_date`), el producto queda con
+ * la cantidad correcta desde la fecha real de la baja y el devengo se reconstruye desde ese mes (`period_closed` si está cerrado). Solo
+ * la cantidad, un registro por cambio, y solo en bajas de cantidad (el unitario del registro es el neto del ítem madre): una rebaja de
+ * precio no se corrige así. Las Por Emitir del producto desde la baja pasan a la cantidad corregida. Si la baja corregida es mayor y ya
+ * hay facturas emitidas con la baja anterior, lo cobrado de más se compensa en las próximas facturas con
+ * `issued_overcharge: compensate_next` (`compensateIssuedOvercharge`); sin ese modo bloquea `issued_after_effective_date`. Si es menor y
+ * hay emitidas, bloquea `issued_undercharge` (el aumento se registra como tal y factura su diferencia). Evento `ITEM_CORRECTED` subtipo
+ * `downsell_quantity`.
+ */
+function planDownsellRecordCorrection(ctx: ChangeContext, req: ContractChangeRequestDto): ChangePlan {
+	const p = new Planner(ctx, req, 'item_update');
+	const refs = (req.change.items ?? []) as Array<Record<string, unknown>>;
+	const field = 'change.items.0';
+	const ref = refs[0] ?? {};
+	const compensations: IssuedCompensationPreview[] = [];
+	let summary: Record<string, unknown> = {};
+	let changes: ItemCorrectionChange[] = [];
+	let lineIds: string[] = [];
+
+	p.assertState();
+	if (refs.length !== 1) p.error('change.items', 'Corrige una baja a la vez');
+	if (ITEM_CORRECTION_FIELDS.some((name) => name in ref && name !== 'quantity'))
+		p.error(field, 'En el registro de una baja solo se corrige la cantidad que se dio de baja');
+	const record = p.findItem(String(ref.item_id ?? ''), `${field}.item_id`);
+	const parent = record?.related_item_id ? (ctx.items.find((row) => row.id === record.related_item_id) ?? null) : null;
+	const quantity = typeof ref.quantity === 'number' && Number.isFinite(ref.quantity) ? ref.quantity : null;
+	const name = parent?.product_name ?? record?.product_name ?? 'Producto';
+
+	if (quantity === null || quantity <= 0) p.error(`${field}.quantity`, 'La cantidad dada de baja debe ser mayor que 0');
+	if (record && !parent) p.error(`${field}.item_id`, `"${name}" es una baja sin su ítem de origen: no se corrige así`);
+	if (record && parent && quantity !== null && quantity > 0 && !p.errors.length) {
+		const quantityBefore = num(record.quantity);
+		const unit = num(record.unit_price ?? num(record.annual_unit_price) / 12);
+		const parentUnit = num(parent.unit_price ?? num(parent.annual_unit_price) / 12);
+		const parentPct = parent.discount_type === 'Porcentaje' ? num(parent.discount_value) : 0;
+		const spec = priceSpecFromRow(parent.raw);
+		const start = record.start_date;
+		const end = record.end_date;
+		const group = start ? buildItemGroups(ctx.items, start).find((row) => row.item_ids.includes(parent.id)) : undefined;
+		const groupQuantity = group ? num(group.quantity) - (quantity - quantityBefore) : 0;
+
+		if (quantity === quantityBefore) p.error(`${field}.quantity`, `La baja de "${name}" ya tiene esa cantidad: no hay nada que corregir`);
+		else if (!start || !end || parent.is_recurring === false || parent.churn_date || record.churn_date)
+			p.error(`${field}.item_id`, `La baja de "${name}" no se corrige así: el producto no está vigente o la baja no tiene fechas`);
+		else if (spec && !isStandardFixed(spec))
+			p.error(`${field}.item_id`, `"${name}" tiene modelo de precio (${spec.model}): su baja no se corrige así`);
+		else if (Math.abs(Math.abs(unit) - parentUnit * (1 - parentPct / 100)) > 1e-4)
+			p.error(
+				`${field}.item_id`,
+				`La baja de "${name}" es una rebaja de precio, no de cantidad: su valor no se corrige; registra el cambio con "Cambió el precio o la cantidad"`
+			);
+		else if (!group || groupQuantity <= 0)
+			p.error(`${field}.quantity`, `Con ${quantity} de baja "${name}" queda sin unidades: para quitar el producto usa la baja del producto`);
+		else {
+			const anchor = anchorOfItem(parent, anchorDayOf(ctx.contract, ctx.items));
+			const groupIds = new Set(group.item_ids);
+			const monthlyDelta = round2((quantity - quantityBefore) * unit);
+			const finalPrice = round2(quantity * unit * monthsBetween(start, end, anchor));
+			const derived = pricingFields(
+				{
+					unit_price: unit,
+					annual_unit_price: null,
+					price_entry_mode: 'monthly',
+					quantity,
+					billing_frequency: record.billing_frequency,
+					is_recurring: true,
+					final_price: finalPrice,
+					term_months: record.term_months,
+					discount_type: null,
+					discount_value: 0,
+					categoria: 'DOWNSELL',
+				},
+				'contract_items'
+			);
+			const set: ItemUpdateSet = {
+				quantity,
+				price: finalPrice,
+				final_price: finalPrice,
+				annual_price: derived.annual_price,
+				monthly_price: derived.monthly_price,
+				billing_period_price: derived.billing_period_price,
+			};
+			const row = p.itemsAfter.find((candidate) => candidate.id === record.id)!;
+			const issuedUntil = issuedFrontierOf(ctx, parent.id);
+			const overIssued = Boolean(issuedUntil) && start <= issuedUntil!;
+			const input: CompensationInput = {
+				item: parent,
+				groupIds,
+				start,
+				monthly_delta: monthlyDelta,
+				quantity_delta: quantity - quantityBefore,
+				anchor,
+			};
+
+			changes = [{ field: 'quantity', before: quantityBefore, after: quantity }];
+			p.assertOpenPeriod(start, `El inicio de la baja de "${name}"`);
+			p.ops.push({ kind: 'update_item', item_id: record.id, set });
+			Object.assign(row, set);
+			p.adjusted.push(previewOf(row));
+			p.touchRsm(start);
+			// Unificadas: cuentan desde lo que falta emitir (lo emitido solo se mide).
+			p.assertNoUnified(groupIds, overIssued ? addDays(issuedUntil!, 1) : start);
+			// Por Emitir del producto desde la baja: la línea del ítem madre pasa a la cantidad corregida (mismo unitario y descuento).
+			for (const invoice of ctx.invoices.filter(isEditablePending)) {
+				const lines = invoice.lines.filter((line) => line.contract_item_id === parent.id && (line.billing_period_start ?? '') >= start);
+
+				if (!lines.length || p.skipPartial(invoice)) continue;
+				for (const line of lines) {
+					if (isConsumptionLine(line)) {
+						p.warn(
+							'consumption_quantity_kept',
+							`La factura ${invoiceName(invoice)} conserva el consumo registrado de "${name}" (${num(line.quantity)})`
+						);
+						continue;
+					}
+					const months = monthsBetween(line.billing_period_start!, line.billing_period_end!, anchor);
+					const subtotal = Math.max(0, round2(line.subtotal + round2(monthlyDelta * months)));
+					const tax = round2((subtotal * invoice.tax_rate) / 100);
+
+					p.updateLine(
+						invoice,
+						line,
+						{
+							quantity: round6(num(line.quantity) - (quantity - quantityBefore)),
+							unit_price: num(line.unit_price),
+							discount_pct: num(line.discount_pct),
+							subtotal,
+							tax_amount: tax,
+							total: round2(subtotal + tax),
+						},
+						'línea neta con la baja corregida'
+					);
+				}
+			}
+			if (overIssued) {
+				if (monthlyDelta > 0) {
+					p.block(
+						'issued_undercharge',
+						`"${name}" ya está facturado hasta el ${issuedUntil} con una baja mayor que la corregida: lo emitido cobró de menos`,
+						'Registra el aumento con "Cambió el precio o la cantidad": la diferencia de lo ya emitido se factura sola'
+					);
+				} else {
+					const compensate = req.change.issued_overcharge === 'compensate_next';
+					const result = compensateIssuedOvercharge(p, input, !compensate);
+
+					if (result) {
+						p.extras.issued_compensation_available = true;
+						if (compensate) compensations.push(result);
+						else
+							p.block(
+								'issued_after_effective_date',
+								`"${name}" ya está facturado en firme hasta el ${issuedUntil} con la baja anterior: se cobraron de más ${result.currency ?? ''} ${money(result.amount)}`,
+								'Elige compensar lo cobrado de más en las próximas facturas, o corrige lo emitido con nota de crédito'
+							);
+					}
+				}
+			}
+			p.closeHeaders('Corrección de una baja');
+			lineIds = ctx.invoices
+				.filter((invoice) => isEditablePending(invoice) && !hasErpDraft(invoice))
+				.flatMap((invoice) => {
+					const visible = new Set(invoice.lines.map((line) => line.visible_line_id).filter(Boolean));
+
+					return invoice.lines.filter(
+						(line) =>
+							line.contract_item_id === parent.id &&
+							(line.billing_period_start ?? '') >= start &&
+							line.description_locked !== true &&
+							line.quantity_source !== 'manual' &&
+							!isConsumptionLine(line) &&
+							!visible.has(line.id)
+					);
+				})
+				.map((line) => line.id);
+			if (lineIds.length) p.ops.push({ kind: 'regenerate_descriptions', line_ids: lineIds });
+			if (compensations.length) p.extras.issued_compensation = compensations;
+			p.mrrDelta = round2(p.toContract(monthlyDelta, parent.currency, start));
+			p.extras.items_after = [
+				{
+					item_id: record.id,
+					product_name: record.product_name,
+					account_before: record.account?.trim() || null,
+					account: record.account?.trim() || null,
+					changes,
+				},
+			];
+			summary = {
+				related_item_id: parent.id,
+				downsell_start: start,
+				mrr_delta: p.mrrDelta,
+				...(compensations.length ? { issued_overcharge: 'compensate_next', issued_compensation: compensations } : {}),
+			};
+		}
+	}
+
+	return p.finish({
+		type: 'ITEM_CORRECTED',
+		subtype: 'downsell_quantity',
+		title: 'Baja corregida',
+		description: `"${name}": cantidad dada de baja ${changes[0]?.before ?? '—'} → ${changes[0]?.after ?? '—'}${compensationSentence(compensations)}`,
+		amount_delta: 0,
+		items_affected: [record?.id, parent?.id].filter((id): id is string => Boolean(id)),
+		metadata: {
+			items: record ? [{ item_id: record.id, product_name: record.product_name, changes }] : [],
+			pending_descriptions_updated: lineIds.length,
+			...summary,
 		},
 	});
 }
@@ -7947,7 +8841,8 @@ function correctItemInvoices(
 
 			if (isConsumptionLine(line)) preserved.push(`la cantidad consumida registrada en ${label} (${num(line.quantity)})`);
 			if (line.description_locked) preserved.push(`la glosa escrita a mano de ${label}`);
-			if (values.pricing_breakdown) preserved.push(`el descuento puntual de ${label}`);
+			if (p.heldOneOff(line.id)) preserved.push(`el descuento puntual de ${label}`);
+			if (p.heldCompensation(line.id) > 0) preserved.push(`el ajuste por cobro en exceso de ${label}`);
 			if (PER_INVOICE_FX_SOURCES.has(line.fx_rate_source ?? '')) preserved.push(`el tipo de cambio fijado en ${label}`);
 			candidates.push({ invoice, line, values, target: false });
 		}
