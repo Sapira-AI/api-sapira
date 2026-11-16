@@ -756,7 +756,20 @@ export type WriteOp =
 				discount_value?: number;
 				monthly_price?: number | null;
 				billing_period_price?: number | null;
+				/** `item_update` con `price` (corregir el modelo de precio): modo de cobro del ítem. */
+				billing_method?: string;
 			};
+	  }
+	/** `item_update` con `price`: fila nueva de `prices` (owner contract) con el modelo correcto; el ítem pasa a apuntarla. */
+	| {
+			kind: 'set_item_price';
+			item_id: string;
+			product_id: string | null;
+			currency: string | null;
+			name: string;
+			spec: PriceSpec;
+			version: number;
+			supersedes_price_id: string | null;
 	  }
 	/** `item_update` (corrección): motivo del desvío de la Por Emitir que recibe su parte de la diferencia emitida (`invoice_adjustments`). */
 	| { kind: 'insert_invoice_adjustment'; invoice_id: string; type: 'correction'; amount_diff: number; notes: string }
@@ -1383,6 +1396,8 @@ class Planner {
 	readonly invoiceDecisions = new Map<string, InvoiceDecisionAction>();
 	/** `contract_cancel` con decisión `cancel`: las líneas editadas a mano también se quitan (entran a la misma decisión, §9.3.1). */
 	forceManual = false;
+	/** Corrección del modelo de precio: las líneas rehechas vuelven a su misma Por Emitir, también si su fecha de emisión ya pasó. */
+	mergeIntoPast = false;
 	/** Ítems de ciclo propio (§9.3.9), existentes y nuevos (`new:N`): `mergeTarget` solo los funde con PE de la misma fecha exacta. */
 	readonly ownCycleKeys = new Set<string>();
 	/** Campos opcionales del preview que agrega cada tipo (decisiones, sugerencias, pactos, tasas extendidas, ramas de reactivación). */
@@ -2379,7 +2394,7 @@ class Planner {
 					upper(row.invoice_currency) === upper(invoice.currency) &&
 					(row.document_type ?? 'FACTURA') === invoice.document_type &&
 					(row.issue_date ?? '').slice(0, 7) === invoice.issue_date.slice(0, 7) &&
-					(row.issue_date ?? '') >= this.ctx.today &&
+					(this.mergeIntoPast || (row.issue_date ?? '') >= this.ctx.today) &&
 					(ownCycle ? row.issue_date === invoice.issue_date : !this.isOwnCyclePending(row))
 			)
 			.sort((a, b) => (a.issue_date ?? '').localeCompare(b.issue_date ?? ''));
@@ -3695,7 +3710,9 @@ export function planItemAdd(ctx: ChangeContext, req: ContractChangeRequestDto): 
 			[...sameProduct]
 				.filter(
 					(item) =>
-						!DELTA_CATEGORIES.has(item.categoria ?? '') &&
+						// Ajuste = ampliación o reducción que cuelga de otro ítem. Una Expansión sin ítem base (el cliente ya tenía el producto en
+						// otro contrato, CTR-2026-425Bolivia 13-11) es el ítem base de este contrato.
+						!(DELTA_CATEGORIES.has(item.categoria ?? '') && item.related_item_id) &&
 						!REMOVAL_CATEGORIES.has(item.categoria ?? '') &&
 						!item.churn_date &&
 						(!account || (item.account ?? '').trim() === account)
@@ -6872,6 +6889,8 @@ export function issuedDifferenceSentence(
  * Bloqueo `item_not_found`. Evento `ITEM_CORRECTED` con `metadata.items[{ item_id, product_name, changes[{ field, before, after }] }]`.
  */
 export function planItemUpdate(ctx: ChangeContext, req: ContractChangeRequestDto): ChangePlan {
+	// Corregir el modelo de precio mal cargado (Bolivia 13-11): camino propio, el ítem se reescribe desde su inicio.
+	if (((req.change.items ?? []) as Array<Record<string, unknown>>).some((ref) => 'price' in ref)) return planPriceModelCorrection(ctx, req);
 	const p = new Planner(ctx, req, 'item_update');
 	const refs = (req.change.items ?? []) as Array<Record<string, unknown>>;
 	const seen = new Set<string>();
@@ -7090,6 +7109,268 @@ export interface ItemCorrectionChange {
 }
 
 type ItemUpdateSet = Extract<WriteOp, { kind: 'update_item' }>['set'];
+
+/**
+ * `item_update` con `price` = **corregir el modelo de precio mal cargado** (caso CTR-2026-425Bolivia, 13-11: ítem creado con cantidad fija
+ * que era por consumo). `price_model_change` corta en el próximo período y deja el primero con el modelo anterior; esto es una
+ * corrección: el ítem se reescribe en su lugar **desde su inicio** (sin RENEWAL ni Expansión/Contracción, misma `categoria` y
+ * `booking_date`), nace su fila de `prices` (owner contract; versión siguiente si ya tenía una) y todas sus Por Emitir se rehacen con el
+ * modelo nuevo (`{ item_id, price, billing_method?, quantity?, discount_value? }`, un ítem por cambio y sin otros datos en el mismo paso).
+ * Pasar a consumo exige cobro Vencido, salvo asiento. MRR = el modelo nuevo a la cantidad base; devengo reconstruido desde el inicio.
+ * Bloqueos: ya tiene facturas emitidas (`issued_invoices_for_item`: lo emitido no se corrige así; va "Cambiar el modelo de precio" desde
+ * el período siguiente), ajustes vigentes colgados (`item_with_adjustments`), Por Emitir facturada por OC (`partial_billing_invoice`),
+ * consumo registrado con modelo nuevo de cantidad fija, período cerrado, ítem con baja o ya renovado. Las líneas editadas a mano se
+ * reemplazan (aviso `manual_edit_replaced`). Evento `ITEM_CORRECTED` subtipo `price_model`.
+ */
+function planPriceModelCorrection(ctx: ChangeContext, req: ContractChangeRequestDto): ChangePlan {
+	const p = new Planner(ctx, req, 'item_update');
+	const refs = (req.change.items ?? []) as Array<Record<string, unknown>>;
+	const field = 'change.items.0';
+	const ref = refs[0] ?? {};
+	let mrrDelta = 0;
+	let summary: Record<string, unknown> = {};
+	let engineItem: NewItemRow | null = null;
+
+	p.assertState();
+	if (refs.length !== 1) p.error('change.items', 'Corrige el modelo de precio de un ítem a la vez');
+	if (ITEM_CORRECTION_FIELDS.some((name) => name in ref && name !== 'quantity' && name !== 'discount_value'))
+		p.error(field, 'Corrige el modelo de precio en un paso aparte de los demás datos del ítem');
+	const item = p.findItem(String(ref.item_id ?? ''), `${field}.item_id`);
+	const priceDto = ref.price && typeof ref.price === 'object' ? (ref.price as PriceSpec) : null;
+	const spec = priceDto ? normalizePriceSpec(priceDto) : null;
+	const requestedMethod = ref.billing_method === undefined || ref.billing_method === null ? null : String(ref.billing_method);
+	const methodValid = requestedMethod === null || (BILLING_METHODS as readonly string[]).includes(requestedMethod);
+	const billingMethod = methodValid ? (requestedMethod ?? item?.billing_method ?? 'Anticipado') : (item?.billing_method ?? 'Anticipado');
+	const current = item ? priceSpecFromRow(item.raw) : null;
+	let valid = Boolean(spec) && methodValid;
+
+	if (!spec) p.error(`${field}.price`, 'Indica el modelo de precio correcto');
+	if (!methodValid) p.error(`${field}.billing_method`, 'Modo de cobro inválido: Anticipado o Vencido');
+	for (const error of spec ? validatePriceSpec(spec) : []) {
+		p.error(`${field}.price.${error.field}`, error.message);
+		valid = false;
+	}
+	if (item && spec && valid) {
+		if (isMetered(spec)) {
+			const metricId = spec.billable_metric_id ?? null;
+			const status = metricId ? ctx.billable_metrics?.get(metricId) : undefined;
+
+			if (!metricId) p.error(`${field}.price.billable_metric_id`, 'Elige la métrica que se mide');
+			else if (!status) p.error(`${field}.price.billable_metric_id`, 'La métrica facturable no existe en el holding');
+			else if (status !== 'active') p.error(`${field}.price.billable_metric_id`, 'La métrica facturable está archivada');
+			if (billingMethod === 'Anticipado' && spec.model !== 'seat') p.error(`${field}.billing_method`, METERED_ADVANCE_MESSAGE);
+		}
+		if (item.is_recurring === false || !item.start_date || !item.end_date)
+			p.error(`${field}.item_id`, `"${item.product_name}" no es recurrente o no tiene inicio y fin: no lleva modelo de precio`);
+		if (item.related_item_id && DELTA_CATEGORIES.has(item.categoria ?? ''))
+			p.error(`${field}.item_id`, `"${item.product_name}" es un ajuste de otro ítem: corrige el modelo en el ítem base`);
+		if (
+			current &&
+			JSON.stringify(normalizePriceSpec(current)) === JSON.stringify(spec) &&
+			billingMethod === (item.billing_method ?? 'Anticipado') &&
+			(ref.quantity === undefined || ref.quantity === null || num(ref.quantity) === num(item.quantity))
+		)
+			p.error(`${field}.price`, `"${item.product_name}" ya tiene ese modelo de precio`, PRICE_MODEL_CHANGE_CODES.same_model);
+	}
+	if (item && spec && valid && item.is_recurring !== false && item.start_date && item.end_date && !p.errors.length && p.assertRemovable(item)) {
+		const start = item.start_date;
+		const ids = new Set([item.id]);
+		const ownLines = (invoice: ChangeInvoiceRow) => invoice.lines.filter((line) => line.contract_item_id === item.id);
+		const issued = ctx.invoices.filter((invoice) => isIssued(invoice) && ownLines(invoice).length > 0);
+		const adjustments = ctx.items.filter(
+			(row) => row.related_item_id === item.id && DELTA_CATEGORIES.has(row.categoria ?? '') && !row.churn_date
+		);
+		const pending = ctx.invoices.filter((invoice) => isEditablePending(invoice) && ownLines(invoice).length > 0);
+
+		p.assertOpenPeriod(start, `El inicio de "${item.product_name}"`);
+		p.assertNoUnified(ids, start);
+		if (issued.length)
+			p.block(
+				'issued_invoices_for_item',
+				`"${item.product_name}" ya tiene ${issued.length === 1 ? 'una factura emitida' : `${issued.length} facturas emitidas`} (${issued
+					.slice(0, 3)
+					.map(invoiceName)
+					.join(', ')}${issued.length > 3 ? '…' : ''}): el modelo solo se corrige desde el inicio cuando nada se ha emitido`,
+				'Usa "Cambiar el modelo de precio" desde el período siguiente a lo emitido; lo emitido se corrige con nota de crédito'
+			);
+		if (adjustments.length)
+			p.block(
+				'item_with_adjustments',
+				`"${item.product_name}" tiene ${adjustments.length === 1 ? 'un ajuste vigente' : `${adjustments.length} ajustes vigentes`} (ampliación o reducción): no se reescribe desde el inicio`,
+				'Usa "Cambiar el modelo de precio": el modelo nuevo absorbe los ajustes desde su fecha'
+			);
+		if (pending.some(isPartialBilled))
+			p.block(
+				'partial_billing_invoice',
+				`"${item.product_name}" tiene una factura por emitir facturada por OC: no se rehace sola`,
+				PARTIAL_BILLING_STEP
+			);
+		const recorded = recordedConsumption(ctx, item.id, start);
+
+		if (recorded.length && !isMetered(spec))
+			p.block(
+				PRICE_MODEL_CHANGE_CODES.corrections_on_fixed,
+				`"${item.product_name}" tiene consumos registrados (${recorded.map((entry) => entry.period_start).join(', ')}) y el modelo correcto es de cantidad fija`,
+				'Elige cantidad por consumo o quita primero los consumos registrados'
+			);
+		if (pending.some((invoice) => ownLines(invoice).some((line) => line.quantity_source === 'manual')))
+			p.warn('manual_edit_replaced', `Hay líneas de "${item.product_name}" editadas a mano: se reemplazan por las del modelo correcto`);
+		const quantity = ref.quantity !== undefined && ref.quantity !== null ? num(ref.quantity) : num(item.quantity);
+		const pct =
+			ref.discount_value !== undefined && ref.discount_value !== null
+				? num(ref.discount_value)
+				: item.discount_type === 'Porcentaje'
+					? num(item.discount_value)
+					: 0;
+
+		if (quantity <= 0) p.error(`${field}.quantity`, 'La cantidad base debe ser mayor que 0');
+		if (item.discount_type === 'Monto fijo' && num(item.discount_value) > 0)
+			p.warn(
+				'fixed_discount_dropped',
+				`El descuento en monto fijo de "${item.product_name}" no aplica a un modelo de precio: se tarifa sin él`
+			);
+		const frequency = (item.billing_frequency ?? 'Mensual') as BillingFrequency;
+		const term = num(item.term_months) || monthsCeil(start, item.end_date);
+		const oldMonthly = round2(itemMonthly(item));
+		const monthlyNew = round2(
+			pricedMonthlyEquivalent(spec, { quantity, billing_frequency: frequency, is_recurring: true, term_months: term }, pct)
+		);
+		const unit = quantity > 0 && pct < 100 ? round6(monthlyNew / (quantity * (1 - pct / 100))) : 0;
+		const finalPrice = round2(monthlyNew * term);
+		const derived = pricingFields(
+			{
+				unit_price: unit,
+				annual_unit_price: round6(unit * 12),
+				price_entry_mode: 'monthly',
+				quantity,
+				billing_frequency: frequency,
+				is_recurring: true,
+				final_price: finalPrice,
+				term_months: term,
+				discount_type: pct > 0 ? 'Porcentaje' : null,
+				discount_value: pct,
+				categoria: item.categoria,
+			},
+			'contract_items'
+		);
+		const set: ItemUpdateSet = {
+			quantity,
+			unit_price: derived.unit_price,
+			annual_unit_price: derived.annual_unit_price,
+			annual_price: derived.annual_price,
+			price_entry_mode: derived.price_entry_mode,
+			discount_type: pct > 0 ? 'Porcentaje' : null,
+			discount_value: pct,
+			monthly_price: derived.monthly_price,
+			billing_period_price: derived.billing_period_price,
+			price: round2(unit * quantity * term),
+			final_price: finalPrice,
+			billing_method: billingMethod,
+		};
+
+		if (!p.blockers.length && !p.errors.length) {
+			// Las líneas del ítem salen de todas sus Por Emitir (también las editadas a mano) y el generador las rehace con el modelo correcto,
+			// fundidas en las mismas facturas.
+			p.forceManual = true;
+			p.mergeIntoPast = true;
+			for (const invoice of pending) for (const line of ownLines(invoice)) p.deleteLine(invoice, line);
+			p.ops.push({ kind: 'update_item', item_id: item.id, set });
+			p.ops.push({
+				kind: 'set_item_price',
+				item_id: item.id,
+				product_id: item.product_id,
+				currency: item.currency ?? ctx.contract.contract_currency,
+				name: typeof item.raw.price_name === 'string' && item.raw.price_name ? item.raw.price_name : (item.product_name ?? 'Producto'),
+				spec,
+				version: item.price_id ? num(item.raw.price_version ?? 1) + 1 : 1,
+				supersedes_price_id: item.price_id ?? null,
+			});
+			const after = p.itemsAfter.find((row) => row.id === item.id)!;
+
+			Object.assign(after, set);
+			p.adjusted.push(previewOf(after));
+			// Mismo ítem (su id como clave): el generador tarifa con el modelo nuevo y el consumo ya registrado de cada período.
+			engineItem = {
+				key: item.id,
+				product_id: item.product_id,
+				product_name: item.product_name ?? 'Producto',
+				account: item.account,
+				item_type: item.item_type,
+				unit_of_measure: item.unit_of_measure,
+				categoria: item.categoria ?? 'NEW',
+				quantity,
+				unit_price: unit,
+				annual_unit_price: round6(unit * 12),
+				price_entry_mode: 'monthly',
+				discount_type: pct > 0 ? 'Porcentaje' : null,
+				discount_value: pct,
+				price: round2(unit * quantity * term),
+				final_price: finalPrice,
+				currency: item.currency ?? ctx.contract.contract_currency,
+				billing_frequency: frequency,
+				billing_method: billingMethod,
+				is_recurring: true,
+				start_date: start,
+				end_date: item.end_date,
+				term_months: term,
+				related_item_id: item.related_item_id ?? null,
+				renews_item_id: item.renews_item_id ?? null,
+				booking_date: item.booking_date ?? ctx.today,
+				auto_renew: item.auto_renew,
+				price_id: null,
+				quote_item_id: null,
+				billing_anchor_day: validAnchorDay(item.billing_anchor_day),
+				price_spec: spec,
+				consumption: recorded,
+			};
+			p.touchRsm(start);
+			mrrDelta = p.toContract(round2(monthlyNew - oldMonthly), item.currency, start);
+		}
+		summary = {
+			item_id: item.id,
+			from: start,
+			correction: true,
+			model_before: current?.model ?? 'standard',
+			quantity_type_before: current?.quantity_type ?? 'fixed',
+			model_after: spec.model,
+			quantity_type_after: spec.quantity_type,
+			base_quantity: quantity,
+			billing_method_before: item.billing_method ?? 'Anticipado',
+			billing_method_after: billingMethod,
+			monthly_before: oldMonthly,
+			monthly_after: monthlyNew,
+			supersedes_price_id: item.price_id ?? null,
+			consumption_periods: recorded.map((entry) => entry.period_start),
+		};
+	}
+	if (engineItem) p.addGeneratedInvoices([engineItem], 'cycle');
+	p.closeHeaders('Corrección del modelo de precio');
+	p.mrrDelta = round2(mrrDelta);
+	const label: Record<string, string> = {
+		standard: 'estándar',
+		graduated: 'por tramos',
+		volume: 'por volumen',
+		package: 'por paquete',
+		seat: 'por asiento',
+	};
+	const describe = (model: unknown, quantityType: unknown) =>
+		`${label[String(model)] ?? String(model)}${quantityType === 'metered' ? ' por consumo' : ''}`;
+
+	return p.finish({
+		type: 'ITEM_CORRECTED',
+		subtype: 'price_model',
+		title: 'Corrección del modelo de precio',
+		description: item
+			? `Se corrigió el modelo de precio de "${item.product_name}" desde su inicio: ${describe(summary.model_before, summary.quantity_type_before)} → ${describe(
+					summary.model_after,
+					summary.quantity_type_after
+				)}${mrrDelta ? ` · MRR ${mrrDelta >= 0 ? '+' : ''}${money(mrrDelta)}` : ''}`
+			: 'Corrección del modelo de precio',
+		amount_delta: round2(mrrDelta),
+		items_affected: item ? [item.id] : [],
+		metadata: { price_model: summary },
+	});
+}
 
 /** Texto de un valor corregido para la descripción del evento ("sin cuenta" / "sin tipo" para null; modo del precio en palabras). */
 export const correctionValueText = (field: ItemCorrectionField, value: string | number | null) => {

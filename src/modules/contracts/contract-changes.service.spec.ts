@@ -587,6 +587,85 @@ describe('ContractChangesService.apply (POST /contracts/:id/changes)', () => {
 		expect(firstIndex(sql, 'DELETE FROM invoice_items')).toBeLessThan(firstIndex(sql, 'INSERT INTO invoice_items'));
 	});
 
+	it('item_update con price (corregir el modelo mal cargado): mismo ítem con su precio v1, sin ítem nuevo, y sus Por Emitir reciben las líneas nuevas sin cancelarse', async () => {
+		const price = {
+			model: 'graduated',
+			quantity_type: 'fixed',
+			tiers: [
+				{ from: 1, to: 5, per_unit_amount: 100 },
+				{ from: 6, to: null, per_unit_amount: 80 },
+			],
+		};
+		const body = request({ type: 'item_update', items: [{ item_id: LICENCIA, price }] } as never, {
+			effective_date: '2026-09-28',
+			reason: 'Mal cargado',
+		});
+		// Nada emitido todavía (contrato recién activado): las doce facturas Por Emitir.
+		const fresh = build((sql) => {
+			if (sql.includes('INSERT INTO prices')) return [{ id: 'price-9' }];
+			if (sql.includes('FROM invoices i') && sql.includes('ORDER BY i.issue_date'))
+				return MONTHS.map((mm) => ({ ...invoiceDbRow(mm), status: 'Por Emitir', invoice_number: null }));
+
+			return undefined;
+		});
+
+		await fresh.service.apply(CONTRACT_ID, body, HOLDING, 'auth-1', undefined, today);
+		const sql = sqlOf(fresh.runner.query);
+		const [priceInsert] = calls(fresh.runner.query, 'INSERT INTO prices');
+
+		expect(priceInsert[1].slice(5, 7)).toEqual(['graduated', 'fixed']);
+		expect(priceInsert[1].slice(19)).toEqual([1, null]);
+		expect(calls(fresh.runner.query, 'UPDATE contract_items SET price_id')[0][1]).toEqual([LICENCIA, HOLDING, 'price-9', CONTRACT_ID]);
+		expect(calls(fresh.runner.query, 'INSERT INTO contract_items')).toEqual([]);
+		expect(sql.some((text) => text.includes('UPDATE contract_items SET') && text.includes('billing_method'))).toBe(true);
+		expect(sql.some((text) => text.includes(`SET status = 'Cancelada'`))).toBe(false);
+		expect(calls(fresh.runner.query, 'INSERT INTO invoices')).toEqual([]);
+		expect(firstIndex(sql, 'DELETE FROM invoice_items')).toBeLessThan(firstIndex(sql, 'INSERT INTO invoice_items'));
+		expect(calls(fresh.runner.query, 'INSERT INTO invoice_items').length).toBeGreaterThanOrEqual(12);
+
+		// A consumo: la métrica del pedido se carga también en `item_update` (sin eso el plan la daba por inexistente; simulación Bolivia 13-11).
+		const METRIC = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+		const metered = build((sql) => {
+			if (sql.includes('INSERT INTO prices')) return [{ id: 'price-10' }];
+			if (sql.includes('FROM billable_metrics')) return [{ id: METRIC, status: 'active' }];
+			if (sql.includes('FROM invoices i') && sql.includes('ORDER BY i.issue_date'))
+				return MONTHS.map((mm) => ({ ...invoiceDbRow(mm), status: 'Por Emitir', invoice_number: null }));
+
+			return undefined;
+		});
+
+		await metered.service.apply(
+			CONTRACT_ID,
+			request(
+				{
+					type: 'item_update',
+					items: [
+						{
+							item_id: LICENCIA,
+							billing_method: 'Vencido',
+							price: { model: 'standard', quantity_type: 'metered', unit_amount: 100, billable_metric_id: METRIC },
+						},
+					],
+				} as never,
+				{ effective_date: '2026-09-28', reason: 'Era por consumo' }
+			),
+			HOLDING,
+			'auth-1',
+			undefined,
+			today
+		);
+		expect(calls(metered.runner.query, 'INSERT INTO prices')[0][1].slice(6, 8)).toEqual(['metered', METRIC]);
+
+		// Con enero a septiembre emitidas (fixture base) se bloquea sin escribir: lo emitido no se corrige así.
+		const issued = build();
+		const blocked = await issued.service
+			.apply(CONTRACT_ID, body, HOLDING, 'auth-1', undefined, today)
+			.catch((error: { getResponse?: () => unknown }) => error.getResponse?.());
+
+		expect(JSON.stringify(blocked)).toContain('issued_invoices_for_item');
+		expect(calls(issued.runner.query, 'INSERT INTO prices')).toEqual([]);
+	});
+
 	it('price_model_change solo de modo de cobro (Stanhome 10-11): el RENEWAL nace apuntando al precio del ítem y no nace otra versión de prices', async () => {
 		const withPrice = itemDbRows.map((row) =>
 			row.id === LICENCIA

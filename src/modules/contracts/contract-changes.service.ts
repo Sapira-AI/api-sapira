@@ -586,6 +586,8 @@ export class ContractChangesService {
 			'insert_entity',
 			'insert_item',
 			'update_item',
+			// Corrección del modelo de precio: el precio del ítem ya corregido, antes de rehacer sus líneas.
+			'set_item_price',
 			// `price_model_change`: los consumos pasan al RENEWAL ya insertado.
 			'move_consumption',
 			// §9.3.3: pausas después de los ítems (el devengo las lee al reconstruirse, después de todo).
@@ -944,9 +946,56 @@ export class ContractChangesService {
 						'discount_value',
 						'monthly_price',
 						'billing_period_price',
+						'billing_method',
 					] as const)
 						if (op.set[column] !== undefined) add(column, op.set[column]);
 					if (sets.length) await runner.query(`UPDATE contract_items SET ${sets.join(', ')} WHERE id = $1 AND holding_id = $2`, params);
+					break;
+				}
+				case 'set_item_price': {
+					// Corrección del modelo de precio (`item_update` con `price`): precio propio del contrato, versión siguiente si ya tenía uno.
+					const spec = op.spec;
+					const [price] = (await runner.query(
+						`INSERT INTO prices (
+							holding_id, owner, product_id, contract_id, name, currency, model, quantity_type, billable_metric_id,
+							unit_amount, tiers, package_size, package_amount, seat_minimum_quantity, free_units, minimum_amount, cap_amount,
+							status, version, supersedes_price_id, created_by, updated_by, published_at, invoice_line_mode, charge_flat_when_free
+						) VALUES (
+							$1, 'contract', $2, $3, $4, $5, $6, $7, $8,
+							$9, $10::jsonb, $11, $12, $13, $14, $15, $16,
+							'active', $20, $21, $17, $17, now(), $18, $19
+						) RETURNING id`,
+						[
+							holdingId,
+							op.product_id,
+							contract.id,
+							op.name,
+							op.currency,
+							spec.model,
+							spec.quantity_type,
+							spec.billable_metric_id ?? null,
+							spec.unit_amount ?? null,
+							spec.tiers ? JSON.stringify(spec.tiers) : null,
+							spec.package_size ?? null,
+							spec.package_amount ?? null,
+							spec.seat_minimum_quantity ?? 0,
+							spec.free_units ?? 0,
+							spec.minimum_amount ?? null,
+							spec.cap_amount ?? null,
+							userFk(userId),
+							spec.invoice_line_mode ?? DEFAULT_INVOICE_LINE_MODE,
+							spec.charge_flat_when_free === true,
+							op.version,
+							op.supersedes_price_id,
+						]
+					)) as Row[];
+
+					await runner.query(`UPDATE contract_items SET price_id = $3 WHERE id = $1 AND holding_id = $2 AND contract_id = $4`, [
+						op.item_id,
+						holdingId,
+						String(price.id),
+						contract.id,
+					]);
 					break;
 				}
 				case 'regenerate_descriptions': {
@@ -1568,7 +1617,7 @@ export class ContractChangesService {
 		const productIds =
 			change.type === 'item_add' ? [...new Set((change.items ?? []).map((item) => String(item.product_id ?? '')).filter(Boolean))] : [];
 		const metricIds =
-			change.type === 'item_add' || change.type === 'price_model_change'
+			change.type === 'item_add' || change.type === 'price_model_change' || change.type === 'item_update'
 				? [
 						...new Set(
 							(change.items ?? [])
