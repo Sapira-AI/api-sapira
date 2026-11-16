@@ -71,7 +71,8 @@ export interface ResolvedQuantity {
 }
 
 /** `invoiced` solo aparece en la línea de una factura complementaria: lo ya facturado del período, en negativo (§4.4). */
-export type BreakdownKind = 'free' | 'tier' | 'package' | 'seat' | 'discount' | 'minimum' | 'cap' | 'invoiced';
+// `compensation` no es precio: es la marca (monto 0) de la línea que compensa un cobro en exceso (`overcharge-compensation.ts`).
+export type BreakdownKind = 'free' | 'tier' | 'package' | 'seat' | 'discount' | 'minimum' | 'cap' | 'invoiced' | 'compensation';
 
 export interface PricedSubline {
 	kind: BreakdownKind;

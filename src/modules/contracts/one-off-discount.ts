@@ -1,4 +1,5 @@
 import { round2 } from './billing-engine';
+import { isCompensationMarker } from './overcharge-compensation';
 
 import type { PricedSubline } from './pricing-engine';
 
@@ -36,9 +37,12 @@ export interface OneOffSubline extends PricedSubline {
 export const isOneOffSubline = (subline: Partial<PricedSubline> | null | undefined): boolean =>
 	!!subline && subline.kind === 'discount' && (subline as { one_off?: unknown }).one_off === true;
 
-/** Desglose sin las sublíneas de descuento puntual (lo que describe el precio de la línea). null si queda vacío. */
+/**
+ * Desglose sin las marcas de la línea: el descuento puntual y la compensación de un cobro en exceso (`overcharge-compensation.ts`). Queda
+ * lo que describe el precio de la línea. null si queda vacío. Una línea nunca lleva las dos marcas a la vez.
+ */
 export const withoutOneOff = (breakdown: PricedSubline[] | null | undefined): PricedSubline[] | null => {
-	const rest = (breakdown ?? []).filter((subline) => !isOneOffSubline(subline));
+	const rest = (breakdown ?? []).filter((subline) => !isOneOffSubline(subline) && !isCompensationMarker(subline));
 
 	return rest.length ? rest : null;
 };

@@ -74,3 +74,42 @@ consumos.
 Los datos de Ransa no se tocan desde el código. Soporte registra cada mes cantidad y unitario regional en los cuatro
 contratos. Chile deja de usar cantidad 1 con el monto como precio. Los borradores de septiembre y octubre de CTR-2026-412 ya
 están en el ERP a cantidad base: al registrar el consumo, la factura queda marcada con el aviso de borrador desactualizado.
+
+## Pendiente: B y C del pedido de Ransa (solo esquema, sin plan por archivo ni OK)
+
+Estado en [`ROADMAP-OPERATIVO.md`](../ROADMAP-OPERATIVO.md) → "Pendientes del sistema nuevo" (R1 a R4).
+
+**Contexto verificado en producción (solo lectura, 11-11 y 13-11).** Los cuatro contratos están bajo el cliente "Ransa PE", todos
+PATHFINDER+ estándar por consumo, métrica `vehiculos`, Vencido mensual: CTR-2026-412 (GT), CTR-2026-82 (PE), CTR-2026-82-CHILE (CL) y
+CTR-2026-Salvador (SV). Consumos al 13-11: 412 tiene 1; 82 tiene 8 (6 con el monto final antiguo); Chile 6 (6); Salvador 5 (4). Chile
+registraba cantidad 1 con el monto como precio; Perú septiembre tenía 190 con la factura editada a mano a 19,6709. La cotización de
+despliegue (006RO00000czmEjYAI) trae cuatro líneas por tramo (102 a 15, 58 a 22, 150 a 20, 200 a 17) y `price_list_type: Progresiva`.
+El scheduler corre todos los días a las 9 y envía toda Por Emitir del mes con fecha cumplida, sin mirar si el consumo está pendiente
+(`quantity_source = 'pending'` existe en la línea y nadie lo lee).
+
+**Fuera de A por decisión de Domi (13-11), no reabrir sin pedido:** modelo nuevo `per_period`, retención en el scheduler de facturas con
+consumo pendiente, cambio de la regla de MRR, bloqueo del unitario en Editar factura.
+
+### B · Repartir una cotización entre varios contratos del mismo cliente
+
+- API: `POST /quotes/:id/apply-split` con `[{contract_id, lines:[{quote_item_id, quantity}]}]`. `quote-contract-targets.ts` deja de
+  bloquear por `contract_created` cuando queda cantidad pendiente. `contract-changes.service.ts` registra `quote_items` con la cantidad
+  asignada en el evento de cada contrato y los enlaza entre sí (`metadata.split_group`). Vista previa que corre `planChanges` por
+  contrato y un solo apply transaccional (un `lockContract` por contrato, en orden de id).
+- Esquema (migración, según la guía): `quotes.salesforce_account_id` y `quotes.salesforce_account_country`. Hoy el SOQL de
+  oportunidades no trae `Cuenta_SR__c` ni `Country__c` (trae `Account.BillingCountry` y `DemoCountry__c`) y las cotizaciones no guardan
+  la cuenta. Campo configurable en `salesforce-field-mapping-defaults.ts`; el reparto por país queda manual en el front.
+- Front: paso "Repartir" en `AsociarAContratoDrawer` (varios contratos, cantidad por línea; el flujo se llama **Asociar a contrato**),
+  estado "Aplicada parcialmente" en Cotización 360, ayuda `cotizaciones/de-la-cotizacion-al-contrato.md`.
+- Tests: 47 licencias en 30 + 17, bloqueo por contrato, cotización parcialmente aplicada.
+- Base que ya existe (Brightcell 6): cotización aplicada por línea (`applied_quote_item_ids`, `quote_partially_applied`).
+
+### C · Grupo de precio regional por tramos sobre varios contratos
+
+- Tablas `price_groups` (holding, cliente, métrica, modelo `graduated`/`volume`, tramos, moneda; RLS y policies desde el inicio) y
+  `price_group_items` (`contract_item_id`). Al informar la cantidad de cualquier ítem del grupo, `consumption.service` suma el período
+  del grupo, calcula el monto regional con `priceLine` y el unitario efectivo, y recalcula las Por Emitir de todos los contratos
+  (emitidas: aviso y `additional`/`reissue`). El desglose va en `pricing_breakdown` (total regional, tramo, unitario efectivo, cantidad
+  propia).
+- Front: Precios › grupo de precio, desglose en Consumos y en la vista rápida de la factura, ayuda `contratos/precio-regional.md`.
+- Tests: grupo de tres contratos, recálculo cruzado, caso con una emitida.

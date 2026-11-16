@@ -283,7 +283,7 @@ facturas por **F3** (estado objetivo → cambio mínimo, generador v2 para lo nu
   warnings: [{ code, message }], blockers: [{ code, message, next_step }] }
 ```
 
-Blockers (invariantes): `period_closed`, `issued_after_effective_date` (solo `item_change` DOWNSELL; el UPSELL dentro de un período emitido no bloquea: prorratea por días hasta lo emitido, aviso `upsell_within_issued_period`, 28-10), `not_active`, `manual_lines_pending` (solo `contract_cancel`),
+Blockers (invariantes): `period_closed`, `issued_after_effective_date` (solo `item_change` DOWNSELL; el UPSELL dentro de un período emitido no bloquea: prorratea por días hasta lo emitido, aviso `upsell_within_issued_period`, 28-10; desde el 16-11 la rebaja admite `change.issued_overcharge: compensate_next`, que la aplica desde su fecha real y compensa lo cobrado de más en las próximas Por Emitir del mismo producto, sin descuento, ver §9.6d), `not_active`, `manual_lines_pending` (solo `contract_cancel`),
 `item_already_churned`, `item_already_renewed`, `unified_invoice_in_range` (hasta A.5), `fixed_fx_without_rate`,
 `quote_already_applied`, `new_business_quote_on_existing_contract` (S3-3), `uf_invoice_currency`. Warnings (blandas,
 piden motivo y siguen): `possible_duplicate`, `unpaid_invoice_prorated`, `pending_invoices_keep_old_terms`,
@@ -749,6 +749,28 @@ Multimoneda (MM1–MM6) va antes de B2-2 o en paralelo: `item_add` en otra moned
   evento `HORIZON_EXTENDED` por contrato solo si creó algo. Tests `contract-horizon.spec.ts`.
 - **RSM**: `apply_pending_renewal_tail` v1.3 sin cola en Cancelado/Borrador/En revisión (borra la que hubiera) ni en meses con pausa
   activa/programada del ítem (asset sin aplicar).
+
+### 9.6d Rebaja con fecha anterior a lo emitido: compensar en las próximas facturas (16-11, S07212)
+
+Detalle completo en [`../cambios/baja-retroactiva-con-compensacion-16-11.md`](../cambios/baja-retroactiva-con-compensacion-16-11.md).
+
+- `change.issued_overcharge`: `credit_note` (default, bloquea como siempre) | `compensate_next`. En `item_change` (DOWNSELL sin modelo de
+  precio) y en `item_update` con `quantity` sobre un registro de baja (corregir la cantidad dada de baja; evento `ITEM_CORRECTED` subtipo
+  `downsell_quantity`). La vista previa avisa con `issued_compensation_available`.
+- Con `compensate_next` la baja rige desde su fecha real. El cobro en exceso se mide por período emitido del ítem madre
+  (`min(ΔMRR × meses, emitido − debido)`) y se compensa, en orden, en las Por Emitir del mismo producto (y de su renovación). **No es
+  un descuento** (Domi 16-11): lo facturado de más cubre parte de los períodos siguientes, así que la línea sale con menos cantidad (baja
+  de cantidad: 61 − 14 × 3 = 19 al mismo precio) o con menor unitario (baja de precio), sin tocar `discount_pct` y sin líneas negativas.
+  La línea lleva la marca `{ kind: compensation, amount: 0, compensation: { mode, base_quantity, base_unit_price, units, amount, periods } }`
+  en su `pricing_breakdown`; ajuste `invoice_adjustments` tipo `downsell`. Preview y evento: `issued_compensation[]` (con `mode` y la
+  cantidad y el unitario antes y después). La factura que compensa más las ya emitidas suman el total con el ajuste.
+- Bloqueos nuevos: `compensation_exceeds_pending` (saldo que no cabe), `compensation_not_supported` (consumo registrado en lo emitido),
+  `issued_undercharge` (baja corregida a menos con emitidas), `compensation_line_protected` (Editar factura: en la línea que compensa
+  solo se edita la glosa; facturar por OC). Avisos nuevos:
+  `issued_overcharge_compensated`, `compensation_line_zero`, `compensation_reduced`, `compensation_lost`, `compensation_kept`,
+  `one_off_discount_reduced`.
+- Regla transversal: el `Planner` retira y reaplica las marcas de las líneas Por Emitir (compensación y descuento puntual) alrededor de
+  todo cambio; ninguno las pisa. Reorganizar mueve la línea que compensa, pero no la divide ni la re-monta.
 
 ### 9.7 Pendientes
 

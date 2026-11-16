@@ -443,6 +443,55 @@ describe('InvoiceSchedulerService', () => {
 		expect(allZero.invoice_line_ids).toHaveLength(1);
 	});
 
+	it('línea que compensa un cobro en exceso (S07212): viaja como cualquier otra, 19 × 627 sin descuento; si quedó en 0 no viaja', async () => {
+		const { service } = createService();
+		const base = buildInvoice('Uruguay', null, []);
+		const marker = (mode: string) => [
+			{
+				kind: 'compensation',
+				quantity: 0,
+				amount: 0,
+				label: '61 del período menos 42 ya facturados en sep-nov 2026 (14 x 3)',
+				compensation: { item_id: 'x', periods: [], mode, base_quantity: 61, base_unit_price: 627, units: 42, amount: 26334 },
+			},
+		];
+		// 61 del período − 14 × 3 ya facturadas = 19 al mismo precio: no hay descuento ni unitario ajustado.
+		const compensated = {
+			id: 'item-c',
+			description: 'PATHFINDER+',
+			quantity: 19,
+			unit_price_invoice_currency: 627,
+			discount_pct: 0,
+			subtotal_invoice_currency: 11913,
+			pricing_breakdown: marker('quantity'),
+		};
+		const payload = await service.mapInvoiceToOdooFormat({ ...base, items: [compensated] } as typeof base);
+		const [sent] = payload.invoice_line_ids;
+
+		expect(sent).toMatchObject({ quantity: 19, price_unit: 627, discount: 0 });
+		expect(sent.quantity * sent.price_unit).toBe(11913);
+
+		// Lo ya facturado cubre el período completo: cantidad 0 (o unitario 0 si compensa por precio). No viaja.
+		const zeroQuantity = { ...compensated, id: 'item-z', quantity: 0, subtotal_invoice_currency: 0 };
+		const zeroPrice = {
+			...compensated,
+			id: 'item-p',
+			quantity: 61,
+			unit_price_invoice_currency: 0,
+			subtotal_invoice_currency: 0,
+			pricing_breakdown: marker('unit_price'),
+		};
+
+		for (const zero of [zeroQuantity, zeroPrice]) {
+			const mixed = await service.mapInvoiceToOdooFormat({ ...base, items: [...base.items, zero] } as typeof base);
+
+			expect(mixed.invoice_line_ids).toHaveLength(1);
+			expect(mixed.invoice_line_ids[0].quantity).toBe(28);
+			// Si es la única línea de la factura, viaja igual (como las líneas en cero de siempre).
+			expect((await service.mapInvoiceToOdooFormat({ ...base, items: [zero] } as typeof base)).invoice_line_ids).toHaveLength(1);
+		}
+	});
+
 	it('no envía al ERP las líneas internas de una línea visible (facturación por OC): solo viaja la visible', async () => {
 		const { service } = createService();
 		const base = buildInvoice('Uruguay', null, []);
@@ -1328,6 +1377,14 @@ describe('InvoiceSchedulerService', () => {
 
 		it('línea estándar (subtotal = cantidad × unitario × (1 − descuento)) → el unitario va tal cual', () => {
 			expect(InvoiceSchedulerService.erpPriceUnit(100, 2, 10, 180)).toBe(100);
+		});
+
+		it('línea que compensa: se reconoce por la marca del desglose, no por un descuento', () => {
+			expect(
+				InvoiceSchedulerService.isCompensatedLine({ pricing_breakdown: [{ kind: 'compensation', amount: 0, compensation: { amount: 300 } }] })
+			).toBe(true);
+			expect(InvoiceSchedulerService.isCompensatedLine({ pricing_breakdown: [{ kind: 'discount', one_off: true, amount: -1 }] })).toBe(false);
+			expect(InvoiceSchedulerService.isCompensatedLine({ pricing_breakdown: null })).toBe(false);
 		});
 
 		it('sin descuento, descuento 100 % o sin subtotal → tal cual', () => {

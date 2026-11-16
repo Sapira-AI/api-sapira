@@ -128,6 +128,6 @@ contra una base. (4) *Doc:* ayuda `contratos/renovar-y-programar-cambios.md` y l
 
 - Revertir: probar de punta a punta en QA (aplicar un cambio, emitir la factura, revertir) antes de producción; no se probó contra una base.
 - Dar de baja un ítem ya renovado durante sus últimos 30 días sigue bloqueado: hay que decidir si la baja deshace la renovación.
-- Las renovaciones automáticas exitosas no notifican una por una (quedan en el Historial); falta decidir si se quiere un resumen diario.
+- Rebaja sobre un ítem ya renovado con facturas por emitir de su renovación: error encontrado el 16-11, sin corregir (P5 del roadmap).
 - Reajuste de ítems con modelo de precio (ajustar los tramos de la tarifa): fuera de alcance.
 - Prueba de punta a punta de los jobs contra una base (dev o QA): hasta ahora se verificó con tests y con simulaciones de solo lectura.

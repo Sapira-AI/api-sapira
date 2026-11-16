@@ -7,7 +7,7 @@
 
 # 🗺️ Roadmap de desarrollo Sapira — backlog unificado
 
-> **Actualizado:** 2026-10-05 (premisa del borrado de funciones y edge function `rag-chat` muerta) · 2026-10-03 ("Resuelto en v2" suma Configuración y usuarios) · 2026-10-02 (bloque "Resuelto en v2" y regla de no arreglar lo que solo afecta al front actual) · antes 2026-08-31 (reclasificación de reportes de la semana: ⚡ Tanda 3, scheduler = regla de soporte, import → carril León, upsell desde cotización → Complejos #1, estratégico #25) · base 2026-08-24 (reestructura completa por estado + esfuerzo, revisión profunda de las 108 memorias + verificación en vivo contra código y BD prod/dev) · **Mantienen:** Domi + Leon
+> **Actualizado:** 2026-11-16 (bloque 6: rebaja con fecha anterior a lo emitido construida; P5 rebaja sobre ítem renovado) · 2026-11-13 (bloque "Pendientes del sistema nuevo": registro vivo desde el switch, con la regla de actualizarlo en cada tarea) · 2026-10-05 (premisa del borrado de funciones y edge function `rag-chat` muerta) · 2026-10-03 ("Resuelto en v2" suma Configuración y usuarios) · 2026-10-02 (bloque "Resuelto en v2" y regla de no arreglar lo que solo afecta al front actual) · antes 2026-08-31 (reclasificación de reportes de la semana: ⚡ Tanda 3, scheduler = regla de soporte, import → carril León, upsell desde cotización → Complejos #1, estratégico #25) · base 2026-08-24 (reestructura completa por estado + esfuerzo, revisión profunda de las 108 memorias + verificación en vivo contra código y BD prod/dev) · **Mantienen:** Domi + Leon
 > Estructura: **✅ Desplegado y probado** · **🟡 Terminado, en validación de producción** · **🔴 Pendientes** ordenados de rápido a complejo (⚡ tandas rápidas → 🔨 medios → 🏗️ complejos) + **carril León (api-sapira)** · **🟣 Estratégico** (se trabaja en la versión nueva del sistema, no aquí).
 > Convención: al cerrar un ítem, moverlo a "Desplegado" con commit/migración. Este doc es la fuente de verdad del orden; el detalle técnico vive en los docs/memorias referenciados.
 > Todo ítem de esta versión fue **verificado contra el estado real** (código del repo, api-sapira y funciones vivas en Supabase prod) el 24-08 — no es solo consolidación de memorias.
@@ -91,6 +91,120 @@
 ---
 
 ## 🔴 Pendientes — de rápido a complejo
+
+### 🔴 Pendientes del sistema nuevo (registro vivo desde el switch · actualizado 2026-11-16)
+
+> **Regla (Domi, 13-11):** este bloque es el registro único de lo pendiente en el sistema nuevo (`api-sapira` + `front-sapira`).
+> **Se actualiza en la misma tarea que cierra, cambia o agrega un punto**: lo cerrado baja a "Cerrado" con su commit y fecha, lo nuevo
+> entra con su caso y el enlace a su detalle. Nada de aquí se construye sin plan por punto y OK de Domi. El detalle técnico vive en la
+> nota enlazada de `docs/cambios/`. Este bloque se anota solo en `api-sapira`: no son pendientes del front anterior.
+>
+> Estado base 13-11: `domi` = `qa` = `main` en ambos repos (API v0.0.167, front v0.1.106); QA y producción sin migraciones pendientes.
+>
+> Estado 16-11: `qa` = `main` con API v0.0.168 (PR #269 y #270) y front v0.1.107 (PR #113 y #114): incluyen los bloques 8 y 9. En `domi`,
+> **solo en local y sin push**, quedan los commits del bloque 6: en la API, los documentos del 13-11 (`b9d32b9`) y la rebaja con compensación; en el front, `8211f76`.
+
+**1 · Ransa / SimpliRoute** · detalle: [`cambios/precio-unitario-del-periodo-13-11.md`](./cambios/precio-unitario-del-periodo-13-11.md)
+
+| # | Pendiente | Estado | Qué falta |
+|---|---|---|---|
+| R1 | **Migración de los 4 contratos de Ransa** (CTR-2026-412, CTR-2026-82, CTR-2026-82-CHILE, CTR-2026-Salvador) al precio unitario del período | Soporte, después del deploy | Registrar cantidad y unitario real por período. Decidir qué pasa con septiembre y octubre de CTR-2026-412, que ya están como borrador en el ERP a cantidad base. No se tocan datos de Ransa, CCU ni Camposur desde desarrollo |
+| R2 | **B · Repartir una cotización entre varios contratos del mismo cliente** | Solo esquema | Plan por archivo y OK. Requiere migración (`quotes.salesforce_account_id`, `salesforce_account_country`) e importar cuenta y país desde el CRM |
+| R3 | **C · Grupo de precio regional por tramos sobre varios contratos** | Solo esquema | Plan por archivo y OK. Requiere tablas nuevas (`price_groups`, `price_group_items`) con RLS |
+| R4 | Lo que quedó fuera de A por decisión de Domi (13-11): modelo `per_period`, retención en el scheduler de facturas con consumo pendiente, cambio de la regla de MRR, bloqueo del unitario en Editar factura | No se hace | No reabrir sin pedido explícito |
+
+**2 · Facturas unificadas (Brightcell)** · detalle: [`cambios/brightcell-unificadas-10-11.md`](./cambios/brightcell-unificadas-10-11.md) → "Pendiente: editar y reorganizar orígenes"
+
+| # | Pendiente | Estado | Qué falta |
+|---|---|---|---|
+| U1 | **Editar factura y Reorganizar sobre los orígenes de una unificada** (hoy el origen manda a la unificada y la unificada al origen) + "Editar en el origen" desde la vista rápida | Plan presentado 10/11-11 | OK de Domi. Caso: Brightcell octubre, CTR-2026-110 |
+| U2 | **Marca "no unificar"**: una línea sacada de una unificada queda suelta Por Emitir el mismo mes sin que la regla de las 06:30 la reabsorba | Plan presentado | OK. **Cambio de esquema** (campo en `invoices`, checklist de la guía) |
+| U3 | **4d** · Aviso de línea con tasa fija sin tasa en unificadas | Parcial (`fx_mixed_in_pair`, `pair_rates_differ` ya existen) | Aviso restante |
+| U4 | **Neto de la orden de compra por línea** (hoy por moneda: `net_by_pair`) | Idea de Domi | Definir alcance |
+| U5 | **Listas de Facturación y de los 360 de cliente y razón social** siguen mostrando los orígenes en "Todas" | Sin empezar | Módulos cerrados: requiere pedido explícito de Domi |
+| U6 | Invariantes de unificadas en el conocimiento de soporte (`docs/agentes/`) | Sin empezar | Carpeta de la sesión de soporte: se coordina con ella |
+
+**3 · Revisión de código del 28-10 y bugs analizados sin corrección** · detalle: [`cambios/revision-28-10-y-prorrateo-visible.md`](./cambios/revision-28-10-y-prorrateo-visible.md) → "Pendiente del review" · [`cambios/errores-emision-erp-28-10.md`](./cambios/errores-emision-erp-28-10.md) → "E · Pendiente"
+
+| # | Pendiente | Estado | Qué falta |
+|---|---|---|---|
+| C3 | Alertas de error del ERP no se agrupan cuando el texto del mensaje trae datos de la factura | Sin empezar | Agrupar por causa |
+| C4 | Cuando el ERP avisa "emitida" por error y Sapira lo revierte, no devuelve la fecha de emisión ni los montos | Sin empezar | Revertirlos también |
+| C5 | Upsell sobre un período prepagado ya emitido (anual o trimestral): puede salir con fecha pasada | Sin bug confirmado | Test |
+| C6 | Downsell prorrateado con ajustes parciales en el mismo período: asume que todas las líneas cubren el período completo | Sin empezar | Calcular por línea con su solape de días |
+| C7 | Período partido en dos facturas: el prorrateo solo toca la primera | Sin empezar | Cubrir la segunda |
+| C8 | **Cambiar el modelo de precio desde el primer período** no rige desde ahí (caso CTR-2026-413 Arca EC, corregido por datos) | Análisis y propuesta listos | OK de Domi |
+| C9 | Lista de "estados facturados" copiada en tres lugares | Sin empezar | Unificar |
+| CE | Resumen del envío automático agrupado por causa + `edi_state` en el aviso del ERP (pedido a Leon) | Plan escrito | OK y respuesta de Leon |
+| CX | Edición masiva sin documento tributario; `invoice-dte.ts` trata como exportación una factura nacional de un contrato 110 | Anotado el 02-11 | Definir si se aborda |
+
+**4 · Datos en producción** (siempre con OK explícito de Domi y respaldo)
+
+| # | Pendiente | Estado |
+|---|---|---|
+| D1 | 6 ajustes DOWNSELL del sistema anterior con `quantity × unit_price ≠ monthly_price` (CTR-2026-007, S07608, S06975, S01688, S06426, CTR-2025-001): propuesta `unit_price = monthly_price / quantity` | Pendiente de OK. Último recuento 02-11 |
+| D2 | A10166 (México): Emitida en Sapira, sin timbre en el ERP | Verificado 13-11. Falta decidir si vuelve a borrador en Sapira o se corrige en el ERP |
+| D3 | Folios repetidos (Perú y holding demo): errores de folio reales | Esperan respuesta de Domi |
+
+**5 · Entorno**
+
+| # | Pendiente | Estado |
+|---|---|---|
+| E1 | `NOTIFICATION_EMAILS_ENABLED=false` en la API de QA: el cron de QA manda resúmenes a los mismos holdings y choca con producción | De Domi (no está en el repo) |
+
+**6 · Rebaja con fecha anterior a lo emitido: compensar en las próximas facturas** (pedido de soporte 13-11; caso SimpliRoute S07212, México, MXN) · detalle: [`cambios/baja-retroactiva-con-compensacion-16-11.md`](./cambios/baja-retroactiva-con-compensacion-16-11.md)
+
+Construido el 16-11 en `domi`, **sin push ni deploy**: modo `issued_overcharge: compensate_next` en la rebaja y en la corrección de una baja ya registrada. La baja rige desde su fecha real y lo facturado de más cubre parte de los períodos siguientes: las próximas Por Emitir del mismo producto salen con **menos cantidad** (baja de cantidad) o **menor precio unitario** (baja de precio), **sin descuento**, sin líneas negativas y sin nota de crédito. Protección del ajuste ante cualquier cambio posterior, devengo y envío al ERP (la línea viaja como cualquier otra). Sin migración: una función de devengo por aplicar como asset en QA y producción. Un solo commit por repo (front `8211f76`): la primera versión del mismo día, con el ajuste como descuento, se descartó antes de subir y no quedó en el historial.
+
+| # | Pendiente | Estado | Qué falta |
+|---|---|---|---|
+| B6 | **Expresar el ajuste en cantidad o en precio unitario, no como descuento** (Domi 16-11: "no hay descuento": lo facturado de más cubre parte de los períodos siguientes). S07212: 61 − 14 × 3 = 19 × 627 = 11.913 | **Construido 16-11 con OK de Domi, commit local** | Nada: va con B1. Motor, Editar factura, Reorganizar, facturar por OC, devengo, envío al ERP, front, tests y docs. API 259 suites en verde |
+| B1 | **Push, QA y deploy** del modo de compensación | Commit local 16-11, tests en verde | OK de Domi para push (antes, merge de `origin/qa`); aplicar `revenue_schedule_rebuild_contract_ccy.sql` en QA y, con OK, en producción (`nc_discount_revenue_adjustment.sql` ya no cambia). **La factura de diciembre de S07212 se emite sola el 01-12**: tiene que estar en producción antes |
+| B2 | **Corregir S07212** (la baja de 1 pasa a 15, compensando 26.334 en diciembre) | Después del deploy | La hace la usuaria: Corregir un dato › la baja › 15 › compensar en las próximas facturas. Simulado en tests con las cifras reales |
+| B3 | **Confirmar con Leon los decimales de cantidad del ERP** | Sin hacer | La línea que compensa viaja como cualquier otra (cantidad × precio, sin descuento): el envío no cambia. Con prorrateo por días la cantidad lleva hasta 4 decimales; si el ERP redondea a menos, esa línea diferiría en centavos. La línea que queda en 0 no viaja. Ya no hace falta probar un descuento alto en México. Nota en `v2-rediseno/cambios-integracion-para-leon.md` |
+| B4 | Devengo de un mes **emitido con desvío** (línea editada a mano o consumo) ante una rebaja retroactiva: sigue siendo lo facturado de ese período | Límite conocido, sin casos | Solo si aparece un caso: restar en D2-c lo compensado de ese período |
+| B5 | Compensación en productos **por consumo o con modelo de precio** | Fuera de alcance (bloquea con el paso siguiente) | Definir la regla si se pide |
+
+**7 · Cierre del sistema anterior** (pedido de Domi 13-11: pasó un mes desde el switch)
+
+| # | Pendiente | Estado | Qué falta |
+|---|---|---|---|
+| L1 | **Eliminar funciones, triggers y demás objetos del sistema anterior** que se mantuvieron solo por el período de prueba, y dejar base de datos y repos sin restos que confundan en sesiones de desarrollo. Validar en detalle, objeto por objeto, que no se usa ni afecta nada antes de borrar | Sin empezar | Sesión especial, después de B1 y de actualizar estos documentos. Se relaciona con "Nuevos 05-10" de más abajo (premisa del borrado de funciones, edge function `rag-chat`) y con `reglas-desarrollo/logica-en-api-triggers.md` |
+| L2 | **Documentar que el paso al sistema nuevo está aplicado al 100 %** | Sin empezar | Al cerrar L1 |
+
+Orden acordado (Domi 13-11): sesión paralela de auto-renovación y pactos futuros (hecha) → B1 (construido 16-11, con B6) → actualizar documentos → sesión de L1 y L2.
+
+**8 · Renovación automática y cambios programados** (SimpliRoute fin de año, 13-11) · detalle: [`cambios/renovacion-automatica-y-cambios-programados-13-11.md`](./cambios/renovacion-automatica-y-cambios-programados-13-11.md)
+
+Construido el 13-11 (API y front) y en `qa` y `main` desde el 16-11 (API v0.0.168, front v0.1.107): renovación automática y cambios programados que se aplican solos, acciones masivas de la lista (programar cambio por contrato o por producto, renovación automática), filtros por renovación automática y por tipo de ítem, hitos en la línea de tiempo, resumen diario de renovaciones por compañía y reversión de un cambio programado aplicado.
+
+| # | Pendiente | Estado | Qué falta |
+|---|---|---|---|
+| P1 | **Prueba de punta a punta en QA** de los jobs (renovar solo, aplicar solo) y de la reversión (aplicar un cambio, emitir la factura, revertir) | Sin hacer | Hacerla antes de producción: es lo único de este bloque que anula facturas emitidas. Recordar que rige para todos los holdings |
+| P2 | **Baja de un ítem ya renovado** durante sus últimos 30 días | Bloqueado hoy | Decidir si la baja deshace la renovación |
+| P3 | **Reajuste de ítems con modelo de precio** (tramos, consumo) | Fuera de alcance | Definir si se ajusta la tarifa |
+| P4 | Reversión: casos que hoy se bloquean (factura pagada, con documento electrónico, con consumo, período cerrado) | Por diseño | Solo si las usuarias lo piden |
+| P5 | **Rebaja (downsell) sobre un ítem ya renovado** con facturas por emitir de la renovación: el cambio del ítem vigente **quita** las líneas de la renovación (el grupo del ítem incluye a su sucesor y la línea neta solo conserva la del ítem pedido) y la rebaja de la renovación parte un período después de su inicio (`nextPeriodStart` nunca devuelve el inicio del ítem). Encontrado el 16-11 al construir B1; reproducido con test, independiente del modo de compensación | **Error sin corregir** | Plan y OK de Domi. Propuesta: limitar la línea neta a las líneas hasta el fin del ítem pedido y, en el sucesor, partir en su inicio. Producción al 16-11 (solo lectura): 0 rebajas sobre ítems renovados desde el 13-11; 2 ítems renovados vigentes con facturas por emitir de su renovación (SOD-01 y CAR-01, 36 líneas cada uno) y 357 ítems con renovación automática encendida, que quedarán renovados 30 días antes de su fin. **Corregir antes de que corran las renovaciones de fin de año** |
+
+**9 · Corregir el modelo de precio mal cargado** (SimpliRoute CTR-2026-425Bolivia, 13-11) · detalle: [`cambios/correccion-modelo-de-precio-13-11.md`](./cambios/correccion-modelo-de-precio-13-11.md)
+
+Construido el 13-11 (API y front) y en `qa` y `main` desde el 16-11 (API v0.0.168, front v0.1.107): una Expansión sin ítem base ya se lista en "Cambiar el modelo de precio" y "Cambió cuándo se factura", y "Corregir un dato mal cargado" permite corregir el modelo de precio desde el inicio del ítem.
+
+| # | Pendiente | Estado | Qué falta |
+|---|---|---|---|
+| M1 | **Aplicar la corrección en CTR-2026-425Bolivia** (a consumo, Vehículos, USD 19) | Después del deploy | La hace Carelis desde el front; simulación en solo lectura sin bloqueos |
+| M2 | Corrección del modelo **con períodos ya emitidos** | Hoy se bloquea | Decidir si se reparte la diferencia entre las Por Emitir, como las correcciones de valor |
+
+**Cerrado** (para no volver a listarlo)
+
+| Qué | Cuándo y dónde |
+|---|---|
+| Ransa A · precio unitario del período en el modelo Estándar por consumo | 13-11 · API `71df13a`, front `633b055`, migración `1792520000000-ConsumptionUnitPrice` en QA y producción |
+| Datos del interruptor de emisión automática (incluye CTR-2026-411) | Recuento 13-11: 0 Por Emitir sin ERP desalineadas. Quedan 2 borradores en el ERP (CTR-2026-131, S07866) que no se tocan |
+| Migración `DteSimulations` de Leon en producción | Aplicada (aparece en el snapshot del 13-11) |
+| Stanhome: cambiar solo el modo de cobro; reemisión con emisión apagada | 10-11 · `37db916`, `f2568c5` |
+| Brightcell 1–10 (unificadas: tasa por línea, cambios de contrato, rehacer, proforma, listas del contrato, cotización por línea, corregir fecha) | 10/11-11 · `cd0a164`, `47597e6` |
+| Exportación MX/PE por documento tributario + correlativo sin duplicados por mayúsculas | 02-11 · `2a0f518`, `ae10299` |
 
 ### ⚡ Tanda 1 — Fixes SQL de facturación · ✅ DESPLEGADA 28-08 (dev+prod, paridad md5)
 
