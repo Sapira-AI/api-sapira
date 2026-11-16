@@ -65,7 +65,7 @@ export class CreateScheduledChangeDto {
 		description:
 			'% (percent_uplift; en index = puntos sobre la variación del índice, 0 = solo el índice), precio en moneda del ítem, cantidad o meses según kind',
 	})
-	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe el valor del pacto' })
+	@IsNumber({ maxDecimalPlaces: 6 }, { message: 'Escribe el valor' })
 	value!: number;
 
 	@ApiPropertyOptional({ description: 'Obligatorio con kind = index: código de `indicadores_economicos` (IPC, UF, USD)' })

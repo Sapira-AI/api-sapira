@@ -348,6 +348,16 @@ describe('ContractsService', () => {
 		});
 	});
 
+	it('filtro por tipo de ítem (usuarias 13-11): contratos con algún ítem de esos tipos', async () => {
+		const { service, query } = build(() => []);
+
+		await service.list('h-1', { itemType: 'Fijo, Variable' }, asOf);
+		const [sql, params] = listCall(query);
+
+		expect(sql).toContain('ti.item_type = ANY($3::text[])');
+		expect(params).toEqual(['h-1', '2026-09-25', ['Fijo', 'Variable']]);
+	});
+
 	describe('filterOptions', () => {
 		it('devuelve tipos, países, vendedores y lo existente, acotado al holding', async () => {
 			const { service, query } = build((sql) => {
@@ -358,6 +368,7 @@ describe('ContractsService', () => {
 				if (sql.includes('c.type AS value')) return [{ value: 'Histórico' }];
 				if (sql.includes('cl.country AS value')) return [{ value: 'Chile' }];
 				if (sql.includes('ce.country AS value')) return [{ value: 'CL' }];
+				if (sql.includes('ti.item_type AS value')) return [{ value: 'Fijo' }, { value: 'Variable' }];
 
 				return [];
 			});
@@ -373,6 +384,7 @@ describe('ContractsService', () => {
 				segments: [],
 				markets: [],
 				industries: [],
+				item_types: ['Fijo', 'Variable'],
 			});
 			for (const [sql, params] of query.mock.calls) {
 				expect(params).toEqual(['h-1']);

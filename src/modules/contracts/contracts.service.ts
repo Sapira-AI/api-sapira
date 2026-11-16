@@ -196,6 +196,7 @@ export interface ContractListFilters {
 	companyId?: string;
 	currency?: string;
 	productId?: string;
+	itemType?: string;
 	endingWithinDays?: number;
 	autoSendToOdoo?: BoolParam;
 	type?: string;
@@ -209,6 +210,7 @@ export interface ContractListFilters {
 	nextEndTo?: string;
 	multicompany?: BoolParam;
 	multicurrency?: BoolParam;
+	autoRenew?: BoolParam;
 	requiresReferences?: BoolParam;
 	segment?: string;
 	market?: string;
@@ -364,6 +366,11 @@ export class ContractsService {
 			where.push(
 				`EXISTS (SELECT 1 FROM contract_items pi WHERE pi.contract_id = c.id AND pi.product_id = ANY($${params.push(list(productId))}::uuid[]))`
 			);
+		// Tipo de ítem (master data `item_types`, pedido de las usuarias 13-11): algún ítem del contrato es de alguno de esos tipos.
+		if (filters.itemType?.trim())
+			where.push(
+				`EXISTS (SELECT 1 FROM contract_items ti WHERE ti.contract_id = c.id AND ti.item_type = ANY($${params.push(list(filters.itemType))}::text[]))`
+			);
 		if (search?.trim()) {
 			const n = params.push(`%${search.trim()}%`);
 
@@ -389,6 +396,12 @@ export class ContractsService {
 			where.push(isTrue(filters.multicompany!) ? `c.requires_multicompany_billing IS TRUE` : `c.requires_multicompany_billing IS NOT TRUE`);
 		if (has(filters.multicurrency))
 			where.push(isTrue(filters.multicurrency!) ? `c.requires_multicurrency_billing IS TRUE` : `c.requires_multicurrency_billing IS NOT TRUE`);
+		// Renovación automática (Domi 13-11): la marca vive en los ítems; cuenta si algún recurrente vigente (sin baja ni renovación) la tiene.
+		if (has(filters.autoRenew))
+			where.push(
+				`${isTrue(filters.autoRenew!) ? '' : 'NOT '}EXISTS (SELECT 1 FROM contract_items ar WHERE ar.contract_id = c.id AND ar.is_recurring = true
+					AND ar.auto_renew = true AND ar.churn_date IS NULL AND ar.renewed_by_item_id IS NULL AND COALESCE(ar.categoria, '') NOT IN ('CHURN', 'DOWNSELL'))`
+			);
 		if (has(filters.requiresReferences))
 			where.push(
 				isTrue(filters.requiresReferences!) ? `c.requires_references_for_billing IS TRUE` : `c.requires_references_for_billing IS NOT TRUE`
@@ -644,39 +657,42 @@ export class ContractsService {
 				ORDER BY value`,
 				[holdingId]
 			);
-		const [companies, currencies, products, types, clientCountries, entityCountries, sellers, segments, markets, industries] = await Promise.all([
-			this.dataSource.query<Row[]>(
-				`SELECT DISTINCT co.id, COALESCE(co.legal_name, co.holding_name) AS name
+		const [companies, currencies, products, types, clientCountries, entityCountries, sellers, segments, markets, industries, itemTypes] =
+			await Promise.all([
+				this.dataSource.query<Row[]>(
+					`SELECT DISTINCT co.id, COALESCE(co.legal_name, co.holding_name) AS name
 				FROM contracts c JOIN companies co ON co.id = c.company_id
 				WHERE ${scoped}
 				ORDER BY name`,
-				[holdingId]
-			),
-			distinctText('c.contract_currency'),
-			this.dataSource.query<Row[]>(
-				`SELECT ci.product_id AS id, COALESCE(MAX(p.name), MAX(ci.product_name)) AS name
+					[holdingId]
+				),
+				distinctText('c.contract_currency'),
+				this.dataSource.query<Row[]>(
+					`SELECT ci.product_id AS id, COALESCE(MAX(p.name), MAX(ci.product_name)) AS name
 				FROM contract_items ci
 				JOIN contracts c ON c.id = ci.contract_id
 				LEFT JOIN products p ON p.id = ci.product_id
 				WHERE ${scoped} AND ci.product_id IS NOT NULL
 				GROUP BY ci.product_id
 				ORDER BY name`,
-				[holdingId]
-			),
-			distinctText('c.type'),
-			distinctText('cl.country', 'JOIN clients cl ON cl.id = c.client_id'),
-			distinctText('ce.country', 'JOIN client_entities ce ON ce.id = c.client_entity_id'),
-			this.dataSource.query<Row[]>(
-				`SELECT DISTINCT sl.id, sl.name
+					[holdingId]
+				),
+				distinctText('c.type'),
+				distinctText('cl.country', 'JOIN clients cl ON cl.id = c.client_id'),
+				distinctText('ce.country', 'JOIN client_entities ce ON ce.id = c.client_entity_id'),
+				this.dataSource.query<Row[]>(
+					`SELECT DISTINCT sl.id, sl.name
 				FROM contracts c JOIN quotes q ON q.id = c.quote_id JOIN sellers sl ON sl.id = q.seller_id
 				WHERE ${scoped}
 				ORDER BY sl.name`,
-				[holdingId]
-			),
-			distinctText('cl.segment', 'JOIN clients cl ON cl.id = c.client_id'),
-			distinctText('cl.market', 'JOIN clients cl ON cl.id = c.client_id'),
-			distinctText('cl.industry', 'JOIN clients cl ON cl.id = c.client_id'),
-		]);
+					[holdingId]
+				),
+				distinctText('cl.segment', 'JOIN clients cl ON cl.id = c.client_id'),
+				distinctText('cl.market', 'JOIN clients cl ON cl.id = c.client_id'),
+				distinctText('cl.industry', 'JOIN clients cl ON cl.id = c.client_id'),
+				// Tipos de ítem que usan los contratos del holding (no todo el master data: solo lo que filtra algo).
+				distinctText('ti.item_type', 'JOIN contract_items ti ON ti.contract_id = c.id'),
+			]);
 		const values = (rows: Row[]) => rows.map((row) => String(row.value));
 
 		return {
@@ -690,6 +706,7 @@ export class ContractsService {
 			segments: values(segments),
 			markets: values(markets),
 			industries: values(industries),
+			item_types: values(itemTypes),
 		};
 	}
 

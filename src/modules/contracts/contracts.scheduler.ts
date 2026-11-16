@@ -11,11 +11,13 @@ export const CONSOLIDATION_RULES_JOB = 'contracts-consolidation-rules';
 /**
  * Jobs diarios de contratos v2 (spec modificaciones §9.3.5 y §9.3.6, B2-4). Se disparan a su hora en `America/Santiago` (hora del
  * servidor); dentro de la corrida cada holding calcula su "hoy" con su zona (`holding_settings.timezone`, Configuración ronda 4):
- * - `contracts-scheduled-changes` (05:30): pactos `on_date` / `every_n_months` por vencer → evento `SCHEDULED_CHANGE_DUE` + notificación.
+ * - `contracts-scheduled-changes` (05:30): cambios programados `on_date` / `every_n_months` dentro del plazo de aviso → **se aplican solos**
+ *   (Domi 13-11); el que no se puede aplicar deja `SCHEDULED_CHANGE_DUE` + notificación con el motivo y se reintenta cada día.
  * - `contracts-extend-horizon` (05:45): ítems recurrentes sin término → las Por Emitir que faltan para tener siempre
  *   12 períodos desde hoy (`HORIZON_PERIODS_AHEAD`, fijo por sistema: calendario rodante)
  *   (evento `HORIZON_EXTENDED` por contrato solo si creó algo; idempotente con el contrato bloqueado).
- * - `contracts-auto-renewal` (06:00): ítems `auto_renew` por vencer → evento `RENEWAL_PROPOSED` + notificación. **Nunca renueva sola.**
+ * - `contracts-auto-renewal` (06:00): ítems `auto_renew` que terminan dentro del plazo de aviso → **se renuevan solos** (Domi 13-11). Lo ya
+ *   vencido o bloqueado queda como `RENEWAL_PROPOSED` + notificación.
  * - `contracts-consolidation-rules` (06:30): unificación recurrente de cada razón social con regla activa
  *   (`InvoiceConsolidationRulesService.runAll`): une las Por Emitir que nacieron después de guardarla, antes del envío automático.
  * - `contracts-renewal-reminders` (06:15): ítems que terminan sin decisión → alertas crecientes (`auto_renewal_notice_days` y la escalera del

@@ -31,8 +31,29 @@ import {
 } from './contract-360';
 import { type ContractDerivedStatus, derivedStatusLateral } from './contract-status';
 import { CONTRACT_DATES_LATERAL, ContractsService, NEXT_ITEM_END_LATERAL } from './contracts.service';
+import { loadScheduledChanges, type ScheduledChangeView } from './scheduled-change-rows';
 import { ContractDocumentsStorageService } from './storage/contract-documents-storage.service';
 import { documentTypeLabel } from './tax-document-types';
+
+/** Texto corto de un cambio programado para la línea de tiempo: "Reajuste +5 %", "Reajuste por IPC", "Precio nuevo"… */
+const pactLabel = (pact: Pick<ScheduledChangeView, 'kind' | 'value' | 'index_code'>): string => {
+	const value = Number(pact.value) || 0;
+
+	switch (pact.kind) {
+		case 'percent_uplift':
+			return `Reajuste ${value > 0 ? '+' : ''}${value.toLocaleString('es-CL')} %`;
+		case 'index':
+			return `Reajuste por ${pact.index_code ?? 'índice'}`;
+		case 'new_unit_price':
+			return 'Precio nuevo';
+		case 'quantity':
+			return `Cantidad nueva: ${value.toLocaleString('es-CL')}`;
+		case 'term':
+			return `Plazo nuevo: ${value} meses`;
+		default:
+			return 'Frecuencia nueva';
+	}
+};
 
 type Row = Record<string, unknown>;
 
@@ -202,7 +223,7 @@ export class Contract360Service {
 	async overview(idOrNumber: string, holdingId: string, asOfDate = new Date()) {
 		const contract = await this.contracts.resolveContract(idOrNumber, holdingId);
 		const today = todayFor(await holdingTimezone(this.dataSource, holdingId), asOfDate);
-		const [context, invoices, fxRows, itemRows, history, [recognizedRow]] = await Promise.all([
+		const [context, invoices, fxRows, itemRows, history, [recognizedRow], scheduled] = await Promise.all([
 			this.loadContext(contract.id, holdingId, today),
 			this.loadInvoices(contract.id, holdingId),
 			this.loadFxRates(contract.id, holdingId),
@@ -224,6 +245,7 @@ export class Contract360Service {
 				WHERE r.contract_id = $1 AND r.holding_id = $2 AND r.is_total_row = false AND r.period_month <= date_trunc('month', $3::date)`,
 				[contract.id, holdingId, today]
 			),
+			loadScheduledChanges(this.dataSource, contract.id, holdingId),
 		]);
 		const items: FactsItem[] = itemRows.map((row) => ({
 			is_recurring: row.is_recurring !== false,
@@ -270,6 +292,25 @@ export class Contract360Service {
 				next_item_end_date: toText(context.next_item_end_date),
 				overdue_renewal_date: itemFacts.overdue_renewal_date,
 				closed_date: toText(context.churn_date) ?? (closingEvent ? eventDate(closingEvent) : null),
+				// Hitos de la línea de tiempo (Domi 13-11): lo ocurrido (historial) y lo programado (cambios futuros sin aplicar).
+				// Lo revertido (baja reactivada, cambio programado revertido) no es un hito.
+				events: history.data
+					.filter((event) => !event.metadata?.reversed_by)
+					.map((event) => ({ type: event.type, title: event.title, date: eventDate(event) })),
+				scheduled_changes: scheduled
+					.filter((pact) => pact.status === 'scheduled' && !pact.parent_id)
+					.map((pact) => ({
+						id: pact.id,
+						trigger: pact.trigger,
+						date:
+							pact.trigger === 'on_date'
+								? pact.effective_date
+								: pact.trigger === 'every_n_months'
+									? (pact.next_effective_date ?? pact.anchor_date)
+									: null,
+						label: pactLabel(pact),
+					})),
+				today,
 			}),
 			facts: {
 				contract_currency: contractCurrency,
