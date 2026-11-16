@@ -59,3 +59,43 @@ vuelve a escribir las columnas de precio de esas 6 (una corrección), su mensual
   prorrateado. `proration`: campo opcional nuevo en la vista previa. Front: renegociación y prorrateo son textos y un modo de ingreso más.
 - Registros: ninguno migrado. Tests: API `contract-changes.spec` (+ glosa y `proration`), `invoice-description.spec`,
   `notifications.service.spec`; suites de contratos y notificaciones 1354 en verde. Front: 1012 tests de Contratos en verde.
+
+## Pendiente del review (sin corrección al 13-11)
+
+Estado en [`ROADMAP-OPERATIVO.md`](../ROADMAP-OPERATIVO.md) → "Pendientes del sistema nuevo" (C3 a CX). La parte E del envío automático
+y A10166 están en [`errores-emision-erp-28-10.md`](./errores-emision-erp-28-10.md) → "E · Pendiente".
+
+- **C3** · `odoo-failure-alert.ts`: la clave de agrupación lleva el hash del mensaje; en `unknown`/`validation` el texto crudo puede
+  traer datos de la factura y cada una sale como alerta aparte. Falta agrupar por causa.
+- **C4** · `revertIfNotPosted` no deshace `issue_date` ni los montos que pudo escribir un aviso falso de "emitida". Verificar qué
+  `invoice_date` manda `mapInvoiceToOdooFormat`.
+- **C5** · Upsell sobre períodos prepagados ya emitidos (anual o trimestral): facturas de diferencia con fecha pasada o tramo que supera
+  el fin del ítem. Sin bug confirmado: falta el test.
+- **C6** · Downsell prorrateado (`contract-changes.ts`): el tramo actual = Σ líneas del grupo × ratio asume que todas cubren el período
+  completo; un tramo previo (upsell a mitad del mismo mes) se prorratea mal y se borra. Calcular por línea con su solape de días.
+- **C7** · `coveringPendingLine` toma solo la primera Por Emitir que cubre la fecha: con el período partido en dos facturas, la segunda
+  queda entera.
+- **C9** · `BILLED_STATUSES` duplicado en el scheduler, el webhook e `ISSUED_STATUSES`. Unificar.
+- **CX** · Anotado el 02-11: la edición masiva (`planBulkHeader`) no ofrece documento tributario; `invoice-dte.ts` trata como exportación
+  una factura nacional de un contrato 110 (Chile).
+
+### C8 · Cambiar el modelo de precio desde el primer período (análisis del 28-10, sin OK)
+
+Caso: CTR-2026-413 (Arca EC), contrato recién creado, PATHFINDER+ 332 × 9,06 mes vencido 01-01 → 31-12-2026, 12 Por Emitir sin emitir;
+pasar a "por consumo" desde enero. La vista previa con fecha efectiva 01-01 avisa `price_model_from_next_period` (01-02), enero queda
+fijo y el plan quita y recrea líneas de todo el plazo. Producción ya corregida por datos: no reparar.
+
+- **Causa.** `nextPeriodStart` (`billing-engine.ts`) exige `period.period_start > item.start_date` y excluye siempre el primer período.
+  Lo usan `planPriceModelChange`, `planItemChange` (DOWNSELL y precio), `planReterm` (ahí debe seguir excluyendo: un cambio de plazo en
+  el inicio es una corrección) y `scheduled-changes.ts` (pactos, que ya cubren `item.start_date >= date`).
+- **Segundo problema.** `mergeTarget` solo funde en Por Emitir con `issue_date >= hoy`: en un contrato con vigencia retroactiva las
+  Por Emitir pasadas quedan sin destino, se quitan sus líneas y se crean facturas nuevas.
+- **Esperado (Domi).** (1) Fecha efectiva = inicio de un período del ítem, incluido el primero, sin emitidas desde ahí → rige desde
+  ahí; el bloqueo `issued_after_effective_date` ya protege lo emitido. (2) A mitad de período se mantiene el corrimiento. (3) Con
+  `cut === item.start_date` no se crea ítem ni tramo vacío ni se rearman facturas: se recalculan las Por Emitir existentes.
+- **Propuesta.** `nextPeriodStart(…, { includeFirst: true })` en `planPriceModelChange` y `planItemChange`; `planReterm` y pactos sin
+  cambio. En `planPriceModelChange`, si `cut === item.start_date`: variante en el lugar (`update_item` del ítem original con el modelo
+  nuevo, precio nuevo como versión siguiente, sin RENEWAL ni `renewed_by_item_id`, conservando el id) y recálculo de las Por Emitir por
+  período con `pricedItemInvoicesByPeriod` + `mergePricedLines`; el generador solo para períodos sin factura.
+- **Tests pedidos.** Fijo → por consumo con fecha efectiva = inicio y nada emitido (sin facturas de más); igual con la primera emitida
+  (bloqueo); mitad de período (corre); mes vencido y anticipado; día de ciclo distinto del inicio; downsell según lo que se decida.
