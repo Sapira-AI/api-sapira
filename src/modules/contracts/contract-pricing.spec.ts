@@ -165,7 +165,7 @@ describe('CreateContractItemDto.price (PriceSpecDto)', () => {
 				})
 			)
 		).toEqual([
-			'items.0.price.model: Elige el modelo de precio: fijo, por tramos, volumen, paquete o asiento',
+			'items.0.price.model: Elige el modelo de precio: fijo, por unidad, por tramos, por volumen, por paquete o por asiento',
 			'items.0.price.quantity_type: Indica si la cantidad es fija o medida',
 			'items.0.price.billable_metric_id: Métrica facturable inválida',
 			'items.0.price.unit_amount: El precio por unidad no puede ser negativo',

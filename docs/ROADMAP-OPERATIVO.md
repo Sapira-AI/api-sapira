@@ -101,8 +101,9 @@
 >
 > Estado base 13-11: `domi` = `qa` = `main` en ambos repos (API v0.0.167, front v0.1.106); QA y producción sin migraciones pendientes.
 >
-> Estado 16-11: `qa` = `main` con API v0.0.168 (PR #269 y #270) y front v0.1.107 (PR #113 y #114): incluyen los bloques 8 y 9. En `domi`,
-> **solo en local y sin push**, quedan los commits del bloque 6: en la API, los documentos del 13-11 (`b9d32b9`) y la rebaja con compensación; en el front, `8211f76`.
+> Estado 16-11: `qa` = `main` con API v0.0.169 (PR #271 y #272) y front v0.1.108 (PR #115 y #116): incluyen los bloques 6, 8 y 9. La
+> función de devengo del bloque 6 (`revenue_schedule_rebuild_contract_ccy` v3.9) está aplicada en QA y en producción desde el 16-11.
+> 18-11: bloque 10 (nombres únicos de los modelos de precio y Por unidad desde la pantalla) subido a `domi` en los dos repos; falta el PR a `qa`.
 
 **1 · Ransa / SimpliRoute** · detalle: [`cambios/precio-unitario-del-periodo-13-11.md`](./cambios/precio-unitario-del-periodo-13-11.md)
 
@@ -154,12 +155,12 @@
 
 **6 · Rebaja con fecha anterior a lo emitido: compensar en las próximas facturas** (pedido de soporte 13-11; caso SimpliRoute S07212, México, MXN) · detalle: [`cambios/baja-retroactiva-con-compensacion-16-11.md`](./cambios/baja-retroactiva-con-compensacion-16-11.md)
 
-Construido el 16-11 en `domi`, **sin push ni deploy**: modo `issued_overcharge: compensate_next` en la rebaja y en la corrección de una baja ya registrada. La baja rige desde su fecha real y lo facturado de más cubre parte de los períodos siguientes: las próximas Por Emitir del mismo producto salen con **menos cantidad** (baja de cantidad) o **menor precio unitario** (baja de precio), **sin descuento**, sin líneas negativas y sin nota de crédito. Protección del ajuste ante cualquier cambio posterior, devengo y envío al ERP (la línea viaja como cualquier otra). Sin migración: una función de devengo por aplicar como asset en QA y producción. Un solo commit por repo (front `8211f76`): la primera versión del mismo día, con el ajuste como descuento, se descartó antes de subir y no quedó en el historial.
+Construido el 16-11 y en `qa` y `main` desde ese día (API v0.0.169, front v0.1.108): modo `issued_overcharge: compensate_next` en la rebaja y en la corrección de una baja ya registrada. La baja rige desde su fecha real y lo facturado de más cubre parte de los períodos siguientes: las próximas Por Emitir del mismo producto salen con **menos cantidad** (baja de cantidad) o **menor precio unitario** (baja de precio), **sin descuento**, sin líneas negativas y sin nota de crédito. Protección del ajuste ante cualquier cambio posterior, devengo y envío al ERP (la línea viaja como cualquier otra). Sin migración: la función de devengo se aplicó como asset en QA y en producción el 16-11 (con OK de Domi). Un solo commit por repo (front `8211f76`): la primera versión del mismo día, con el ajuste como descuento, se descartó antes de subir y no quedó en el historial.
 
 | # | Pendiente | Estado | Qué falta |
 |---|---|---|---|
-| B6 | **Expresar el ajuste en cantidad o en precio unitario, no como descuento** (Domi 16-11: "no hay descuento": lo facturado de más cubre parte de los períodos siguientes). S07212: 61 − 14 × 3 = 19 × 627 = 11.913 | **Construido 16-11 con OK de Domi, commit local** | Nada: va con B1. Motor, Editar factura, Reorganizar, facturar por OC, devengo, envío al ERP, front, tests y docs. API 259 suites en verde |
-| B1 | **Push, QA y deploy** del modo de compensación | Commit local 16-11, tests en verde | OK de Domi para push (antes, merge de `origin/qa`); aplicar `revenue_schedule_rebuild_contract_ccy.sql` en QA y, con OK, en producción (`nc_discount_revenue_adjustment.sql` ya no cambia). **La factura de diciembre de S07212 se emite sola el 01-12**: tiene que estar en producción antes |
+| B6 | **Expresar el ajuste en cantidad o en precio unitario, no como descuento** (Domi 16-11: "no hay descuento": lo facturado de más cubre parte de los períodos siguientes). S07212: 61 − 14 × 3 = 19 × 627 = 11.913 | **Hecho 16-11**, en producción con B1 | Nada. Motor, Editar factura, Reorganizar, facturar por OC, devengo, envío al ERP, front, tests y docs. API 259 suites en verde |
+| B1 | **Push, QA y deploy** del modo de compensación | **Hecho 16-11**: en `qa` y `main` (API v0.0.169, PR #271 y #272; front v0.1.108, PR #115 y #116) y `revenue_schedule_rebuild_contract_ccy.sql` (v3.9) aplicada en QA y en producción | Queda de Domi: corregir S07212 desde la pantalla (Corregir un dato mal cargado › la baja › 15 › Compensar en las próximas facturas) **antes del 01-12**, cuando su factura de diciembre se emite sola. Verificación de la función: en QA, dentro de una transacción con rollback, el devengo de 3 contratos con consumo o líneas manuales (114 filas) salió idéntico con la versión anterior y la nueva, y una marca de 100 en una línea Por Emitir subió en 100 el reconocido de su mes. Producción y QA: 0 líneas con la marca al aplicar |
 | B2 | **Corregir S07212** (la baja de 1 pasa a 15, compensando 26.334 en diciembre) | Después del deploy | La hace la usuaria: Corregir un dato › la baja › 15 › compensar en las próximas facturas. Simulado en tests con las cifras reales |
 | B3 | **Confirmar con Leon los decimales de cantidad del ERP** | Sin hacer | La línea que compensa viaja como cualquier otra (cantidad × precio, sin descuento): el envío no cambia. Con prorrateo por días la cantidad lleva hasta 4 decimales; si el ERP redondea a menos, esa línea diferiría en centavos. La línea que queda en 0 no viaja. Ya no hace falta probar un descuento alto en México. Nota en `v2-rediseno/cambios-integracion-para-leon.md` |
 | B4 | Devengo de un mes **emitido con desvío** (línea editada a mano o consumo) ante una rebaja retroactiva: sigue siendo lo facturado de ese período | Límite conocido, sin casos | Solo si aparece un caso: restar en D2-c lo compensado de ese período |
@@ -172,7 +173,7 @@ Construido el 16-11 en `domi`, **sin push ni deploy**: modo `issued_overcharge: 
 | L1 | **Eliminar funciones, triggers y demás objetos del sistema anterior** que se mantuvieron solo por el período de prueba, y dejar base de datos y repos sin restos que confundan en sesiones de desarrollo. Validar en detalle, objeto por objeto, que no se usa ni afecta nada antes de borrar | Sin empezar | Sesión especial, después de B1 y de actualizar estos documentos. Se relaciona con "Nuevos 05-10" de más abajo (premisa del borrado de funciones, edge function `rag-chat`) y con `reglas-desarrollo/logica-en-api-triggers.md` |
 | L2 | **Documentar que el paso al sistema nuevo está aplicado al 100 %** | Sin empezar | Al cerrar L1 |
 
-Orden acordado (Domi 13-11): sesión paralela de auto-renovación y pactos futuros (hecha) → B1 (construido 16-11, con B6) → actualizar documentos → sesión de L1 y L2.
+Orden acordado (Domi 13-11): sesión paralela de auto-renovación y pactos futuros (hecha) → B1 (hecho 16-11, con B6, en producción) → actualizar documentos → sesión de L1 y L2.
 
 **8 · Renovación automática y cambios programados** (SimpliRoute fin de año, 13-11) · detalle: [`cambios/renovacion-automatica-y-cambios-programados-13-11.md`](./cambios/renovacion-automatica-y-cambios-programados-13-11.md)
 
@@ -192,8 +193,19 @@ Construido el 13-11 (API y front) y en `qa` y `main` desde el 16-11 (API v0.0.16
 
 | # | Pendiente | Estado | Qué falta |
 |---|---|---|---|
-| M1 | **Aplicar la corrección en CTR-2026-425Bolivia** (a consumo, Vehículos, USD 19) | Después del deploy | La hace Carelis desde el front; simulación en solo lectura sin bloqueos |
+| M1 | **Aplicar la corrección en CTR-2026-425Bolivia** (a consumo, Vehículos, USD 19) | **Hecho** (verificado en solo lectura el 18-11) | Nada: el ítem está en Por unidad (`standard` + `metered`, Vehículos, 19, Vencido), sin consumos cargados todavía. Desde la pantalla no se podía hasta el bloque 10 |
 | M2 | Corrección del modelo **con períodos ya emitidos** | Hoy se bloquea | Decidir si se reparte la diferencia entre las Por Emitir, como las correcciones de valor |
+
+**10 · Modelos de precio: nombres únicos y Por unidad desde la pantalla** (soporte 18-11, SimpliRoute CTR-2026-425Bolivia; decisión de Domi 18-11) · detalle: [`cambios/nombres-modelos-de-precio-18-11.md`](./cambios/nombres-modelos-de-precio-18-11.md)
+
+Construido el 18-11 y subido a `domi` (front y textos de la API), **sin PR ni deploy**: seis modelos con un solo nombre (Fijo, Por unidad, Por tramos, Por volumen, Por paquete, Por asiento), sin el selector "cantidad fija o medida" (Fijo cobra la cantidad acordada; el resto, el consumo de una métrica), y el modelo simple por consumo (Por unidad) ya se puede crear y corregir desde contrato nuevo, cotización, agregar producto, "Cambiar el modelo de precio", "Corregir un dato mal cargado" y el catálogo de Precios. Sin migración ni cambios de validación en la API.
+
+| # | Pendiente | Estado | Qué falta |
+|---|---|---|---|
+| N1 | **PR, QA y deploy** | En `domi` (remoto) desde el 18-11; tests en verde (front y API) | Domi hace los PR, la API primero. Verificar en QA las cuatro puertas con un producto Por unidad |
+| N2 | **Filtro "Modelo" del catálogo de Precios** con Fijo y Por unidad por separado | Hoy van juntos ("Fijo o Por unidad") | `GET /prices` (catálogo) filtra solo por `model`; agregar `quantity_type` al `QueryPricesDto` como ya tiene `contract-prices`. Sin urgencia: 0 precios de catálogo en producción |
+| N3 | **Textos del sitio público** que nombran modelos ("Escalonado (step)", "Paquete") | Sin tocar | El copy del sitio sale de Claude Design; decidir si se alinea con los seis nombres |
+| N4 | **Modelos que tienen las referencias y Sapira no** | Sin decidir | Prepago con excedente, tramos que se acumulan en el plazo, porcentaje, matriz y fórmula; y volver a ofrecer cantidad fija con tramos o volumen (licencias con descuento por volumen, cobro anticipado). Lista en la nota de cambios |
 
 **Cerrado** (para no volver a listarlo)
 

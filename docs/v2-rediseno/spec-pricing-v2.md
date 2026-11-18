@@ -14,6 +14,10 @@
 -   Capa **nueva y compatible** con `contract_items`: el ítem apunta a un precio (`contract_items.price_id`). Los ítems
     existentes no se migran: `price_id NULL` = modelo `standard` con el comportamiento de hoy.
 -   Modelos etapa 1: `standard | graduated | volume | package | seat`. `percentage` y `matrix` quedan para después.
+-   **Nombres para personas (Domi 18-11)**: un solo nombre por modelo en todas las pantallas y textos. `standard` + `fixed` (o
+    sin precio) = **Fijo**; `standard` + `metered` = **Por unidad**; `graduated` = **Por tramos**; `volume` = **Por volumen**;
+    `package` = **Por paquete**; `seat` = **Por asiento**. No se usa "Estándar". Detalle:
+    [`cambios/nombres-modelos-de-precio-18-11.md`](../cambios/nombres-modelos-de-precio-18-11.md).
 -   Tramos `[{from, to|null, per_unit_amount, flat_amount}]`. Extras opcionales: unidades gratis, mínimo comprometido con
     true-up, tope máximo (cap). Cadencia y anticipado/vencido siguen **por línea**, como hoy.
 -   `consumption_entries` por contrato + ítem + período reemplaza `quantities` ("overrides", "cantidades variables").
@@ -518,7 +522,12 @@ bajando 25 %". Condiciones: unidades gratis, mínimo con true-up, tope. **Vista 
 /contracts/price-preview` con debounce): campo "simular: 1.250 rutas", chips de tramo, sublíneas y total del período, "≈ CLP …
 al FX de hoy". `PasoRevisar` muestra el modelo por ítem y las líneas `pending` del calendario con su aviso.
 
-**Transición: cantidad fija con modelo de precio (30-09).** En régimen, un ítem con modelo de precio distinto de "Fijo" usa
+**Cantidad fija con modelo de precio: retirada de la pantalla (18-11).** La transición de abajo terminó: el front ya no ofrece
+"cantidad fija o medida". Fijo cobra la cantidad acordada y todo otro modelo, el consumo de una métrica obligatoria (0 precios
+con modelo y cantidad fija en producción al 18-11). La API conserva el comportamiento descrito (lo sigue aceptando y tarifando)
+por si se decide ofrecerlo de nuevo. Las métricas se crean en Planes y precios › Métricas facturables.
+
+**Transición: cantidad fija con modelo de precio (30-09, histórico).** En régimen, un ítem con modelo de precio distinto de "Fijo" usa
 una **métrica facturable** (cantidad medida). Mientras los holdings no tengan sus métricas armadas, el editor mantiene la
 opción de cantidad **Fija** con cualquier modelo (tramos, volumen, paquete, asiento): el motor tarifa la cantidad del ítem en
 cada período, la prorratea en períodos parciales y su mensual equivalente suma al MRR. Es **transitorio**: el editor lo avisa
