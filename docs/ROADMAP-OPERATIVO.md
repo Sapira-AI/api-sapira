@@ -103,6 +103,7 @@
 >
 > Estado 16-11: `qa` = `main` con API v0.0.169 (PR #271 y #272) y front v0.1.108 (PR #115 y #116): incluyen los bloques 6, 8 y 9. La
 > función de devengo del bloque 6 (`revenue_schedule_rebuild_contract_ccy` v3.9) está aplicada en QA y en producción desde el 16-11.
+> 18-11: bloque 10 (nombres únicos de los modelos de precio y Por unidad desde la pantalla) subido a `domi` en los dos repos; falta el PR a `qa`.
 
 **1 · Ransa / SimpliRoute** · detalle: [`cambios/precio-unitario-del-periodo-13-11.md`](./cambios/precio-unitario-del-periodo-13-11.md)
 
@@ -192,8 +193,19 @@ Construido el 13-11 (API y front) y en `qa` y `main` desde el 16-11 (API v0.0.16
 
 | # | Pendiente | Estado | Qué falta |
 |---|---|---|---|
-| M1 | **Aplicar la corrección en CTR-2026-425Bolivia** (a consumo, Vehículos, USD 19) | Después del deploy | La hace Carelis desde el front; simulación en solo lectura sin bloqueos |
+| M1 | **Aplicar la corrección en CTR-2026-425Bolivia** (a consumo, Vehículos, USD 19) | **Hecho** (verificado en solo lectura el 18-11) | Nada: el ítem está en Por unidad (`standard` + `metered`, Vehículos, 19, Vencido), sin consumos cargados todavía. Desde la pantalla no se podía hasta el bloque 10 |
 | M2 | Corrección del modelo **con períodos ya emitidos** | Hoy se bloquea | Decidir si se reparte la diferencia entre las Por Emitir, como las correcciones de valor |
+
+**10 · Modelos de precio: nombres únicos y Por unidad desde la pantalla** (soporte 18-11, SimpliRoute CTR-2026-425Bolivia; decisión de Domi 18-11) · detalle: [`cambios/nombres-modelos-de-precio-18-11.md`](./cambios/nombres-modelos-de-precio-18-11.md)
+
+Construido el 18-11 y subido a `domi` (front y textos de la API), **sin PR ni deploy**: seis modelos con un solo nombre (Fijo, Por unidad, Por tramos, Por volumen, Por paquete, Por asiento), sin el selector "cantidad fija o medida" (Fijo cobra la cantidad acordada; el resto, el consumo de una métrica), y el modelo simple por consumo (Por unidad) ya se puede crear y corregir desde contrato nuevo, cotización, agregar producto, "Cambiar el modelo de precio", "Corregir un dato mal cargado" y el catálogo de Precios. Sin migración ni cambios de validación en la API.
+
+| # | Pendiente | Estado | Qué falta |
+|---|---|---|---|
+| N1 | **PR, QA y deploy** | En `domi` (remoto) desde el 18-11; tests en verde (front y API) | Domi hace los PR, la API primero. Verificar en QA las cuatro puertas con un producto Por unidad |
+| N2 | **Filtro "Modelo" del catálogo de Precios** con Fijo y Por unidad por separado | Hoy van juntos ("Fijo o Por unidad") | `GET /prices` (catálogo) filtra solo por `model`; agregar `quantity_type` al `QueryPricesDto` como ya tiene `contract-prices`. Sin urgencia: 0 precios de catálogo en producción |
+| N3 | **Textos del sitio público** que nombran modelos ("Escalonado (step)", "Paquete") | Sin tocar | El copy del sitio sale de Claude Design; decidir si se alinea con los seis nombres |
+| N4 | **Modelos que tienen las referencias y Sapira no** | Sin decidir | Prepago con excedente, tramos que se acumulan en el plazo, porcentaje, matriz y fórmula; y volver a ofrecer cantidad fija con tramos o volumen (licencias con descuento por volumen, cobro anticipado). Lista en la nota de cambios |
 
 **Cerrado** (para no volver a listarlo)
 

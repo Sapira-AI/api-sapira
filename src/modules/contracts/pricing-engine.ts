@@ -149,7 +149,20 @@ export const tierLabel = (tier: Pick<PriceTier, 'from' | 'to'>) => {
 	return tier.to === null || tier.to === undefined ? `${format(tier.from)}+` : `${format(tier.from)}–${format(tier.to)}`;
 };
 
-/** Precio "standard fijo": el caso de hoy; el generador no cambia para él. */
+/**
+ * Nombre único de cada modelo de precio en los textos para personas (Domi 18-11), el mismo de la lista "Modelo de precio"
+ * del front: `standard` es **fijo** si cobra la cantidad acordada del ítem y **por unidad** si cobra el consumo del período.
+ * Ya no se dice "estándar".
+ */
+const PRICE_MODEL_NAMES: Record<string, string> = { graduated: 'por tramos', volume: 'por volumen', package: 'por paquete', seat: 'por asiento' };
+
+export function priceModelName(model: unknown, quantityType: unknown): string {
+	if (model === null || model === undefined || model === 'standard') return quantityType === 'metered' ? 'por unidad' : 'fijo';
+
+	return PRICE_MODEL_NAMES[String(model)] ?? String(model);
+}
+
+/** Precio fijo (`standard` con cantidad fija, o sin precio): cantidad × precio unitario; el generador no cambia para él. */
 export const isStandardFixed = (price: PriceSpec | null | undefined) => !price || (price.model === 'standard' && price.quantity_type === 'fixed');
 
 /** Ítem por consumo: cantidad medida por una métrica facturable. */
@@ -168,7 +181,8 @@ export function validatePriceSpec(price: PriceSpec): PriceFieldError[] {
 	};
 
 	if (!price || typeof price !== 'object') return [{ field: 'model', message: 'Elige el modelo de precio' }];
-	if (!PRICE_MODELS.includes(price.model)) push('model', 'Elige el modelo de precio: fijo, por tramos, volumen, paquete o asiento');
+	if (!PRICE_MODELS.includes(price.model))
+		push('model', 'Elige el modelo de precio: fijo, por unidad, por tramos, por volumen, por paquete o por asiento');
 	if (!PRICE_QUANTITY_TYPES.includes(price.quantity_type)) push('quantity_type', 'Indica si la cantidad es fija o medida');
 	if (price.quantity_type === 'metered' && !present(price.billable_metric_id)) {
 		push('billable_metric_id', 'Un precio por consumo necesita una métrica facturable');

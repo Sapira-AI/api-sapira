@@ -36,7 +36,7 @@ const fieldErrors = (fn: () => unknown) => {
 };
 
 describe('price_model_change (cambiar el modelo de precio de un ítem)', () => {
-	it('estándar → tramos: corta el ítem el día antes, RENEWAL con el precio nuevo, MRR = el modelo a la cantidad base, Por Emitir regeneradas', () => {
+	it('fijo → por tramos: corta el ítem el día antes, RENEWAL con el precio nuevo, MRR = el modelo a la cantidad base, Por Emitir regeneradas', () => {
 		const plan = planChange(context(), request(change(TIERS), { effective_date: '2026-11-01' }));
 		const [renewal] = ofKind(plan.ops, 'insert_item');
 
@@ -75,6 +75,7 @@ describe('price_model_change (cambiar el modelo de precio de un ítem)', () => {
 		expect(ofKind(plan.ops, 'delete_line').some((op) => op.invoice_id === 'inv-10')).toBe(false);
 		expect(plan.preview.rsm.mrr_delta).toBe(-100);
 		expect(plan.event).toMatchObject({ type: 'DOWNSELL', subtype: 'price_model', amount_delta: -100, items_affected: [LICENCIA] });
+		expect(plan.event.description).toContain('pasa a precio por tramos desde el');
 		expect(plan.event.metadata).toMatchObject({
 			price_model: { model_before: 'standard', model_after: 'graduated', monthly_before: 1000, monthly_after: 900, base_quantity: 10 },
 		});
