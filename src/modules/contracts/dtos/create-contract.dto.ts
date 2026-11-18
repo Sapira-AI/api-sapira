@@ -148,8 +148,12 @@ export class PriceTierDto {
  * métrica si es medido, tope ≥ mínimo) la valida `validatePriceSpec` con `errors[{ field: items.N.price.<campo> }]`.
  */
 export class PriceSpecDto {
-	@ApiProperty({ enum: PRICE_MODELS, description: 'standard (por unidad), graduated (por tramos), volume, package o seat' })
-	@IsIn(PRICE_MODELS, { message: 'Elige el modelo de precio: fijo, por tramos, volumen, paquete o asiento' })
+	@ApiProperty({
+		enum: PRICE_MODELS,
+		description:
+			'standard (fijo con quantity_type fixed; por unidad con metered), graduated (por tramos), volume (por volumen), package (por paquete) o seat (por asiento)',
+	})
+	@IsIn(PRICE_MODELS, { message: 'Elige el modelo de precio: fijo, por unidad, por tramos, por volumen, por paquete o por asiento' })
 	model!: PriceModel;
 
 	@ApiProperty({ enum: PRICE_QUANTITY_TYPES, description: 'fixed = la cantidad del ítem; metered = la métrica facturable por período' })

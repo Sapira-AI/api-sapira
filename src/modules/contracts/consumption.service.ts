@@ -101,9 +101,9 @@ const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 type PeriodLine = ConsumptionPeriodLine & { sent_to_odoo_at?: string | null };
 const hasErpDraft = (line: PeriodLine) => (line.odoo_invoice_id !== null && line.odoo_invoice_id !== undefined) || Boolean(line.sent_to_odoo_at);
 export const ERP_DRAFT_STALE_CODE = 'erp_draft_stale';
-/** El unitario del período solo existe en el precio estándar (cantidad × precio): el resto de los modelos tarifa con sus tramos o paquetes. */
+/** El unitario del período solo existe en los precios Fijo y Por unidad (`standard`: cantidad × precio): el resto de los modelos tarifa con sus tramos o paquetes. */
 export const PERIOD_UNIT_PRICE_MODEL_MESSAGE =
-	'El precio unitario del período solo se informa en ítems con precio Estándar (cantidad × precio): en este ítem el precio sale de su modelo';
+	'El precio unitario del período solo se informa en ítems con precio Fijo o Por unidad (cantidad × precio): en este ítem el precio sale de su modelo';
 const acceptsPeriodUnitPrice = (item: { price: PriceSpec | null }) => !item.price || item.price.model === 'standard';
 /** Aviso: el consumo recalculó también el documento unificado Por Emitir que lleva la factura de origen del período. */
 export const CONSOLIDATED_RESYNC_CODE = 'consolidated_resynced';

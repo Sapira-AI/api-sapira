@@ -95,6 +95,7 @@ import {
 	type PricedLine,
 	type PricedSubline,
 	priceLine,
+	priceModelName,
 	type PriceSpec,
 	type QuantitySource,
 	validatePriceSpec,
@@ -6010,14 +6011,6 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 	p.closeHeaders(methodOnly ? 'Cambio de modo de cobro' : 'Cambio de modelo de precio');
 	p.mrrDelta = round2(mrrDelta);
 	const type = Math.abs(mrrDelta) < 0.005 ? 'RENEWAL' : mrrDelta > 0 ? 'UPSELL' : 'DOWNSELL';
-	const label: Record<string, string> = {
-		standard: 'estándar',
-		graduated: 'por tramos',
-		volume: 'por volumen',
-		package: 'por paquete',
-		seat: 'por asiento',
-	};
-
 	if (methodOnly)
 		return p.finish({
 			type,
@@ -6036,9 +6029,9 @@ export function planPriceModelChange(ctx: ChangeContext, req: ContractChangeRequ
 		subtype: 'price_model',
 		title: 'Cambio de modelo de precio',
 		description: item
-			? `"${item.product_name}" pasa a precio ${label[String(spec?.model)] ?? spec?.model ?? ''}${
-					spec && isMetered(spec) ? ' por consumo' : ''
-				} desde el ${String(summary.cut ?? p.effective)}${mrrDelta ? ` · MRR ${mrrDelta >= 0 ? '+' : ''}${money(mrrDelta)}` : ''}`
+			? `"${item.product_name}" pasa a precio ${priceModelName(spec?.model, spec?.quantity_type)} desde el ${String(summary.cut ?? p.effective)}${
+					mrrDelta ? ` · MRR ${mrrDelta >= 0 ? '+' : ''}${money(mrrDelta)}` : ''
+				}`
 			: 'Cambio de modelo de precio',
 		amount_delta: round2(mrrDelta),
 		items_affected: item ? [item.id] : [],
@@ -8240,15 +8233,7 @@ function planPriceModelCorrection(ctx: ChangeContext, req: ContractChangeRequest
 	if (engineItem) p.addGeneratedInvoices([engineItem], 'cycle');
 	p.closeHeaders('Corrección del modelo de precio');
 	p.mrrDelta = round2(mrrDelta);
-	const label: Record<string, string> = {
-		standard: 'estándar',
-		graduated: 'por tramos',
-		volume: 'por volumen',
-		package: 'por paquete',
-		seat: 'por asiento',
-	};
-	const describe = (model: unknown, quantityType: unknown) =>
-		`${label[String(model)] ?? String(model)}${quantityType === 'metered' ? ' por consumo' : ''}`;
+	const describe = priceModelName;
 
 	return p.finish({
 		type: 'ITEM_CORRECTED',

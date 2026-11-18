@@ -5,6 +5,7 @@ import {
 	isMetered,
 	isStandardFixed,
 	priceLine,
+	priceModelName,
 	type PriceSpec,
 	pricingGlosa,
 	resolveQuantity,
@@ -488,5 +489,15 @@ describe('helpers', () => {
 		expect(isMetered(null)).toBe(false);
 		expect(tierLabel({ from: 2001, to: null })).toBe('2.001+');
 		expect(tierLabel({ from: 501, to: 2000 })).toBe('501–2.000');
+	});
+
+	it('priceModelName: un solo nombre por modelo; `standard` es fijo (cantidad acordada) o por unidad (consumo), nunca "estándar" (Domi 18-11)', () => {
+		expect(priceModelName('standard', 'fixed')).toBe('fijo');
+		expect(priceModelName(null, null)).toBe('fijo');
+		expect(priceModelName('standard', 'metered')).toBe('por unidad');
+		expect(priceModelName('graduated', 'metered')).toBe('por tramos');
+		expect(priceModelName('volume', 'metered')).toBe('por volumen');
+		expect(priceModelName('package', 'metered')).toBe('por paquete');
+		expect(priceModelName('seat', 'metered')).toBe('por asiento');
 	});
 });

@@ -49,7 +49,7 @@ export class UpsertConsumptionDto {
 
 	@ApiPropertyOptional({
 		description:
-			'Precio unitario del período (moneda del ítem, antes del descuento), solo en ítems de precio estándar por consumo: la línea queda en cantidad × este unitario. Ausente = se conserva el del período (o el del precio si no había); null = vuelve al del precio del ítem',
+			'Precio unitario del período (moneda del ítem, antes del descuento), solo en ítems de precio Fijo o Por unidad (`standard`): la línea queda en cantidad × este unitario. Ausente = se conserva el del período (o el del precio si no había); null = vuelve al del precio del ítem',
 		nullable: true,
 		example: 20.1412,
 	})

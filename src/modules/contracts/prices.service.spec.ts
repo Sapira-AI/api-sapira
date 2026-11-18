@@ -523,7 +523,7 @@ describe('DTOs del catálogo', () => {
 			'name: Escribe el nombre del precio',
 			'owner: property owner should not exist',
 			'product_id: Producto inválido',
-			'spec.model: Elige el modelo de precio: fijo, por tramos, volumen, paquete o asiento',
+			'spec.model: Elige el modelo de precio: fijo, por unidad, por tramos, por volumen, por paquete o por asiento',
 			'spec.quantity_type: Indica si la cantidad es fija o medida',
 		]);
 		expect(plainToInstance(CreatePriceDto, { currency: ' clf ' }).currency).toBe('CLF');

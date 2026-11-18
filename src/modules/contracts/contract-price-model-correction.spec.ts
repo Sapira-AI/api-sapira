@@ -109,7 +109,7 @@ const correction = (item: Record<string, unknown> = {}) =>
 	});
 
 describe('corregir el modelo de precio mal cargado (Bolivia 13-11)', () => {
-	it('a consumo estándar (Vehículos, 19): el ítem se reescribe en su lugar y de marzo a febrero queda por consumo; sin RENEWAL y con MRR 152', () => {
+	it('de fijo a por unidad (consumo de Vehículos, 19): el ítem se reescribe en su lugar y de marzo a febrero queda por consumo; sin RENEWAL y con MRR 152', () => {
 		const plan = planChange(bolivia(), correction());
 
 		expect(plan.preview.blockers).toEqual([]);
@@ -150,6 +150,9 @@ describe('corregir el modelo de precio mal cargado (Bolivia 13-11)', () => {
 		// MRR = base del modelo nuevo (8 × 19): no cambia; devengo desde el inicio.
 		expect(plan.preview.rsm?.mrr_delta).toBe(0);
 		expect(plan.event).toMatchObject({ type: 'ITEM_CORRECTED', subtype: 'price_model', amount_delta: 0, items_affected: [ITEM] });
+		// El historial nombra los modelos con su nombre único: de fijo (cantidad acordada) a por unidad (consumo).
+		expect(plan.event.description).toContain('fijo → por unidad');
+		expect(plan.event.description).not.toMatch(/estándar/i);
 		expect(plan.event.rsm_from_month).toBe('2026-03-01');
 		expect(plan.event.metadata.price_model).toMatchObject({
 			correction: true,
