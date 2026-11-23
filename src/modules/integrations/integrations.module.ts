@@ -19,6 +19,7 @@ import { SalesforceSyncLog, SalesforceSyncLogSchema } from '@/modules/salesforce
 import { StripeIntegrationLog, StripeIntegrationLogSchema } from '@/modules/stripe/schemas/stripe-integration-log.schema';
 import { StripeModule } from '@/modules/stripe/stripe.module';
 
+import { CrmAccountsService } from './adapters/crm-accounts';
 import { CrmAdapter } from './adapters/crm.adapter';
 import { DatosAdapter } from './adapters/datos.adapter';
 import { ErpAdapter } from './adapters/erp.adapter';
@@ -50,6 +51,6 @@ import { IntegrationsService } from './integrations.service';
 		]),
 	],
 	controllers: [IntegrationsController],
-	providers: [IntegrationsService, ErpAdapter, CrmAdapter, StripeAdapter, DatosAdapter],
+	providers: [IntegrationsService, ErpAdapter, CrmAdapter, CrmAccountsService, StripeAdapter, DatosAdapter],
 })
 export class IntegrationsModule {}

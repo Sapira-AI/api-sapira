@@ -24,6 +24,8 @@ describe('SalesforceSyncCompleteService', () => {
 			update: jest.fn(),
 			create: jest.fn(),
 			save: jest.fn(),
+			// Asignación de una razón social sin cliente (`linkOrphanClientEntity`): por defecto no asigna nada.
+			query: jest.fn().mockResolvedValue([]),
 		};
 		// Transacción de la importación (cotizaciones protegidas): repos por entity + `query` para protección y evento.
 		const txRepos = {
@@ -1044,6 +1046,115 @@ describe('SalesforceSyncCompleteService', () => {
 		expect(clientEntityRepository.update).toHaveBeenCalledWith('entity-2', expect.objectContaining({ tax_id: '76517784-7' }));
 		expect(typeormService.createClientEntityClient).not.toHaveBeenCalled();
 		expect(odooPartnersService.resolveAndLinkPartnerForEntityId).toHaveBeenCalledTimes(2);
+	});
+
+	describe('traer clientes desde el CRM (Domi 23-11)', () => {
+		it('el cliente de una cuenta se busca por el vínculo de la integración, luego por su ID en el CRM y al final por número', async () => {
+			const { service, typeormService, clientRepository } = buildService();
+
+			typeormService.getObjectMapping.mockResolvedValueOnce('client-mapped');
+			await expect(service.findClientIdForAccount('holding-1', 'acc-1', 'N-1')).resolves.toBe('client-mapped');
+			expect(clientRepository.findOne).not.toHaveBeenCalled();
+
+			typeormService.getObjectMapping.mockResolvedValue(null);
+			clientRepository.findOne.mockResolvedValueOnce({ id: 'client-by-crm-id' });
+			await expect(service.findClientIdForAccount('holding-1', 'acc-1', 'N-1')).resolves.toBe('client-by-crm-id');
+			expect(clientRepository.findOne).toHaveBeenCalledWith({
+				where: { holding_id: 'holding-1', salesforce_account_id: 'acc-1' },
+				select: ['id'],
+			});
+			expect(typeormService.getClientByNumber).not.toHaveBeenCalled();
+
+			clientRepository.findOne.mockResolvedValue(null);
+			typeormService.getClientByNumber.mockResolvedValue('client-by-number');
+			await expect(service.findClientIdForAccount('holding-1', 'acc-1', 'N-1')).resolves.toBe('client-by-number');
+			await expect(service.findClientIdForAccount('holding-1', 'acc-1', null)).resolves.toBeNull();
+		});
+
+		it('un cliente creado a mano con su ID en el CRM no se duplica: importar la cuenta lo actualiza y deja el vínculo', async () => {
+			const { service, typeormService, clientRepository, fieldMappingEngine } = buildService();
+
+			typeormService.getObjectMapping.mockResolvedValue(null);
+			clientRepository.findOne.mockResolvedValue({ id: 'client-manual', client_number: 'CL-1' });
+			fieldMappingEngine.buildMappedRecord.mockResolvedValue({ name_commercial: 'Sidapt', salesforce_account_id: 'acc-1' });
+			jest.spyOn(service as any, 'createOrLinkClientEntity').mockResolvedValue(undefined);
+			const stats = { clientsCreated: 0, clientsUpdated: 0, errors: [] };
+
+			await expect((service as any).syncAccountFromData({ Id: 'acc-1', Name: 'Sidapt' }, 'holding-1', stats)).resolves.toBe('client-manual');
+			expect(clientRepository.save).not.toHaveBeenCalled();
+			expect(typeormService.createObjectMapping).toHaveBeenCalledWith('holding-1', 'Account', 'acc-1', 'clients', 'client-manual');
+			expect(stats).toEqual(expect.objectContaining({ clientsCreated: 0, clientsUpdated: 1 }));
+		});
+
+		it('una sola razón social con ese RUT y sin cliente se asigna al cliente; repetida no se toca', async () => {
+			const { service, typeormService, clientEntityRepository } = buildService();
+			const link = jest.spyOn(service, 'linkOrphanClientEntity').mockResolvedValue(true);
+			const payload = { legal_name: 'Acme SpA', tax_id: '76517784-7', country: 'Chile' };
+
+			typeormService.resolveClientEntitiesByTaxId.mockResolvedValue({ entities: [{ id: 'entity-1' }] });
+			await (service as any).createOrLinkClientEntity('client-1', payload, { Id: 'account-1', Name: 'Acme SpA' }, 'holding-1');
+			expect(link).toHaveBeenCalledWith('holding-1', 'client-1', 'entity-1');
+			expect(clientEntityRepository.save).not.toHaveBeenCalled();
+
+			link.mockClear();
+			typeormService.resolveClientEntitiesByTaxId.mockResolvedValue({ entities: [{ id: 'entity-1' }, { id: 'entity-2' }] });
+			await (service as any).createOrLinkClientEntity('client-1', payload, { Id: 'account-1', Name: 'Acme SpA' }, 'holding-1');
+			expect(link).not.toHaveBeenCalled();
+		});
+
+		it('la asignación solo aplica a una razón social sin ningún cliente (nunca reasigna) y es del holding', async () => {
+			const { service, clientEntityRepository } = buildService();
+
+			clientEntityRepository.query.mockResolvedValueOnce([[{ id: 'link-1' }], 1]);
+			await expect(service.linkOrphanClientEntity('holding-1', 'client-1', 'entity-1')).resolves.toBe(true);
+			const [sql, params] = clientEntityRepository.query.mock.calls[0];
+
+			expect(params).toEqual(['holding-1', 'client-1', 'entity-1']);
+			expect(sql).toContain('e.holding_id = $1');
+			expect(sql).toContain('c.holding_id = $1');
+			expect(sql).toContain('e.client_id IS NULL');
+			expect(sql).toContain('NOT EXISTS (SELECT 1 FROM client_entity_clients x WHERE x.client_entity_id = e.id)');
+			// Principal solo si el cliente no tiene otra.
+			expect(sql).toContain('NOT EXISTS (SELECT 1 FROM client_entity_clients p WHERE p.client_id = c.id AND p.is_primary)');
+			clientEntityRepository.query.mockResolvedValueOnce([]);
+			await expect(service.linkOrphanClientEntity('holding-1', 'client-1', 'entity-con-cliente')).resolves.toBe(false);
+		});
+
+		it('importar cuentas leídas del CRM: tabla intermedia → clasificar → procesar solo esas cuentas', async () => {
+			const { service, stagingService } = buildService();
+			const classify = jest.spyOn(service as any, 'classifyAccountStaging').mockResolvedValue(undefined);
+			const process = jest.spyOn(service as any, 'processAccountStaging').mockResolvedValue(undefined);
+			const account = { Id: 'acc-1', Name: 'Sidapt' };
+
+			await service.importAccountsFromCrm('holding-1', [account] as any, { skipClientEntityFor: ['acc-1'] });
+			expect(stagingService.upsertAccounts).toHaveBeenCalledWith('holding-1', [account], 'batch-1', 'session-1');
+			expect(classify).toHaveBeenCalledWith('holding-1', 'batch-1');
+			expect(process).toHaveBeenCalledWith('holding-1', 'batch-1', expect.any(Object), {
+				salesforceIds: ['acc-1'],
+				skipClientEntityFor: ['acc-1'],
+			});
+			stagingService.upsertAccounts.mockClear();
+			await service.importAccountsFromCrm('holding-1', []);
+			expect(stagingService.upsertAccounts).not.toHaveBeenCalled();
+		});
+
+		it('con la razón social decidida por quien importa, la cuenta no crea ni vincula una por su cuenta', async () => {
+			const { service, typeormService, clientRepository, fieldMappingEngine } = buildService();
+			const entity = jest.spyOn(service as any, 'createOrLinkClientEntity').mockResolvedValue(undefined);
+
+			typeormService.getObjectMapping.mockResolvedValue(null);
+			clientRepository.findOne.mockResolvedValue(null);
+			clientRepository.create.mockImplementation((value: unknown) => value);
+			clientRepository.save.mockResolvedValue({ id: 'client-new' });
+			fieldMappingEngine.buildMappedRecord.mockResolvedValue({ name_commercial: 'Sidapt' });
+			const stats = { clientsCreated: 0, clientsUpdated: 0, errors: [] };
+
+			await (service as any).syncAccountFromData({ Id: 'acc-1', Name: 'Sidapt' }, 'holding-1', stats, { skipClientEntityFor: ['acc-1'] });
+			expect(entity).not.toHaveBeenCalled();
+			expect(stats.clientsCreated).toBe(1);
+			await (service as any).syncAccountFromData({ Id: 'acc-2', Name: 'Otra' }, 'holding-1', stats, { skipClientEntityFor: ['acc-1'] });
+			expect(entity).toHaveBeenCalledTimes(1);
+		});
 	});
 
 	it('conserva el RUT existente cuando Salesforce no entrega RUT__c', async () => {

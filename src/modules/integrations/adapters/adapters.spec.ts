@@ -433,6 +433,103 @@ describe('CrmAdapter', () => {
 		expect((await adapter.listRuns(HOLDING, { page: 1, limit: 20, status: ['failed'] })).total).toBe(0);
 	});
 
+	it('historial: una importación de clientes desde el CRM aparece como "Importación de clientes" con una línea por cuenta', async () => {
+		const job = {
+			jobId: `salesforce-accounts-import:production:${HOLDING}:abc`,
+			status: 'completed',
+			startedAt: new Date('2026-11-23T12:00:00Z'),
+			completedAt: new Date('2026-11-23T12:00:05Z'),
+			holdingResults: [{ holding_id: HOLDING, success: true, opportunities: 0, accounts: 3, clientsCreated: 1, clientsUpdated: 1 }],
+		};
+		const logs = [
+			{
+				stage: 'account',
+				level: 'info',
+				salesforceAccountId: '001A',
+				message: 'Cliente creado',
+				metadata: { account_name: 'Sidapt', client_id: 'client-1' },
+			},
+			{
+				stage: 'account',
+				level: 'info',
+				salesforceAccountId: '001B',
+				message: 'El cliente ya existía',
+				metadata: { account_name: 'Acme', client_id: 'client-2' },
+			},
+			{
+				stage: 'account',
+				level: 'error',
+				salesforceAccountId: '001C',
+				message: 'No se pudo importar la cuenta',
+				errorMessage: 'La cuenta no tiene país',
+				metadata: {},
+			},
+		];
+		const aggregate = jest.fn(() => ({ exec: async () => [{ _id: job.jobId, count: 1 }] }));
+		const findLogs = jest.fn(() => chain(logs));
+		const adapter = new CrmAdapter(
+			{ query: jest.fn(async () => []) } as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{} as never,
+			{ find: jest.fn(() => chain([job])), findOne: jest.fn(() => lean(job)) } as never,
+			{ aggregate, find: findLogs } as never,
+			config as never
+		);
+		const [run] = (await adapter.listRuns(HOLDING, { page: 1, limit: 20 })).data;
+
+		expect(run).toEqual(
+			expect.objectContaining({
+				id: `crm-job:${job.jobId}`,
+				kind: 'crm_accounts',
+				kind_label: 'Importación de clientes',
+				trigger: 'manual',
+				status: 'partial',
+				totals: { total: 3, ok: 1, unchanged: 1, errors: 1, skipped: 1 },
+				metrics: expect.objectContaining({ clients_created: 1, clients_updated: 1 }),
+			})
+		);
+		expect(aggregate).toHaveBeenCalledWith(
+			expect.arrayContaining([{ $match: expect.objectContaining({ holdingId: HOLDING, stage: { $in: ['opportunity', 'account'] } }) }])
+		);
+		const detail = await adapter.getRun(HOLDING, `crm-job:${job.jobId}`);
+
+		expect(findLogs).toHaveBeenCalledWith({ holdingId: HOLDING, jobId: job.jobId, stage: { $in: ['opportunity', 'account'] } });
+		expect(detail.records).toEqual([
+			{
+				object: 'account',
+				record_key: '001A',
+				label: 'Sidapt',
+				sapira_id: 'client-1',
+				external_id: '001A',
+				status: 'ok',
+				message: 'Cliente creado',
+			},
+			{
+				object: 'account',
+				record_key: '001B',
+				label: 'Acme',
+				sapira_id: 'client-2',
+				external_id: '001B',
+				status: 'ok',
+				message: 'El cliente ya existía',
+			},
+			{
+				object: 'account',
+				record_key: '001C',
+				label: '001C',
+				sapira_id: null,
+				external_id: '001C',
+				status: 'error',
+				message: 'La cuenta no tiene país',
+			},
+		]);
+	});
+
 	it('recordHistory: logs de corridas diarias (Mongo) + ítems de ejecuciones (Postgres), filtrados por clave y en una lectura cada uno', async () => {
 		const find = jest.fn(() => ({
 			lean: () => ({

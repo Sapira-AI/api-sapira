@@ -71,6 +71,7 @@ import {
 	SyncStarted,
 } from '../integrations.types';
 
+import { CRM_ACCOUNTS_IMPORT_JOB_PREFIX, CRM_ACCOUNTS_IMPORT_KIND } from './crm-accounts';
 import { FieldsMappingHelper } from './fields-mapping.helper';
 import { IntegrationAdapter, IntegrationRules } from './integration-adapter';
 
@@ -85,7 +86,10 @@ const RUN_KINDS: Record<string, { kind: string; label: string }> = {
 	retry_full: { kind: 'crm_retry', label: 'Traer e importar oportunidades' },
 };
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const isManualJob = (jobId: string) => jobId.startsWith('salesforce-holding-sync:') || jobId.includes(':manual:');
+const isAccountsImportJob = (jobId: string) => jobId.startsWith(CRM_ACCOUNTS_IMPORT_JOB_PREFIX);
+const isManualJob = (jobId: string) => jobId.startsWith('salesforce-holding-sync:') || jobId.includes(':manual:') || isAccountsImportJob(jobId);
+/** Etapas de la bitácora que son un registro de la corrida: oportunidades (sincronización) y cuentas (importación de clientes). */
+const RECORD_LOG_STAGES = ['opportunity', 'account'];
 const logStatus = (level: string | undefined): RunRecord['status'] => (level === 'error' ? 'error' : level === 'warning' ? 'skipped' : 'ok');
 const logMessage = (log: Pick<SalesforceSyncLog, 'errorMessage' | 'integrationNotes' | 'message'>) =>
 	log.errorMessage ?? log.integrationNotes ?? log.message ?? null;
@@ -417,22 +421,25 @@ export class CrmAdapter implements IntegrationAdapter {
 	private jobToRun(job: SalesforceSchedulerJob, holdingId: string, errors: number): IntegrationRun {
 		const result = (job.holdingResults ?? []).find((item) => item.holding_id === holdingId);
 		const manual = isManualJob(job.jobId);
+		const accounts = isAccountsImportJob(job.jobId);
 		const interrupted = job.status === 'running' && this.interrupted(job);
-		const ok = (result?.quotesCreated ?? 0) + (result?.quotesUpdated ?? 0);
+		// Importación de clientes: bien = clientes creados; los que ya existían son "sin cambios".
+		const ok = accounts ? (result?.clientsCreated ?? 0) : (result?.quotesCreated ?? 0) + (result?.quotesUpdated ?? 0);
 		// Oportunidades revisadas sin cotización nueva ni cambio (ya existía, nada que hacer) = sin cambios, no fallo.
-		const totals = runTotals({ total: result?.opportunities ?? 0, ok, errors });
+		const totals = runTotals({ total: accounts ? (result?.accounts ?? 0) : (result?.opportunities ?? 0), ok, errors });
 
 		return {
 			id: `crm-job:${job.jobId}`,
 			tipo: 'crm',
-			kind: manual ? 'crm_manual' : 'crm_daily',
-			kind_label: manual ? 'Sincronización manual' : 'Sincronización diaria',
+			kind: accounts ? CRM_ACCOUNTS_IMPORT_KIND.kind : manual ? 'crm_manual' : 'crm_daily',
+			kind_label: accounts ? CRM_ACCOUNTS_IMPORT_KIND.label : manual ? 'Sincronización manual' : 'Sincronización diaria',
 			trigger: manual ? 'manual' : 'automatic',
 			// `success: false` = falló la selección o algún lote (error de la corrida): "Falló" solo si no se procesó nada.
 			status: runStatusOf({
 				running: job.status === 'running',
 				interrupted,
-				failed: job.status === 'failed' || result?.success === false,
+				// En una importación de clientes los fallos son por cuenta (`errors`): no hay un error de la corrida.
+				failed: !accounts && (job.status === 'failed' || result?.success === false),
 				ok,
 				unchanged: totals.unchanged,
 				errors,
@@ -492,7 +499,7 @@ export class CrmAdapter implements IntegrationAdapter {
 		if (!jobIds.length) return new Map();
 		const rows = (await this.syncLogs
 			.aggregate([
-				{ $match: { holdingId, jobId: { $in: jobIds }, level: 'error', stage: 'opportunity' } },
+				{ $match: { holdingId, jobId: { $in: jobIds }, level: 'error', stage: { $in: RECORD_LOG_STAGES } } },
 				{ $group: { _id: '$jobId', count: { $sum: 1 } } },
 			])
 			.exec()) as Array<{ _id: string; count: number }>;
@@ -529,20 +536,32 @@ export class CrmAdapter implements IntegrationAdapter {
 
 			if (job) {
 				const logs = (await this.syncLogs
-					.find({ holdingId, jobId: job.jobId, stage: 'opportunity' })
+					.find({ holdingId, jobId: job.jobId, stage: { $in: RECORD_LOG_STAGES } })
 					.sort({ occurredAt: 1 })
 					.limit(2000)
 					.lean()
 					.exec()) as SalesforceSyncLog[];
-				const records: RunRecord[] = logs.map((log) => ({
-					object: 'opportunity',
-					record_key: log.salesforceOpportunityId ?? null,
-					label: log.salesforceOpportunityName ?? log.salesforceOpportunityId ?? 'Oportunidad',
-					sapira_id: null,
-					external_id: log.salesforceOpportunityId ?? null,
-					status: logStatus(log.level),
-					message: logMessage(log),
-				}));
+				const records: RunRecord[] = logs.map((log) =>
+					log.stage === 'account'
+						? {
+								object: 'account',
+								record_key: log.salesforceAccountId ?? null,
+								label: String(log.metadata?.account_name ?? log.salesforceAccountId ?? 'Cuenta'),
+								sapira_id: (log.metadata?.client_id as string) ?? null,
+								external_id: log.salesforceAccountId ?? null,
+								status: logStatus(log.level),
+								message: logMessage(log),
+							}
+						: {
+								object: 'opportunity',
+								record_key: log.salesforceOpportunityId ?? null,
+								label: log.salesforceOpportunityName ?? log.salesforceOpportunityId ?? 'Oportunidad',
+								sapira_id: null,
+								external_id: log.salesforceOpportunityId ?? null,
+								status: logStatus(log.level),
+								message: logMessage(log),
+							}
+				);
 				const run = this.jobToRun(job, holdingId, records.filter((record) => record.status === 'error').length);
 
 				return { ...run, records, errors_summary: errorsSummary(records) };

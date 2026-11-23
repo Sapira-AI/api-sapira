@@ -14,6 +14,8 @@ export interface HoldingResult {
 	quotesCreated: number;
 	quotesUpdated: number;
 	sellersCreated: number;
+	/** Solo en una importación de clientes desde el CRM (`salesforce-accounts-import:`): cuentas pedidas. */
+	accounts?: number;
 	error?: string;
 	durationSeconds: number;
 }

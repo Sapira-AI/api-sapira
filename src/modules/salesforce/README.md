@@ -362,7 +362,13 @@ Las migraciones `20260724162100_normalize_client_entity_tax_ids.sql` y `20260725
 
 Un valor activo de `generic_export_vats.vat` se considera un VAT genérico de exportación y no identifica de forma única a una entidad legal. Para esos valores, Salesforce resuelve y actualiza únicamente las entidades cuya combinación `holding_id + tax_id + razón social` coincide; si no existe esa combinación crea una entidad nueva. La razón social se compara ignorando mayúsculas, espacios iniciales/finales y espacios consecutivos.
 
-Para cualquier otro tax ID, incluso si está repetido, la integración actualiza todas las `client_entities` que lo comparten sin marcar el staging como error. Estas actualizaciones no reasignan el `client_id` ni alteran los vínculos de `client_entity_clients` de entidades ya existentes.
+Para cualquier otro tax ID, incluso si está repetido, la integración actualiza todas las `client_entities` que lo comparten sin marcar el staging como error. Estas actualizaciones no reasignan el `client_id` ni alteran los vínculos de `client_entity_clients` de entidades que ya tienen cliente.
+
+Excepción (23-11, Domi): si hay **una sola** entidad con ese tax ID y **no tiene ningún cliente** (ni `client_id` ni filas en `client_entity_clients`; típicamente llegó desde el ERP), queda asignada al cliente del Account (`linkOrphanClientEntity`: inserta el vínculo en `client_entity_clients`, principal si el cliente no tiene otra). Con el tax ID repetido o con cliente, no se asigna.
+
+El cliente de un Account se resuelve en un solo método, `findClientIdForAccount`: `salesforce_object_mappings` → `clients.salesforce_account_id` (el "ID en el CRM", que también se escribe a mano desde Clientes) → `client_number`.
+
+La búsqueda en vivo, la vista previa y la importación de cuentas del front nuevo ("Traer un cliente antiguo desde el CRM") viven en `src/modules/integrations/adapters/crm-accounts.ts` y usan `fetchAccount`, `importAccountsFromCrm`, `mapAccount` y `accountFieldSources` de este servicio. Ver `docs/cambios/traer-clientes-desde-el-crm-23-11.md`.
 
 Al crear o actualizar una entidad legal desde Salesforce, Sapira intenta resolver su `odoo_partner_id` si todavía no existe. Para VATs genéricos sólo lo asigna cuando la combinación VAT y razón social (`BusinessName__c` o `Account.Name`) devuelve un único partner activo en Odoo; si no, conserva la entidad sin partner Odoo y registra la situación para revisión.
 
