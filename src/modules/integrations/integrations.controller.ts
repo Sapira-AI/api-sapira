@@ -26,6 +26,9 @@ import { RequirePermission, RequirePermissionGuard } from '@/guards/require-perm
 import {
 	AcceptSuggestionsDto,
 	ConfirmQueryDto,
+	CrmAccountsImportDto,
+	CrmAccountsPreviewDto,
+	CrmAccountsSearchDto,
 	CrmConnectionDto,
 	CrmFetchDto,
 	CrmImportDto,
@@ -58,6 +61,8 @@ interface IntegrationsRequest {
 
 const VIEW = PERMISSION_CODES.viewIntegrations;
 const EDIT = PERMISSION_CODES.editIntegrations;
+/** Traer clientes desde el CRM también se hace desde Clientes: basta con poder editar clientes. */
+const EDIT_CLIENTS = 'EDIT_CLIENTES';
 
 /**
  * Integraciones v2 (`docs/v2-rediseno/contrato-api-integraciones.md`). Lectura con `VIEW_INTEGRACIONES`, cambios con `EDIT_INTEGRACIONES`;
@@ -385,5 +390,31 @@ export class IntegrationsController {
 	@RequirePermission(EDIT)
 	importOpportunities(@HoldingId() holdingId: string, @Body() body: CrmImportDto) {
 		return this.service.crm.importOpportunities(holdingId, body.opportunity_ids, body.mode ?? 'full');
+	}
+
+	// ── CRM: traer clientes (cuentas) ───────────────────────────────────────────────────────────────────────────────────────
+
+	@Post('crm/accounts/search')
+	@HttpCode(200)
+	@RequirePermission(EDIT, EDIT_CLIENTS)
+	@ApiOperation({ summary: 'Buscar cuentas en el CRM (en vivo, no escribe) y decir si ya existen en Sapira' })
+	searchAccounts(@HoldingId() holdingId: string, @Body() body: CrmAccountsSearchDto) {
+		return this.service.searchCrmAccounts(holdingId, body);
+	}
+
+	@Post('crm/accounts/preview')
+	@HttpCode(200)
+	@RequirePermission(EDIT, EDIT_CLIENTS)
+	@ApiOperation({ summary: 'Vista previa de importar cuentas del CRM: qué se crea y qué se vincula (no escribe)' })
+	previewAccounts(@HoldingId() holdingId: string, @Body() body: CrmAccountsPreviewDto) {
+		return this.service.previewCrmAccounts(holdingId, body.account_ids);
+	}
+
+	@Post('crm/accounts/import')
+	@HttpCode(200)
+	@RequirePermission(EDIT, EDIT_CLIENTS)
+	@ApiOperation({ summary: 'Importar cuentas del CRM como clientes (crea o vincula, nunca duplica)' })
+	importAccounts(@HoldingId() holdingId: string, @Body() body: CrmAccountsImportDto) {
+		return this.service.importCrmAccounts(holdingId, body.accounts);
 	}
 }

@@ -92,7 +92,7 @@
 
 ## 🔴 Pendientes — de rápido a complejo
 
-### 🔴 Pendientes del sistema nuevo (registro vivo desde el switch · actualizado 2026-11-16)
+### 🔴 Pendientes del sistema nuevo (registro vivo desde el switch · actualizado 2026-11-23)
 
 > **Regla (Domi, 13-11):** este bloque es el registro único de lo pendiente en el sistema nuevo (`api-sapira` + `front-sapira`).
 > **Se actualiza en la misma tarea que cierra, cambia o agrega un punto**: lo cerrado baja a "Cerrado" con su commit y fecha, lo nuevo
@@ -104,6 +104,8 @@
 > Estado 16-11: `qa` = `main` con API v0.0.169 (PR #271 y #272) y front v0.1.108 (PR #115 y #116): incluyen los bloques 6, 8 y 9. La
 > función de devengo del bloque 6 (`revenue_schedule_rebuild_contract_ccy` v3.9) está aplicada en QA y en producción desde el 16-11.
 > 18-11: bloque 10 (nombres únicos de los modelos de precio y Por unidad desde la pantalla) subido a `domi` en los dos repos; falta el PR a `qa`.
+> 23-11: `qa` de la API en v0.0.170 (PR #273, ya traída a `domi`). Bloque 11 (traer un cliente antiguo desde el CRM) construido en `domi`
+> en los dos repos y subido al remoto el 23-11 (OK de Domi tras probar búsqueda y vista previa en pantalla).
 
 **1 · Ransa / SimpliRoute** · detalle: [`cambios/precio-unitario-del-periodo-13-11.md`](./cambios/precio-unitario-del-periodo-13-11.md)
 
@@ -206,6 +208,18 @@ Construido el 18-11 y subido a `domi` (front y textos de la API), **sin PR ni de
 | N2 | **Filtro "Modelo" del catálogo de Precios** con Fijo y Por unidad por separado | Hoy van juntos ("Fijo o Por unidad") | `GET /prices` (catálogo) filtra solo por `model`; agregar `quantity_type` al `QueryPricesDto` como ya tiene `contract-prices`. Sin urgencia: 0 precios de catálogo en producción |
 | N3 | **Textos del sitio público** que nombran modelos ("Escalonado (step)", "Paquete") | Sin tocar | El copy del sitio sale de Claude Design; decidir si se alinea con los seis nombres |
 | N4 | **Modelos que tienen las referencias y Sapira no** | Sin decidir | Prepago con excedente, tramos que se acumulan en el plazo, porcentaje, matriz y fórmula; y volver a ofrecer cantidad fija con tramos o volumen (licencias con descuento por volumen, cobro anticipado). Lista en la nota de cambios |
+
+**11 · Traer un cliente antiguo desde el CRM** (soporte 23-11, SimpliRoute, caso SIDAPT `0015w00002mURaYAAW`) · detalle: [`cambios/traer-clientes-desde-el-crm-23-11.md`](./cambios/traer-clientes-desde-el-crm-23-11.md)
+
+Construido el 23-11 en `domi` (API y front), **en el remoto, sin deploy**, sin cambios de esquema: búsqueda de cuentas del CRM en vivo (nombre, id, letra o período) que dice si ya existen en Sapira, vista previa e importación de las elegidas (crea o reconoce el cliente, nunca duplica; la razón social sin cliente con el mismo identificador se asigna, también en la sincronización diaria; sin identificador, elige quien importa; oportunidades ganadas opcionales), registro en el historial del CRM, y campo "ID en el CRM" en el formulario de cliente, único en el holding. Acceso desde Integraciones › CRM y desde Clientes.
+
+| # | Pendiente | Estado | Qué falta |
+|---|---|---|---|
+| T1 | **PR, QA y deploy** | En `domi` (remoto) desde el 23-11; tests en verde (API 4.047, front salvo las dos fallas conocidas ajenas). Domi probó en pantalla la búsqueda y la vista previa de SIDAPT (local contra producción, sin importar) | Domi hace los PR, la API primero. La importación no se ha ejecutado contra el CRM real: en QA, traer un cliente desde Clientes y desde Integraciones › CRM |
+| T2 | **Traer SIDAPT en producción** | Espera el deploy. Decisión de Domi 23-11: lo hace la usuaria (Carelis) desde la pantalla | Avisarle tras el deploy: elegir su razón social existente (`000edbf8…`, 76299358-9, sin cliente) y, si quiere, sus 6 oportunidades ganadas |
+| T3 | **Vínculos de la integración que apuntan a un cliente eliminado** | 2 en producción (conteo 23-11) | Que el resolver compruebe que el cliente existe y reemplace el vínculo. Hoy importar esa cuenta falla al actualizar |
+| T4 | **Historial por registro de las cuentas** (`recordHistory`) | Solo oportunidades | Sumar las líneas `account` de la bitácora para que el "se repite" del Estado cuente también cuentas. Sin urgencia |
+| T5 | **Validar con Leon** la asignación de la razón social sin cliente en la sincronización diaria | Nota en `cambios-integracion-para-leon.md` | Su OK como dueño de la integración |
 
 **Cerrado** (para no volver a listarlo)
 

@@ -25,6 +25,8 @@ const USERS: Record<string, { codes: string[]; super?: boolean }> = {
 	nobody: { codes: [] },
 	reader: { codes: ['VIEW_INTEGRACIONES'] },
 	editor: { codes: ['EDIT_INTEGRACIONES'] },
+	clients: { codes: ['EDIT_CLIENTES'] },
+	clientsReader: { codes: ['VIEW_CLIENTES'] },
 	settings: { codes: ['VIEW_CONFIGURACION', 'EDIT_CONFIGURACION'] },
 	all: { codes: ['ALL_PERMISSIONS'] },
 	super: { codes: [], super: true },
@@ -83,6 +85,9 @@ describe('Integraciones · HTTP (tenancy, permisos, validación)', () => {
 		acceptSuggestions: fn(),
 		deleteConnection: fn(undefined),
 		fetchCrmOpportunities: fn(),
+		searchCrmAccounts: fn({ data: [], total: 0, currentPage: 1, pages: 1, limit: 20 }),
+		previewCrmAccounts: fn({ data: [] }),
+		importCrmAccounts: fn({ data: [] }),
 		assertFieldsEditor: jest.fn(async () => undefined),
 	};
 	const dataSource = {
@@ -241,6 +246,67 @@ describe('Integraciones · HTTP (tenancy, permisos, validación)', () => {
 			await send('post', '/integrations/crm/opportunities/fetch', { opportunity_ids: ['x'] }).expect(400);
 		});
 
+		it('traer clientes del CRM: con EDIT_INTEGRACIONES o EDIT_CLIENTES; sin ellos, 403 y no llega al servicio', async () => {
+			const ACCOUNT_ID = '0015w00002mURaYAAW';
+
+			for (const user of ['editor', 'clients', 'all', 'super']) {
+				await send('post', '/integrations/crm/accounts/search', { query: 'sidapt' }, user).expect(200);
+				await send('post', '/integrations/crm/accounts/preview', { account_ids: [ACCOUNT_ID] }, user).expect(200);
+				await send('post', '/integrations/crm/accounts/import', { accounts: [{ account_id: ACCOUNT_ID }] }, user).expect(200);
+			}
+			jest.clearAllMocks();
+			for (const user of ['nobody', 'reader', 'clientsReader', 'settings']) {
+				await send('post', '/integrations/crm/accounts/search', { query: 'sidapt' }, user).expect(403);
+				await send('post', '/integrations/crm/accounts/preview', { account_ids: [ACCOUNT_ID] }, user).expect(403);
+				await send('post', '/integrations/crm/accounts/import', { accounts: [{ account_id: ACCOUNT_ID }] }, user).expect(403);
+			}
+			expect(service.searchCrmAccounts).not.toHaveBeenCalled();
+			expect(service.previewCrmAccounts).not.toHaveBeenCalled();
+			expect(service.importCrmAccounts).not.toHaveBeenCalled();
+		});
+
+		it('traer clientes del CRM: holding ajeno → 403; el holding del header es el que llega al servicio', async () => {
+			await send('post', '/integrations/crm/accounts/search', { query: 'sidapt' }, 'clients', OTHER_HOLDING).expect(403);
+			await send(
+				'post',
+				'/integrations/crm/accounts/import',
+				{ accounts: [{ account_id: '0015w00002mURaYAAW' }] },
+				'clients',
+				OTHER_HOLDING
+			).expect(403);
+			expect(service.importCrmAccounts).not.toHaveBeenCalled();
+			await send('post', '/integrations/crm/accounts/search', { query: 'sidapt', page: 2, limit: 25 }, 'clients').expect(200);
+			expect(service.searchCrmAccounts).toHaveBeenCalledWith(HOLDING, expect.objectContaining({ query: 'sidapt', page: 2, limit: 25 }));
+		});
+
+		it('traer clientes del CRM: valida ids, letra, fechas, tope de 20 cuentas y la razón social elegida', async () => {
+			const ACCOUNT_ID = '0015w00002mURaYAAW';
+			const fields = async (path: string, body: object) =>
+				(await send('post', path, body).expect(400)).body.errors.map((error: { field: string }) => error.field);
+
+			expect(await fields('/integrations/crm/accounts/search', { account_ids: ["x' OR Name != '"] })).toEqual(['account_ids']);
+			expect(await fields('/integrations/crm/accounts/search', { letter: 'AB' })).toEqual(['letter']);
+			expect(await fields('/integrations/crm/accounts/search', { date_from: '2022-13-01', date_field: 'otro' })).toEqual([
+				'date_from',
+				'date_field',
+			]);
+			expect(await fields('/integrations/crm/accounts/preview', { account_ids: [] })).toEqual(['account_ids']);
+			expect(
+				await fields('/integrations/crm/accounts/import', { accounts: Array.from({ length: 21 }, () => ({ account_id: ACCOUNT_ID })) })
+			).toEqual(['accounts']);
+			expect(
+				await fields('/integrations/crm/accounts/import', {
+					accounts: [{ account_id: ACCOUNT_ID, legal_entity: { mode: 'existing', id: 'no-uuid' } }],
+				})
+			).toEqual(['accounts.0.legal_entity.id']);
+			await send('post', '/integrations/crm/accounts/import', {
+				accounts: [{ account_id: ACCOUNT_ID, legal_entity: { mode: 'existing', id: ACCOUNT }, with_opportunities: true }],
+			}).expect(200);
+			expect(service.importCrmAccounts).toHaveBeenCalledWith(HOLDING, [
+				{ account_id: ACCOUNT_ID, legal_entity: { mode: 'existing', id: ACCOUNT }, with_opportunities: true },
+			]);
+		});
+
 		it('borrar con confirm=true pasa el confirm al servicio', async () => {
 			await send('delete', '/integrations/erp/connection?confirm=true').expect(204);
 			expect(service.deleteConnection).toHaveBeenCalledWith(HOLDING, 'erp', true);
@@ -253,7 +319,9 @@ describe('Integraciones · HTTP (tenancy, permisos, validación)', () => {
 		});
 	});
 
-	it('guards en orden y toda escritura con EDIT_INTEGRACIONES', () => {
+	it('guards en orden y toda escritura con EDIT_INTEGRACIONES (traer clientes del CRM: también con EDIT_CLIENTES)', () => {
+		const withClients = ['searchAccounts', 'previewAccounts', 'importAccounts'];
+
 		expect(Reflect.getMetadata(GUARDS_METADATA, IntegrationsController)).toEqual([SupabaseAuthGuard, HoldingScopeGuard, RequirePermissionGuard]);
 		expect(Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, IntegrationsController)).toEqual(['VIEW_INTEGRACIONES']);
 		for (const name of Object.getOwnPropertyNames(IntegrationsController.prototype)) {
@@ -261,7 +329,10 @@ describe('Integraciones · HTTP (tenancy, permisos, validación)', () => {
 			const method = Reflect.getMetadata(METHOD_METADATA, handler) as RequestMethod | undefined;
 
 			if (method === undefined || method === RequestMethod.GET) continue;
-			expect({ name, codes: Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, handler) }).toEqual({ name, codes: ['EDIT_INTEGRACIONES'] });
+			expect({ name, codes: Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, handler) }).toEqual({
+				name,
+				codes: withClients.includes(name) ? ['EDIT_INTEGRACIONES', 'EDIT_CLIENTES'] : ['EDIT_INTEGRACIONES'],
+			});
 		}
 	});
 });

@@ -4,11 +4,13 @@ import { ILike, Raw, Repository } from 'typeorm';
 
 import { resolveCountryInput } from '@/core/utils/country-resolve';
 import { loadHoldingPreferences } from '@/core/utils/holding-preferences';
+import { validationException } from '@/core/utils/validation-errors';
 import { ClientEntityClient } from '@/databases/postgresql/entities/clientes/client-entity-client.entity';
 import { ClientEntity } from '@/databases/postgresql/entities/clientes/client-entity.entity';
 import { Client } from '@/databases/postgresql/entities/clientes/client.entity';
 import { BigQueryService } from '@/modules/bigquery/bigquery.service';
 import { withApiWriter } from '@/modules/contracts/api-writer';
+import { toSalesforceId18 } from '@/modules/salesforce/utils/salesforce-id';
 
 import { conflict, joinEs, plural } from './client-directory.service';
 import { clientLifecycleSql, type ClientLifecycleStatus } from './client-lifecycle';
@@ -56,8 +58,48 @@ export class ClientsService {
 	/** Crea el cliente en el holding activo (validado por `HoldingScopeGuard`). */
 	async create(createClientDto: CreateClientDto, holdingId: string): Promise<Client> {
 		const prepared = await this.prepareWrite(createClientDto, holdingId, null);
-		const client = this.clientRepository.create({ ...prepared, holding_id: holdingId } as unknown as Partial<Client>);
+		const crmAccountId = await this.resolveCrmAccountId(createClientDto.salesforce_account_id, holdingId, null);
+		const client = this.clientRepository.create({
+			...prepared,
+			...(crmAccountId !== undefined ? { salesforce_account_id: crmAccountId } : {}),
+			holding_id: holdingId,
+		} as unknown as Partial<Client>);
 		return await this.clientRepository.save(client);
+	}
+
+	/**
+	 * "ID en el CRM" del formulario de clientes (`clients.salesforce_account_id`): el vínculo con la cuenta del CRM, con el que la
+	 * integración reconoce al cliente y no lo duplica. `undefined` = no viene en el pedido; vacío lo borra. Se guarda en su forma de
+	 * 18 caracteres y es único en el holding: no puede usarlo otro cliente ni estar vinculado a otro por la integración.
+	 */
+	private async resolveCrmAccountId(
+		raw: string | null | undefined,
+		holdingId: string,
+		clientId: string | null
+	): Promise<string | null | undefined> {
+		if (raw === undefined) return undefined;
+		const text = (raw ?? '').trim();
+
+		if (!text) return null;
+		const accountId = toSalesforceId18(text);
+
+		if (!accountId) throw validationException([{ field: 'salesforce_account_id', message: 'El ID en el CRM tiene 15 o 18 letras y números' }]);
+		const [other] = (await this.clientRepository.query(
+			`SELECT c.name_commercial FROM clients c
+			WHERE c.holding_id = $1 AND ($3::uuid IS NULL OR c.id <> $3::uuid)
+				AND (c.salesforce_account_id = $2 OR EXISTS (SELECT 1 FROM salesforce_object_mappings m WHERE m.holding_id = $1
+					AND m.salesforce_object_type = 'Account' AND m.salesforce_object_id = $2 AND m.sapira_record_id = c.id))
+			LIMIT 1`,
+			[holdingId, accountId, clientId]
+		)) as Array<{ name_commercial: string | null }>;
+
+		if (other) {
+			throw validationException([
+				{ field: 'salesforce_account_id', message: `Ese ID en el CRM ya lo usa el cliente "${other.name_commercial ?? 'sin nombre'}"` },
+			]);
+		}
+
+		return accountId;
 	}
 
 	/**
@@ -289,10 +331,24 @@ export class ClientsService {
 
 	async update(id: string, updateClientDto: UpdateClientDto, holdingId?: string): Promise<Client> {
 		const client = await this.findOne(id);
+		const scope = holdingId ?? String(client.holding_id);
+		const previousCrmAccountId = client.salesforce_account_id ?? null;
+		const crmAccountId = await this.resolveCrmAccountId(updateClientDto.salesforce_account_id, scope, client.id);
 
-		Object.assign(client, await this.prepareWrite(updateClientDto, holdingId ?? String(client.holding_id), client));
+		Object.assign(client, await this.prepareWrite(updateClientDto, scope, client));
+		if (crmAccountId !== undefined) client.salesforce_account_id = crmAccountId as string;
+		const saved = await this.clientRepository.save(client);
 
-		return await this.clientRepository.save(client);
+		// Cambiar o quitar el ID en el CRM cambia el vínculo: el de la cuenta anterior deja de apuntar a este cliente.
+		if (crmAccountId !== undefined && crmAccountId !== previousCrmAccountId) {
+			await this.clientRepository.query(
+				`DELETE FROM salesforce_object_mappings WHERE holding_id = $1 AND salesforce_object_type = 'Account' AND sapira_record_id = $2
+					AND salesforce_object_id IS DISTINCT FROM $3`,
+				[scope, client.id, crmAccountId]
+			);
+		}
+
+		return saved;
 	}
 
 	/**

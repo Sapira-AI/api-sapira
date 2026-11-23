@@ -85,6 +85,80 @@ describe('ClientsService', () => {
 		expect(where.id.objectLiteralParameters).toEqual({ lifecycleHolding: 'h-1', lifecycle: 'churned' });
 	});
 
+	describe('ID en el CRM (vínculo con la cuenta del CRM, único en el holding)', () => {
+		const db = (taken: { name_commercial: string } | null = null) => {
+			const { service, clientRepository } = buildService();
+			const repo = clientRepository as unknown as Record<string, jest.Mock>;
+
+			repo.query.mockImplementation(async (sql: string) =>
+				sql.includes('salesforce_object_mappings m') && sql.startsWith('SELECT') && taken ? [taken] : []
+			);
+			repo.create = jest.fn((value: unknown) => value);
+			repo.save = jest.fn(async (value: unknown) => value);
+			repo.findOne = jest.fn();
+
+			return { service, repo };
+		};
+
+		it('alta: se guarda en su forma de 18 caracteres y se busca dentro del holding', async () => {
+			const { service, repo } = db();
+			const created = await service.create({ name_commercial: 'Sidapt', salesforce_account_id: ' 0015w00002mURaY ' } as never, 'h-1');
+
+			expect(created).toEqual(expect.objectContaining({ salesforce_account_id: '0015w00002mURaYAAW', holding_id: 'h-1' }));
+			const [sql, params] = repo.query.mock.calls[0];
+
+			expect(sql).toContain('c.holding_id = $1');
+			expect(sql).toContain("m.salesforce_object_type = 'Account'");
+			expect(params).toEqual(['h-1', '0015w00002mURaYAAW', null]);
+		});
+
+		it('repetido (otro cliente lo usa o ya está vinculado por la integración) → 400 en el campo, sin guardar', async () => {
+			const { service, repo } = db({ name_commercial: 'Sidapt' });
+
+			await expect(
+				service.create({ name_commercial: 'Otro', salesforce_account_id: '0015w00002mURaYAAW' } as never, 'h-1')
+			).rejects.toMatchObject({
+				response: { errors: [{ field: 'salesforce_account_id', message: 'Ese ID en el CRM ya lo usa el cliente "Sidapt"' }] },
+			});
+			expect(repo.save).not.toHaveBeenCalled();
+		});
+
+		it('formato inválido → 400 en el campo; sin el campo no se valida nada', async () => {
+			const { service, repo } = db();
+
+			await expect(service.create({ name_commercial: 'Otro', salesforce_account_id: 'CL-0021' } as never, 'h-1')).rejects.toMatchObject({
+				response: { errors: [{ field: 'salesforce_account_id' }] },
+			});
+			await service.create({ name_commercial: 'Otro' } as never, 'h-1');
+			expect(repo.query).not.toHaveBeenCalled();
+		});
+
+		it('edición: el mismo valor no choca consigo mismo; cambiarlo o quitarlo suelta el vínculo de la cuenta anterior', async () => {
+			const { service, repo } = db();
+			const current = { id: 'c-1', holding_id: 'h-1', salesforce_account_id: '0015w00002mURaYAAW' };
+
+			repo.findOne.mockImplementation(async () => ({ ...current }));
+			await service.update('c-1', { salesforce_account_id: '0015w00002mURaYAAW' } as never, 'h-1');
+			expect(repo.query.mock.calls[0][1]).toEqual(['h-1', '0015w00002mURaYAAW', 'c-1']);
+			expect(repo.query.mock.calls.some(([sql]) => String(sql).startsWith('DELETE'))).toBe(false);
+
+			repo.query.mockClear();
+			const cleared = await service.update('c-1', { salesforce_account_id: '' } as never, 'h-1');
+
+			expect(cleared.salesforce_account_id).toBeNull();
+			const [sql, params] = repo.query.mock.calls.find(([statement]) => String(statement).startsWith('DELETE')) ?? [];
+
+			expect(sql).toContain("salesforce_object_type = 'Account' AND sapira_record_id = $2");
+			expect(params).toEqual(['h-1', 'c-1', null]);
+
+			repo.query.mockClear();
+			const untouched = await service.update('c-1', { name_commercial: 'Nuevo nombre' } as never, 'h-1');
+
+			expect(untouched.salesforce_account_id).toBe('0015w00002mURaYAAW');
+			expect(repo.query).not.toHaveBeenCalled();
+		});
+	});
+
 	describe('ronda 3 de Configuración: país ISO y listas del holding', () => {
 		const db = () => {
 			const { service, clientRepository } = buildService();

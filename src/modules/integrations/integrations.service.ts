@@ -7,7 +7,9 @@ import { DataSource, Repository } from 'typeorm';
 import { FieldError, validationException } from '@/core/utils/validation-errors';
 import { HoldingIntegration, HoldingIntegrationSettings } from '@/databases/postgresql/entities/base-tenancy/holding-integration-settings.entity';
 import type { PermissionContext } from '@/guards/permissions.service';
+import { toSalesforceId18 } from '@/modules/salesforce/utils/salesforce-id';
 
+import { CrmAccountImportItem, CrmAccountsService } from './adapters/crm-accounts';
 import { CrmAdapter } from './adapters/crm.adapter';
 import { DatosAdapter } from './adapters/datos.adapter';
 import { ErpAdapter } from './adapters/erp.adapter';
@@ -113,7 +115,8 @@ export class IntegrationsService {
 		readonly erp: ErpAdapter,
 		readonly crm: CrmAdapter,
 		readonly stripe: StripeAdapter,
-		readonly datos: DatosAdapter
+		readonly datos: DatosAdapter,
+		readonly crmAccounts: CrmAccountsService
 	) {
 		this.adapters = { erp, crm, stripe, datos };
 	}
@@ -1061,6 +1064,53 @@ export class IntegrationsService {
 		const stages = (await this.effectiveRules(holdingId, 'crm')).opportunity_stages as string[];
 
 		return this.crm.fetchOpportunities(holdingId, { date_from: from, date_to: to, opportunity_ids: body.opportunity_ids, stages });
+	}
+
+	// ── CRM: traer clientes (cuentas) ───────────────────────────────────────────────────────────────────────────────────────
+
+	private async crmWonStages(holdingId: string): Promise<string[]> {
+		return ((await this.effectiveRules(holdingId, 'crm')).opportunity_stages as string[]) ?? [];
+	}
+
+	/** Ids de cuenta en su forma de 18 caracteres (la que devuelve el CRM), sin repetidos. */
+	private crmAccountIds(ids: string[] | undefined): string[] {
+		return [...new Set((ids ?? []).map((id) => toSalesforceId18(id) ?? id))];
+	}
+
+	async searchCrmAccounts(
+		holdingId: string,
+		body: {
+			query?: string;
+			account_ids?: string[];
+			letter?: string;
+			date_from?: string;
+			date_to?: string;
+			date_field?: 'won' | 'activation';
+			page?: number;
+			limit?: number;
+		}
+	) {
+		return this.crmAccounts.search(holdingId, {
+			...body,
+			account_ids: this.crmAccountIds(body.account_ids),
+			letter: body.letter?.toUpperCase(),
+			page: body.page ?? 1,
+			limit: body.limit ?? 20,
+			stages: await this.crmWonStages(holdingId),
+		});
+	}
+
+	async previewCrmAccounts(holdingId: string, accountIds: string[]) {
+		return this.crmAccounts.preview(holdingId, this.crmAccountIds(accountIds), await this.crmWonStages(holdingId));
+	}
+
+	async importCrmAccounts(holdingId: string, accounts: CrmAccountImportItem[]) {
+		const items = accounts.map((item) => ({ ...item, account_id: toSalesforceId18(item.account_id) ?? item.account_id }));
+		const repeated = items.findIndex((item, index) => items.findIndex((other) => other.account_id === item.account_id) !== index);
+
+		if (repeated > -1) throw validationException([{ field: `accounts.${repeated}.account_id`, message: 'La cuenta está repetida' }]);
+
+		return this.crmAccounts.import(holdingId, items, await this.crmWonStages(holdingId));
 	}
 
 	static isTipo = isIntegrationTipo;
