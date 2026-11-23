@@ -713,6 +713,95 @@ Body `{ opportunity_ids: string[] (1–200), mode?: 'full' | 'review' }` (`full`
 409 si ya hay una ejecución de ese tipo en curso. Cotizaciones protegidas: `full` crea las nuevas pero **no actualiza** cotizaciones
 existentes (quedan "Por revisar" si el CRM cambió; se aplican con `records/import` por ids + `confirm_updates`, §3.5).
 
+### 6.6 Traer clientes (cuentas) del CRM · `POST /integrations/crm/accounts/search` · `/preview` · `/import` (23-11)
+
+Traer un cliente antiguo que la sincronización no trae (la ventana de 30 días solo ve cuentas con una oportunidad ganada reciente).
+Permiso: **`EDIT_INTEGRACIONES` o `EDIT_CLIENTES`** (se usa desde Integraciones › CRM y desde Clientes). Los ids de cuenta se aceptan
+de 15 o 18 caracteres y se trabajan en 18. Detalle y reglas: `docs/cambios/traer-clientes-desde-el-crm-23-11.md`.
+
+**`POST …/accounts/search`** (200, en vivo, **no escribe**). Body: `{ query?: string (≤ 120, el nombre contiene), account_ids?: string[]
+(≤ 50), letter?: 'A'…'Z' | '#', date_from?, date_to?, date_field?: 'won' | 'activation', page = 1, limit = 20 (≤ 100) }`. Al menos un
+criterio; se combinan con Y. `date_field = 'won'` (por defecto): cuentas con una oportunidad en las etapas ganadas del holding
+(`opportunity_stages`) cerrada en el período; `'activation'`: por la fecha de activación de la cuenta, si el CRM la tiene.
+
+```jsonc
+{
+  "data": [
+    {
+      "id": "0015w00002mURaYAAW", "name": "Sidapt", "legal_name": null, "tax_id": null, "country": "Chile",
+      "status": "Cliente", "mrr": 839.15, "currency": "USD", "activated_at": "2022-12-01",   // null si el CRM no tiene el campo
+      "sapira": {
+        "state": "new",                   // client (ya es cliente) | legal_entity (hay una razón social con su identificador) | new
+        "client": null,                   // { id, name } del cliente vinculado a la cuenta
+        "legal_entities": []              // [{ id, legal_name, tax_id, client: { id, name } | null }]
+      }
+    }
+  ],
+  "total": 1, "currentPage": 1, "pages": 1, "limit": 20
+}
+```
+
+Errores: 400 sin criterio, período incompleto o al revés, `date_field = 'activation'` sin ese campo en el CRM, más de 2.000 resultados
+de desplazamiento ("afina la búsqueda"); 400 sin conexión o en pausa; 502 `{ message: 'El CRM no respondió: …' }`.
+
+**`POST …/accounts/preview`** (200, **no escribe**). Body `{ account_ids: string[] (1–20) }` →
+
+```jsonc
+{
+  "data": [
+    {
+      "id": "0015w…", "name": "Sidapt", "found": true,        // false: la cuenta no está en el CRM (no se importa)
+      "tax_id": null, "legal_name": null,
+      "client": { "action": "create", "id": null, "name": "Sidapt" },   // create | link (ya existe: no se crea otro)
+      "legal_entity": {
+        "action": "choose",     // create (se crea) | assign (una sola con ese identificador y sin cliente: se asigna)
+                                // keep (ya existe con cliente, o el cliente ya tiene la suya: no se reasigna)
+                                // choose (la cuenta no trae identificador: elige quien importa)
+        "entities": [],         // las que aplican a assign / keep
+        "suggestions": [{ "id": "000edbf8-…", "legal_name": "SERVICIOS INTEGRADOS SIDAPT LIMITADA", "tax_id": "76299358-9", "client": null }],
+        "new_name": "Sidapt"    // nombre con que se crearía una nueva
+      },
+      "opportunities": { "won": 6, "in_sapira": 0 }           // ganadas en el CRM · ya con cotización en Sapira
+    }
+  ]
+}
+```
+
+**`POST …/accounts/import`** (200, síncrono, hasta 20). Body `{ accounts: [{ account_id, legal_entity?: { mode: 'auto' | 'existing' |
+'none', id?: uuid }, with_opportunities?: boolean }] }`. `auto` (por defecto): por identificador, o una nueva con el nombre de la
+cuenta; `existing` + `id`: esa razón social sin cliente; `none`: ninguna. Crea o reconoce el cliente (**nunca duplica**), deja el
+vínculo con la cuenta y responde por cuenta:
+
+```jsonc
+{
+  "data": [
+    { "account_id": "0015w…", "name": "Sidapt", "status": "created",     // created | linked (ya existía) | error
+      "client": { "id": "…", "name": "Sidapt" },
+      "legal_entity": { "id": "000edbf8-…", "legal_name": "…", "tax_id": "76299358-9", "client": { "id": "…", "name": "Sidapt" } },
+      "message": null }                                                    // motivo del error, o aviso (p. ej. la razón social ya tenía otro cliente)
+  ],
+  "created": 1, "linked": 0, "errors": 0,
+  "opportunities": { "run_id": "crm-run:<uuid>", "accepted": 6, "message": "Trayendo e importando sus oportunidades ganadas" },  // null si no se pidió
+  "run_id": "crm-job:salesforce-accounts-import:<entorno>:<holding>:<uuid>",
+  "message": "1 cliente creado"
+}
+```
+
+Una cuenta que falla no detiene a las demás. Las oportunidades usan `retry_full` (§6.4): si hay otra en curso, `opportunities.run_id`
+viene `null` con el motivo y los clientes igual se traen. Errores: 400 validación (cuenta repetida, `existing` sin `id`, razón social
+que no es del holding); 400 sin conexión.
+
+**Historial.** La importación aparece en `GET /integrations/crm/runs` con `kind: 'crm_accounts'`, `kind_label: 'Importación de
+clientes'`, `trigger: 'manual'`; `totals.ok` = clientes creados, `unchanged` = ya existían, `errors` = cuentas con error. Su detalle
+(`runs/:id`) trae un registro por cuenta (`object: 'account'`, `sapira_id` = el cliente).
+
+### 6.7 "ID en el CRM" del cliente · `POST /clients` · `PATCH /clients/:id`
+
+`salesforce_account_id` (opcional) es el vínculo del cliente con su cuenta del CRM. 15 o 18 letras y números; se guarda en 18. Único en
+el holding contra el mismo campo de otro cliente y contra el vínculo de la integración: si ya se usa, 400 `{ message, errors: [{ field:
+'salesforce_account_id', message: 'Ese ID en el CRM ya lo usa el cliente "…"' }] }`. `''` o `null` lo quita. Al cambiarlo o quitarlo,
+el vínculo de la cuenta anterior con ese cliente se borra.
+
 ## 7. Vendedores del CRM (D7)
 
 ### 7.1 Vendedores

@@ -93,13 +93,19 @@ describe('IntegrationsService', () => {
 	const stripe = adapter('stripe', [source('invoice', { importByIds: false, hasAccount: true })]);
 	const datos = adapter('datos', [source('consumption', { importByIds: false })]);
 	(crm as unknown as { fetchOpportunities: jest.Mock }).fetchOpportunities = jest.fn(async () => ({ data: [] }));
+	const crmAccounts = {
+		search: jest.fn(async () => ({ data: [], total: 0, currentPage: 1, pages: 1, limit: 20 })),
+		preview: jest.fn(async () => ({ data: [] })),
+		import: jest.fn(async () => ({ data: [] })),
+	};
 	const service = new IntegrationsService(
 		dataSource as never,
 		integrationSettings as never,
 		erp as never,
 		crm as never,
 		stripe as never,
-		datos as never
+		datos as never,
+		crmAccounts as never
 	);
 
 	beforeEach(() => {
@@ -673,6 +679,29 @@ describe('IntegrationsService', () => {
 		await expect(service.assertFieldsEditor(HOLDING, { isSuperAdmin: false, roleId: 'role-ventas' } as never)).rejects.toBeInstanceOf(
 			ForbiddenException
 		);
+	});
+
+	it('traer clientes del CRM: pasa las etapas ganadas del holding y los ids en su forma de 18 caracteres, sin repetidos', async () => {
+		settings = { opportunity_stages: ['Ganado', 'Firmado'] };
+		await service.searchCrmAccounts(HOLDING, { account_ids: ['0015w00002mURaY', '0015w00002mURaYAAW'], letter: 's' });
+		expect(crmAccounts.search).toHaveBeenCalledWith(HOLDING, {
+			account_ids: ['0015w00002mURaYAAW'],
+			letter: 'S',
+			page: 1,
+			limit: 20,
+			stages: ['Ganado', 'Firmado'],
+		});
+		await service.previewCrmAccounts(HOLDING, ['0015w00002mURaY']);
+		expect(crmAccounts.preview).toHaveBeenCalledWith(HOLDING, ['0015w00002mURaYAAW'], ['Ganado', 'Firmado']);
+		await service.importCrmAccounts(HOLDING, [{ account_id: '0015w00002mURaY', with_opportunities: true }]);
+		expect(crmAccounts.import).toHaveBeenCalledWith(
+			HOLDING,
+			[{ account_id: '0015w00002mURaYAAW', with_opportunities: true }],
+			['Ganado', 'Firmado']
+		);
+		await expect(
+			service.importCrmAccounts(HOLDING, [{ account_id: '0015w00002mURaY' }, { account_id: '0015w00002mURaYAAW' }])
+		).rejects.toMatchObject({ response: { errors: [{ field: 'accounts.1.account_id', message: 'La cuenta está repetida' }] } });
 	});
 
 	it('traer oportunidades: sin fechas = último mes, con las etapas guardadas', async () => {

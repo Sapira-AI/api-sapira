@@ -75,6 +75,8 @@ interface AccountProcessingOptions {
 	salesforceIds?: string[];
 	allowedClientFields?: string[];
 	processingStatuses?: string[];
+	/** Cuentas cuya razón social la decide quien importa (elegir una existente o ninguna): no se crea ni se vincula sola. */
+	skipClientEntityFor?: string[];
 }
 
 interface OpportunityProcessingOptions {
@@ -1152,9 +1154,7 @@ export class SalesforceSyncCompleteService {
 		const clientEntityPayload = this.normalizeClientEntityPayload(
 			await this.fieldMappingEngine.buildMappedRecord(holdingId, 'client_entity', account)
 		);
-		const existingClientId =
-			(await this.typeormService.getObjectMapping(holdingId, 'Account', account.Id)) ||
-			(clientPayload.client_number ? await this.typeormService.getClientByNumber(holdingId, clientPayload.client_number) : null);
+		const existingClientId = await this.findClientIdForAccount(holdingId, account.Id, clientPayload.client_number);
 
 		if (!existingClientId) {
 			return {
@@ -1872,9 +1872,7 @@ export class SalesforceSyncCompleteService {
 		}
 
 		const clientPayload = await this.fieldMappingEngine.buildMappedRecord(holdingId, 'client', accountData);
-		const clientId =
-			(await this.typeormService.getObjectMapping(holdingId, 'Account', accountData.Id)) ||
-			(clientPayload.client_number ? await this.typeormService.getClientByNumber(holdingId, clientPayload.client_number) : null);
+		const clientId = await this.findClientIdForAccount(holdingId, accountData.Id, clientPayload.client_number);
 
 		if (!clientId) {
 			throw new Error(`No se pudo resolver el cliente Sapira para el Account ${accountData.Id}`);
@@ -1908,10 +1906,8 @@ export class SalesforceSyncCompleteService {
 		const entityPayload = this.normalizeClientEntityPayload(
 			await this.fieldMappingEngine.buildMappedRecord(holdingId, 'client_entity', accountData)
 		);
-		const clientNumber = clientPayload.client_number;
-		const existingClientId =
-			(await this.typeormService.getObjectMapping(holdingId, 'Account', accountData.Id)) ||
-			(clientNumber ? await this.typeormService.getClientByNumber(holdingId, clientNumber) : null);
+		const existingClientId = await this.findClientIdForAccount(holdingId, accountData.Id, clientPayload.client_number);
+		const decidesClientEntity = options.skipClientEntityFor?.includes(accountData.Id) === true;
 
 		if (clientPayload.industry) {
 			await this.typeormService.ensureMasterDataValue(holdingId, 'industries', clientPayload.industry);
@@ -1947,7 +1943,9 @@ export class SalesforceSyncCompleteService {
 
 			if (!options.allowedClientFields?.length) {
 				await this.ensurePrincipalContact(existingClientId, accountData, holdingId);
-				await this.createOrLinkClientEntity(existingClientId, entityPayload, accountData, holdingId);
+				if (!decidesClientEntity) {
+					await this.createOrLinkClientEntity(existingClientId, entityPayload, accountData, holdingId);
+				}
 			}
 			stats.clientsUpdated++;
 			return existingClientId;
@@ -1960,13 +1958,102 @@ export class SalesforceSyncCompleteService {
 		const savedClient = await this.clientRepository.save(client);
 		await this.typeormService.createObjectMapping(holdingId, 'Account', accountData.Id, 'clients', savedClient.id);
 		await this.ensurePrincipalContact(savedClient.id, accountData, holdingId);
-		await this.createOrLinkClientEntity(savedClient.id, entityPayload, accountData, holdingId);
+		if (!decidesClientEntity) {
+			await this.createOrLinkClientEntity(savedClient.id, entityPayload, accountData, holdingId);
+		}
 		stats.clientsCreated++;
 
 		return savedClient.id;
 	}
 
-	private async fetchAccount(accountId: string, holdingId: string): Promise<SalesforceAccount | null> {
+	/**
+	 * Cliente de Sapira de una cuenta del CRM, en un solo lugar (lo usan la clasificación, la importación de cuentas y la de
+	 * oportunidades): primero el vínculo de la integración (`salesforce_object_mappings`), luego el "ID en el CRM" del cliente
+	 * (`clients.salesforce_account_id`, que también se escribe a mano desde Clientes) y por último el número de cliente.
+	 */
+	async findClientIdForAccount(holdingId: string, accountId: string, clientNumber?: string | null): Promise<string | null> {
+		const mapped = await this.typeormService.getObjectMapping(holdingId, 'Account', accountId);
+		if (mapped) {
+			return mapped;
+		}
+
+		const linked = await this.clientRepository.findOne({
+			where: { holding_id: holdingId, salesforce_account_id: accountId },
+			select: ['id'],
+		});
+		if (linked) {
+			return linked.id;
+		}
+
+		return clientNumber ? this.typeormService.getClientByNumber(holdingId, clientNumber) : null;
+	}
+
+	/** Cliente y razón social que resultan de una cuenta del CRM según los mapeos de campos activos del holding. No escribe. */
+	async mapAccount(holdingId: string, account: SalesforceAccount): Promise<{ client: Record<string, any>; clientEntity: Record<string, any> }> {
+		return {
+			client: await this.fieldMappingEngine.buildMappedRecord(holdingId, 'client', account),
+			clientEntity: this.normalizeClientEntityPayload(await this.fieldMappingEngine.buildMappedRecord(holdingId, 'client_entity', account)),
+		};
+	}
+
+	/** Campo de la cuenta del CRM que alimenta cada campo de cliente y de razón social (mapeos activos del holding). */
+	async accountFieldSources(holdingId: string): Promise<Record<'client' | 'client_entity', Record<string, string>>> {
+		const [client, clientEntity] = await Promise.all([
+			this.fieldMappingEngine.getActiveMappings(holdingId, 'client'),
+			this.fieldMappingEngine.getActiveMappings(holdingId, 'client_entity'),
+		]);
+		const sources = (mappings: Array<{ sapira_field: string; salesforce_field: string }>) =>
+			Object.fromEntries(mappings.map((mapping) => [mapping.sapira_field, mapping.salesforce_field]));
+
+		return { client: sources(client), client_entity: sources(clientEntity) };
+	}
+
+	/**
+	 * Asigna una razón social **sin cliente** a un cliente (vínculo `client_entity_clients`; principal si el cliente no tiene otra).
+	 * No hace nada si la razón social ya tiene algún cliente: nunca reasigna. Devuelve si quedó asignada por esta llamada.
+	 */
+	async linkOrphanClientEntity(holdingId: string, clientId: string, clientEntityId: string): Promise<boolean> {
+		const result = (await this.clientEntityRepository.query(
+			`INSERT INTO client_entity_clients (client_entity_id, client_id, holding_id, is_primary)
+			SELECT e.id, c.id, $1, NOT EXISTS (SELECT 1 FROM client_entity_clients p WHERE p.client_id = c.id AND p.is_primary)
+			FROM client_entities e JOIN clients c ON c.id = $2 AND c.holding_id = $1
+			WHERE e.id = $3 AND e.holding_id = $1 AND e.client_id IS NULL
+				AND NOT EXISTS (SELECT 1 FROM client_entity_clients x WHERE x.client_entity_id = e.id)
+			RETURNING id`,
+			[holdingId, clientId, clientEntityId]
+		)) as unknown[];
+		const rows = Array.isArray(result[0]) ? (result[0] as unknown[]) : result;
+
+		return rows.length > 0;
+	}
+
+	/**
+	 * Importa cuentas ya leídas del CRM con el mismo camino de siempre (tabla intermedia → clasificar → cliente, contacto, razón
+	 * social y vínculo con el ERP). `skipClientEntityFor`: cuentas cuya razón social la decide quien importa. Los errores por
+	 * cuenta quedan en `stats.errors` y en la tabla intermedia (`processing_status = 'error'`).
+	 */
+	async importAccountsFromCrm(
+		holdingId: string,
+		accounts: SalesforceAccount[],
+		options: Pick<AccountProcessingOptions, 'skipClientEntityFor'> = {}
+	): Promise<SyncCompleteStats> {
+		const stats = this.createEmptyStats();
+		if (!accounts.length) {
+			return stats;
+		}
+		const { batchId, syncSessionId } = this.stagingService.createRunContext();
+
+		await this.stagingService.upsertAccounts(holdingId, accounts, batchId, syncSessionId);
+		await this.classifyAccountStaging(holdingId, batchId);
+		await this.processAccountStaging(holdingId, batchId, stats, {
+			salesforceIds: accounts.map((account) => account.Id),
+			skipClientEntityFor: options.skipClientEntityFor,
+		});
+
+		return stats;
+	}
+
+	async fetchAccount(accountId: string, holdingId: string): Promise<SalesforceAccount | null> {
 		const soql = `
 			SELECT
 				Id, Name, Salesforce_API_ID__c, Industry, Segmento__c,
@@ -2138,6 +2225,11 @@ export class SalesforceSyncCompleteService {
 						this.fillClientEntityFieldsWhenEmpty(entity, entityUpdatePayload, keepClientNumber)
 					);
 					await this.resolveOdooPartnerForEntity(holdingId, entity.id);
+				}
+				// Una sola razón social con ese identificador y sin ningún cliente (p. ej. llegó del ERP): se asigna a este cliente.
+				// Con cliente o repetida no se toca: nunca se reasigna (Domi 23-11).
+				if (entityResolution.entities.length === 1) {
+					await this.linkOrphanClientEntity(holdingId, clientId, entityResolution.entities[0].id);
 				}
 				return;
 			}

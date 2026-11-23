@@ -22,6 +22,7 @@ import { SalesforceSyncLog } from '@/modules/salesforce/schemas/salesforce-sync-
 import { StripeIntegrationLog } from '@/modules/stripe/schemas/stripe-integration-log.schema';
 import { StripeModule } from '@/modules/stripe/stripe.module';
 
+import { CrmAccountsService } from './adapters/crm-accounts';
 import { CrmAdapter } from './adapters/crm.adapter';
 import { DatosAdapter } from './adapters/datos.adapter';
 import { ErpAdapter } from './adapters/erp.adapter';
@@ -44,6 +45,7 @@ describe('IntegrationsModule · cableado', () => {
 			ConfigService,
 			ErpAdapter,
 			CrmAdapter,
+			CrmAccountsService,
 			StripeAdapter,
 			DatosAdapter,
 			...[OdooConnection, SalesforceConnection, StripeConnection, BigQueryConnection, HoldingIntegrationSettings].map((entity) =>
@@ -53,7 +55,9 @@ describe('IntegrationsModule · cableado', () => {
 		]);
 		const providers = Reflect.getMetadata(MODULE_METADATA.PROVIDERS, IntegrationsModule) as Array<new (...args: never[]) => unknown>;
 
-		expect(providers).toEqual(expect.arrayContaining([IntegrationsService, ErpAdapter, CrmAdapter, StripeAdapter, DatosAdapter]));
+		expect(providers).toEqual(
+			expect.arrayContaining([IntegrationsService, ErpAdapter, CrmAdapter, CrmAccountsService, StripeAdapter, DatosAdapter])
+		);
 		expect(Reflect.getMetadata(MODULE_METADATA.CONTROLLERS, IntegrationsModule)).toEqual([IntegrationsController]);
 		for (const provider of providers) {
 			const params = (Reflect.getMetadata(PARAMTYPES_METADATA, provider) as unknown[]) ?? [];

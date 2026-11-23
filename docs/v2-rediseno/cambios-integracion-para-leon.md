@@ -556,3 +556,28 @@ envío no usa para calcular nada.
 - **Para validar contigo:** con prorrateo por días la cantidad lleva hasta 4 decimales (por ejemplo 53,0667). ¿Cuántos decimales de
   cantidad conserva el ERP? Si redondea a menos, esa línea diferiría en centavos de la de Sapira.
 
+## Traer clientes del CRM: resolver único de cliente y razón social sin cliente que se asigna (23-11, Domi)
+
+Pedido de soporte (SimpliRoute, caso SIDAPT): traer un cliente antiguo desde el CRM. Detalle en
+`docs/cambios/traer-clientes-desde-el-crm-23-11.md`. Lo nuevo vive en `src/modules/integrations/adapters/crm-accounts.ts` y reutiliza tu
+camino de cuentas sin cambiarlo (tabla intermedia → clasificar → `syncAccountFromData`). Tres cambios tocan `SalesforceSyncCompleteService`
+y por eso también la sincronización diaria:
+
+- **Un solo resolver del cliente de una cuenta (`findClientIdForAccount`):** vínculo de la integración → `clients.salesforce_account_id`
+  → número de cliente. Antes eran tres copias de "vínculo, y si no, número". El paso nuevo (el id en el cliente) existe porque el
+  formulario de cliente ahora deja escribir el "ID en el CRM" a mano. En producción no cambia a quién se llega: los 259 clientes de
+  SimpliRoute con id y sin vínculo ya se resolvían por número (igual al id de la cuenta).
+- **Razón social sin cliente con el mismo identificador: ahora se asigna.** En `createOrLinkClientEntity`, cuando hay **una sola**
+  razón social con el identificador de la cuenta y **no tiene ningún cliente** (ni `client_id` ni vínculos), queda asignada al cliente
+  de la cuenta (`linkOrphanClientEntity`: solo `client_entity_clients`, principal si el cliente no tiene otra; no se escribe
+  `client_entities.client_id`). Con cliente, o con el identificador repetido, sigue igual: se actualiza y no se reasigna. Decisión de
+  Domi del 23-11. En producción hoy no cambia ningún caso ya importado; hay 30 razones sociales sin cliente con identificador único
+  que se asignarán cuando llegue su cuenta.
+- **`skipClientEntityFor`** en las opciones de procesar cuentas: solo lo usa la importación nueva cuando quien importa elige la razón
+  social (cuenta sin identificador). La sincronización diaria no lo pasa.
+
+Además: `fetchAccount` pasó a público, la bitácora acepta la etapa `account`, y `HoldingResult` tiene `accounts?` (solo en los trabajos
+`salesforce-accounts-import:`). `/salesforce/staging/accounts/import` y `/process` no cambian.
+
+- **Para validar contigo:** la asignación automática de la razón social sin cliente en la sincronización diaria.
+

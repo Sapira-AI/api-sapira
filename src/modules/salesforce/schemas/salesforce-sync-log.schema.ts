@@ -14,7 +14,7 @@ export type SalesforceSyncLogLevel = 'info' | 'warning' | 'error';
  * - `processing`: paso de staging hacia `clients`, `quotes` y `quote_items`.
  * - `opportunity`: resultado individual de una oportunidad al cierre del lote.
  */
-export type SalesforceSyncLogStage = 'run' | 'holding' | 'selection' | 'staging' | 'processing' | 'opportunity';
+export type SalesforceSyncLogStage = 'run' | 'holding' | 'selection' | 'staging' | 'processing' | 'opportunity' | 'account';
 
 export const SALESFORCE_SYNC_LOG_RETENTION_DAYS = 90;
 
@@ -32,7 +32,7 @@ export class SalesforceSyncLog {
 	@Prop({ required: true, enum: ['info', 'warning', 'error'], default: 'info' })
 	level: SalesforceSyncLogLevel;
 
-	@Prop({ required: true, enum: ['run', 'holding', 'selection', 'staging', 'processing', 'opportunity'] })
+	@Prop({ required: true, enum: ['run', 'holding', 'selection', 'staging', 'processing', 'opportunity', 'account'] })
 	stage: SalesforceSyncLogStage;
 
 	@Prop({ required: true })

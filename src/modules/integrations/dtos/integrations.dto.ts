@@ -569,3 +569,95 @@ export class CrmImportDto {
 	@IsIn(['full', 'review'], { message: 'mode debe ser full o review' })
 	mode?: 'full' | 'review';
 }
+
+/** Id de una cuenta del CRM: 15 o 18 letras y números. */
+const CRM_ACCOUNT_ID = /^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$/;
+
+/** Buscar cuentas en el CRM (en vivo, no escribe): por nombre, ids, letra inicial o período. Al menos un criterio. */
+export class CrmAccountsSearchDto extends PageDto {
+	@ApiPropertyOptional({ description: 'Nombre de la cuenta (contiene)' })
+	@IsOptional()
+	@IsString()
+	@MaxLength(120, { message: 'El texto no puede superar 120 caracteres' })
+	query?: string;
+
+	@ApiPropertyOptional({ type: [String] })
+	@IsOptional()
+	@IsArray()
+	@ArrayMaxSize(50, { message: 'Hasta 50 cuentas por búsqueda' })
+	@Matches(CRM_ACCOUNT_ID, { each: true, message: 'Id de cuenta inválido' })
+	account_ids?: string[];
+
+	@ApiPropertyOptional({ description: 'Letra inicial del nombre, o # para los que empiezan con un número' })
+	@IsOptional()
+	@Matches(/^([A-Za-zÑñ]|#)$/, { message: 'Indica una letra o #' })
+	letter?: string;
+
+	@ApiPropertyOptional()
+	@IsOptional()
+	@IsIsoDate('date_from debe ser una fecha YYYY-MM-DD')
+	date_from?: string;
+
+	@ApiPropertyOptional()
+	@IsOptional()
+	@IsIsoDate('date_to debe ser una fecha YYYY-MM-DD')
+	date_to?: string;
+
+	@ApiPropertyOptional({
+		enum: ['won', 'activation'],
+		description: 'won: oportunidad ganada cerrada en el período · activation: fecha de activación',
+	})
+	@IsOptional()
+	@IsIn(['won', 'activation'], { message: 'date_field debe ser won o activation' })
+	date_field?: 'won' | 'activation';
+}
+
+export class CrmAccountsPreviewDto {
+	@ApiProperty({ type: [String] })
+	@IsArray()
+	@ArrayMinSize(1, { message: 'Indica al menos una cuenta' })
+	@ArrayMaxSize(20, { message: 'Hasta 20 cuentas por vez' })
+	@Matches(CRM_ACCOUNT_ID, { each: true, message: 'Id de cuenta inválido' })
+	account_ids!: string[];
+}
+
+class CrmAccountLegalEntityDto {
+	@ApiProperty({
+		enum: ['auto', 'existing', 'none'],
+		description: 'auto: por identificador tributario (o una nueva) · existing: la elegida · none: ninguna',
+	})
+	@IsIn(['auto', 'existing', 'none'], { message: 'mode debe ser auto, existing o none' })
+	mode!: 'auto' | 'existing' | 'none';
+
+	@ApiPropertyOptional({ description: 'Razón social elegida (mode = existing)' })
+	@IsOptional()
+	@IsUUID('all', { message: 'Razón social inválida' })
+	id?: string;
+}
+
+class CrmAccountImportItemDto {
+	@ApiProperty()
+	@Matches(CRM_ACCOUNT_ID, { message: 'Id de cuenta inválido' })
+	account_id!: string;
+
+	@ApiPropertyOptional({ type: CrmAccountLegalEntityDto })
+	@IsOptional()
+	@ValidateNested()
+	@Type(() => CrmAccountLegalEntityDto)
+	legal_entity?: CrmAccountLegalEntityDto;
+
+	@ApiPropertyOptional({ description: 'Traer también sus oportunidades ganadas' })
+	@IsOptional()
+	@IsBoolean({ message: 'with_opportunities debe ser verdadero o falso' })
+	with_opportunities?: boolean;
+}
+
+export class CrmAccountsImportDto {
+	@ApiProperty({ type: [CrmAccountImportItemDto] })
+	@IsArray()
+	@ArrayMinSize(1, { message: 'Indica al menos una cuenta' })
+	@ArrayMaxSize(20, { message: 'Hasta 20 cuentas por vez' })
+	@ValidateNested({ each: true })
+	@Type(() => CrmAccountImportItemDto)
+	accounts!: CrmAccountImportItemDto[];
+}
